@@ -347,7 +347,7 @@ export function useMineData() {
     oldTifPath,
     newTifPath,
     kmlPath = '',
-    device = 'auto',
+    device = 'cpu',
     limit = 0,
     year = '',
     oldYear = '',

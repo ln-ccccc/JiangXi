@@ -1,9 +1,11 @@
-export const INFERENCE_DEVICES = new Set(['auto', 'cpu', 'cuda:0']);
+export const INFERENCE_DEVICES = new Set(['cpu']);
 
 export function normalizeInferenceDevice(value) {
-  const device = String(value || 'auto').trim().toLowerCase();
+  const device = String(value || 'cpu')
+    .trim()
+    .toLowerCase();
   if (!INFERENCE_DEVICES.has(device)) {
-    throw new Error('device 仅支持 auto、cpu 或 cuda:0');
+    throw new Error('江西项目仅支持 CPU 推理，device 仅支持 cpu');
   }
   return device;
 }

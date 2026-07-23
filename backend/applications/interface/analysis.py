@@ -42,7 +42,7 @@ def save_analysis(type_, pic1, retPic, pic2="", data="{}", is_hole=False, checke
     db.session.commit()
 
 
-def terrain_classification(model_path, data_path, out_dir, names, step1, step2, type_):
+def terrain_classification(model_path, data_path, out_dir, names, step1, step2, type_, device="cpu"):
     print("地物分类 -> start")
     imgs = []
     temp_names = copy.deepcopy(names)
@@ -59,7 +59,7 @@ def terrain_classification(model_path, data_path, out_dir, names, step1, step2, 
     if step2 != 0:
         imgs = handle(step2, imgs, data_path, data_path)
 
-    retPics = SS.execute(model_path, data_path, out_dir, imgs)
+    retPics = SS.execute(model_path, data_path, out_dir, imgs, device=device)
 
     for i, pair in enumerate(resizes):
         first_ = temp_names[i]

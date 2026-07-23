@@ -1,11 +1,11 @@
 @import './base.css';
 
 #app {
-  min-height: 100vh;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  background: var(--jx-bg);
-  color: var(--color-text);
-  font-weight: normal;
+    min-height: 100vh;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: var(--jx-bg);
+    color: var(--color-text);
+    font-weight: normal;
 }

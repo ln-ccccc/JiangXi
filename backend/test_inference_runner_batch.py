@@ -19,7 +19,7 @@ class InferenceRunnerBatchTestCase(unittest.TestCase):
             data_path="/input",
             out_dir="/output",
             file_names=["a.tif", "b.tif"],
-            device="auto",
+            device="cpu",
         )
 
         execute_detailed.assert_called_once_with(
@@ -27,7 +27,7 @@ class InferenceRunnerBatchTestCase(unittest.TestCase):
             data_path="/input",
             out_dir="/output",
             names=["a.tif", "b.tif"],
-            device="auto",
+            device="cpu",
         )
         self.assertEqual(failed, ["b.tif"])
         self.assertEqual(errors, {"b.tif": "bad tile"})

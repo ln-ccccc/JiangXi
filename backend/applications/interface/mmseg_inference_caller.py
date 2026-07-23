@@ -73,7 +73,7 @@ def _run_mmseg_inference(
     data_path: str,
     out_dir: str,
     names: List[str],
-    device: str = "auto",
+    device: str = "cpu",
     timeout: int = 1200,
 ) -> Dict:
     if not names:
@@ -138,7 +138,7 @@ def call_mmseg_inference(
     data_path: str,
     out_dir: str,
     names: List[str],
-    device: str = "auto",
+    device: str = "cpu",
     timeout: int = 1200,
 ) -> List[str]:
     if not names:
@@ -171,7 +171,7 @@ def execute_detailed(
     data_path: str,
     out_dir: str,
     names: List[str],
-    device: str = "auto",
+    device: str = "cpu",
 ) -> Dict:
     """Run one MMSeg process for all tiles and retain per-tile failures."""
     if not names:
@@ -190,7 +190,7 @@ def execute(
     data_path: str,
     out_dir: str,
     names: List[str],
-    device: str = "auto",
+    device: str = "cpu",
 ) -> List[str]:
     return call_mmseg_inference(model_id=model_id, data_path=data_path, out_dir=out_dir, names=names, device=device)
 

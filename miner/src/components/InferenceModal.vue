@@ -9,11 +9,26 @@
         <div class="modal-body">
           <div class="form-group">
             <label>KML 文件路径（服务器路径）</label>
-            <input v-model="formData.kmlPath" placeholder="例如: /app/backend/data/new_mine.kml（可选）" class="form-input" />
+            <input
+              v-model="formData.kmlPath"
+              placeholder="例如: /app/backend/data/new_mine.kml（可选）"
+              class="form-input"
+            />
             <small class="tip">提供 KML 时将自动提取多边形并计算指数；留空则处理默认 KML。</small>
             <div class="upload-row">
-              <input ref="kmlFileRef" type="file" accept=".kml" class="file-input" @change="handleKmlFileChange" />
-              <button class="btn-upload" type="button" :disabled="uploadingKml" @click="triggerKmlPick">
+              <input
+                ref="kmlFileRef"
+                type="file"
+                accept=".kml"
+                class="file-input"
+                @change="handleKmlFileChange"
+              />
+              <button
+                class="btn-upload"
+                type="button"
+                :disabled="uploadingKml"
+                @click="triggerKmlPick"
+              >
                 {{ uploadingKml ? '上传中...' : '选择并上传 KML' }}
               </button>
               <small v-if="uploadedKmlPath" class="tip">已上传：{{ uploadedKmlPath }}</small>
@@ -21,11 +36,19 @@
           </div>
           <div class="form-group">
             <label>基准影像路径（Old TIF）</label>
-            <input v-model="formData.oldTifPath" placeholder="例如: /app/backend/bianhua_2years/mine_TEST.tif" class="form-input" />
+            <input
+              v-model="formData.oldTifPath"
+              placeholder="例如: /app/backend/bianhua_2years/mine_TEST.tif"
+              class="form-input"
+            />
           </div>
           <div class="form-group">
             <label>最新影像路径（New TIF）</label>
-            <input v-model="formData.newTifPath" placeholder="默认与基准影像相同" class="form-input" />
+            <input
+              v-model="formData.newTifPath"
+              placeholder="默认与基准影像相同"
+              class="form-input"
+            />
           </div>
 
           <div class="form-row">
@@ -35,12 +58,8 @@
             </div>
             <div class="form-group half">
               <label>计算设备</label>
-              <select v-model="formData.device" class="form-input">
-                <option value="auto">{{ autoDeviceLabel }}</option>
-                <option value="cpu">CPU</option>
-                <option value="cuda:0" :disabled="gpuCapability && !gpuCapability.cuda_available">CUDA:0</option>
-              </select>
-              <small v-if="gpuCapability" class="tip">{{ gpuStatusText }}</small>
+              <div class="fixed-device" role="status">固定设备：CPU</div>
+              <small class="tip">江西项目采用同步 CPU 推理，不进行设备自动选择。</small>
             </div>
           </div>
 
@@ -60,7 +79,11 @@
 
           <div class="modal-footer">
             <button class="btn-cancel" @click="$emit('close')" :disabled="running">取消</button>
-            <button class="btn-submit" @click="handleSubmit" :disabled="running || !formData.oldTifPath">
+            <button
+              class="btn-submit"
+              @click="handleSubmit"
+              :disabled="running || !formData.oldTifPath"
+            >
               {{ running ? '计算中...' : '开始解译与计算' }}
             </button>
           </div>
@@ -71,14 +94,14 @@
 </template>
 
 <script setup>
-import { computed, defineProps, defineEmits, reactive, ref, watch } from 'vue';
+import { defineProps, defineEmits, reactive, ref, watch } from 'vue';
 import axios from 'axios';
 
 const props = defineProps({
   visible: Boolean,
   running: Boolean,
   error: String,
-  result: Object
+  result: Object,
 });
 
 const emit = defineEmits(['close', 'submit']);
@@ -90,7 +113,7 @@ const formData = reactive({
   singleYear: '',
   oldYear: '',
   newYear: '',
-  device: 'auto'
+  device: 'cpu',
 });
 
 const errorMsg = ref('');
@@ -98,57 +121,40 @@ const successMsg = ref('');
 const uploadingKml = ref(false);
 const uploadedKmlPath = ref('');
 const kmlFileRef = ref(null);
-const gpuCapability = ref(null);
 
-const apiUrl = (path) => {
-  const rawBase = import.meta.env.VITE_MINER_API_BASE_URL;
-  const base = rawBase ? String(rawBase).replace(/\/$/, '') : '';
-  return `${base}${path}`;
-};
-const autoDeviceLabel = computed(() =>
-  gpuCapability.value?.cuda_available ? '自动（推荐：CUDA:0）' : '自动（推荐：CPU）'
-);
-const gpuStatusText = computed(() => {
-  const info = gpuCapability.value;
-  if (!info) return '正在检查 GPU 运行环境…';
-  if (info.cuda_available) return `已检测到 ${info.device_name || 'CUDA GPU'}，自动模式将使用 CUDA:0`;
-  return info.fallback_reason || '未检测到 CUDA；自动模式会使用 CPU';
-});
-
-const loadGpuCapability = async () => {
-  try {
-    const response = await axios.get(apiUrl('/api/geoview/gpu_capability'));
-    gpuCapability.value = response?.data?.data || response?.data || null;
-  } catch (_) {
-    gpuCapability.value = { cuda_available: false, fallback_reason: 'GPU 状态不可用，自动模式会使用 CPU' };
-  }
-};
-
-watch(() => props.visible, (val) => {
-  if (val) {
-    errorMsg.value = '';
-    successMsg.value = '';
-    loadGpuCapability();
-  }
-});
-
-watch(() => props.error, (val) => {
-  if (val) errorMsg.value = val;
-});
-
-watch(() => props.result, (val) => {
-  if (val) {
-    const count = val.written_fid_list ? val.written_fid_list.length : 0;
-    const kmlUpdated = Number(val?.kml_update?.updated || 0);
-    const kmlInserted = Number(val?.kml_update?.inserted || 0);
-    const changedCount = kmlUpdated + kmlInserted;
-    if (changedCount > 0) {
-      successMsg.value = `任务完成：KML 已更新矿山信息（更新 ${kmlUpdated}，新增 ${kmlInserted}），并处理 ${count} 个解译结果。`;
-    } else {
-      successMsg.value = `解译完成：成功处理 ${count} 个矿山多边形并已更新光谱指数。`;
+watch(
+  () => props.visible,
+  (val) => {
+    if (val) {
+      errorMsg.value = '';
+      successMsg.value = '';
     }
   }
-});
+);
+
+watch(
+  () => props.error,
+  (val) => {
+    if (val) errorMsg.value = val;
+  }
+);
+
+watch(
+  () => props.result,
+  (val) => {
+    if (val) {
+      const count = val.written_fid_list ? val.written_fid_list.length : 0;
+      const kmlUpdated = Number(val?.kml_update?.updated || 0);
+      const kmlInserted = Number(val?.kml_update?.inserted || 0);
+      const changedCount = kmlUpdated + kmlInserted;
+      if (changedCount > 0) {
+        successMsg.value = `任务完成：KML 已更新矿山信息（更新 ${kmlUpdated}，新增 ${kmlInserted}），并处理 ${count} 个解译结果。`;
+      } else {
+        successMsg.value = `解译完成：成功处理 ${count} 个矿山多边形并已更新光谱指数。`;
+      }
+    }
+  }
+);
 
 const handleSubmit = () => {
   errorMsg.value = '';
@@ -206,8 +212,11 @@ const handleKmlFileChange = async (e) => {
 <style scoped>
 .modal-overlay {
   position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.7);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
   z-index: 4000;
   display: flex;
   align-items: center;
@@ -223,17 +232,36 @@ const handleKmlFileChange = async (e) => {
 .modal-header {
   display: flex;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   padding: 15px 20px;
 }
-.modal-header h3 { margin: 0; color: #4ecdc4; font-size: 16px; }
-.close-btn { background: none; border: none; color: #fff; font-size: 24px; cursor: pointer; }
+.modal-header h3 {
+  margin: 0;
+  color: #4ecdc4;
+  font-size: 16px;
+}
+.close-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+}
 
-.modal-body { padding: 20px; }
+.modal-body {
+  padding: 20px;
+}
 
-.form-group { margin-bottom: 15px; }
-.form-row { display: flex; gap: 15px; }
-.half { flex: 1; }
+.form-group {
+  margin-bottom: 15px;
+}
+.form-row {
+  display: flex;
+  gap: 15px;
+}
+.half {
+  flex: 1;
+}
 
 .form-group label {
   display: block;
@@ -243,8 +271,8 @@ const handleKmlFileChange = async (e) => {
 }
 .form-input {
   width: 100%;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
   padding: 8px 10px;
   border-radius: 4px;
@@ -254,9 +282,32 @@ const handleKmlFileChange = async (e) => {
   border-color: #4ecdc4;
   outline: none;
 }
-.tip { font-size: 11px; color: #666; margin-top: 4px; display: block; }
-.upload-row { margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.file-input { display: none; }
+.fixed-device {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid rgba(156, 231, 189, 0.45);
+  border-radius: 4px;
+  background: rgba(156, 231, 189, 0.08);
+  color: var(--jx-primary);
+  font-weight: 700;
+}
+.tip {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+  display: block;
+}
+.upload-row {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.file-input {
+  display: none;
+}
 .btn-upload {
   background: rgba(78, 205, 196, 0.15);
   border: 1px solid rgba(78, 205, 196, 0.35);
@@ -270,19 +321,34 @@ const handleKmlFileChange = async (e) => {
   cursor: not-allowed;
 }
 
-.error-msg { color: #ff7675; font-size: 13px; margin-bottom: 15px; padding: 10px; background: rgba(255, 118, 117, 0.1); border-radius: 4px; }
-.success-msg { color: #00b894; font-size: 13px; margin-bottom: 15px; padding: 10px; background: rgba(0, 184, 148, 0.1); border-radius: 4px; }
+.error-msg {
+  color: #ff7675;
+  font-size: 13px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background: rgba(255, 118, 117, 0.1);
+  border-radius: 4px;
+}
+.success-msg {
+  color: #00b894;
+  font-size: 13px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background: rgba(0, 184, 148, 0.1);
+  border-radius: 4px;
+}
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
-  border-top: 1px solid rgba(255,255,255,0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 15px;
 }
 
-.btn-cancel, .btn-submit {
+.btn-cancel,
+.btn-submit {
   padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
@@ -290,7 +356,7 @@ const handleKmlFileChange = async (e) => {
   border: none;
 }
 .btn-cancel {
-  background: rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 .btn-submit {
@@ -304,6 +370,12 @@ const handleKmlFileChange = async (e) => {
   cursor: not-allowed;
 }
 
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

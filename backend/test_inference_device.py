@@ -30,37 +30,24 @@ def _fake_torch(available):
 
 
 class InferenceDeviceTestCase(unittest.TestCase):
-    def test_auto_prefers_cuda_when_available(self):
+    def test_default_device_is_fixed_to_cpu_even_when_cuda_is_available(self):
         from applications.interface.inference_device import resolve_inference_device
 
         with patch.dict(sys.modules, {"torch": _fake_torch(True)}):
-            runtime = resolve_inference_device("auto")
+            runtime = resolve_inference_device()
 
-        self.assertEqual(runtime["requested_device"], "auto")
-        self.assertEqual(runtime["effective_device"], "cuda:0")
-        self.assertTrue(runtime["cuda_available"])
-        self.assertEqual(runtime["device_name"], "RTX test")
-
-    def test_auto_falls_back_to_cpu_with_reason(self):
-        from applications.interface.inference_device import resolve_inference_device
-
-        with patch.dict(sys.modules, {"torch": _fake_torch(False)}):
-            runtime = resolve_inference_device("auto")
-
+        self.assertEqual(runtime["requested_device"], "cpu")
         self.assertEqual(runtime["effective_device"], "cpu")
-        self.assertFalse(runtime["cuda_available"])
-        self.assertIn("CUDA", runtime["fallback_reason"])
 
-    def test_explicit_cuda_rejects_unavailable_runtime(self):
-        from applications.interface.inference_device import InferenceDeviceUnavailable, resolve_inference_device
+    def test_rejects_auto_and_cuda_modes(self):
+        from applications.interface.inference_device import InvalidInferenceDevice, resolve_inference_device
 
-        with patch.dict(sys.modules, {"torch": _fake_torch(False)}):
-            with self.assertRaises(InferenceDeviceUnavailable):
-                resolve_inference_device("cuda:0")
+        for value in ("auto", "cuda:0"):
+            with self.assertRaisesRegex(InvalidInferenceDevice, "江西项目仅支持 CPU"):
+                resolve_inference_device(value)
 
     def test_rejects_unknown_device(self):
         from applications.interface.inference_device import InvalidInferenceDevice, resolve_inference_device
 
         with self.assertRaises(InvalidInferenceDevice):
             resolve_inference_device("cuda:1")
-

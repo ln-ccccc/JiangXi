@@ -30,7 +30,7 @@ def run_kml_roi_inference(
     new_tif_path: Optional[str] = None,
     kml_path: Optional[str] = None,
     output_root: Optional[str] = None,
-    device: str = "auto",
+    device: str = "cpu",
     limit: int = 0,
     year: str = "",
     old_year: str = "",
@@ -78,7 +78,7 @@ def run_kml_roi_inference(
         "--output_root",
         str(output_root),
         "--device",
-        str(device),
+        "cpu",
     ]
 
     if year:

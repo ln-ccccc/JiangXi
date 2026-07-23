@@ -261,7 +261,7 @@ const handleInferenceSubmit = async (formData) => {
       year: formData.singleYear,
       oldYear: formData.oldYear,
       newYear: formData.newYear,
-      device: formData.device || 'auto',
+      device: 'cpu',
       limit: 0,
       syncIndices: true,
       indexTypes: ['ndvi', 'ndbi', 'ndwi', 'ndsi'],

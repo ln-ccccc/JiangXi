@@ -146,7 +146,7 @@ def run_inference(
     input_dir: str,
     output_dir: str,
     file_names: List[str],
-    device: str = "auto",
+    device: str = "cpu",
     opacity: float = 0.3
 ) -> dict:
     """
@@ -261,7 +261,7 @@ def main():
     parser.add_argument("--input_dir", required=True, help="Input directory")
     parser.add_argument("--output_dir", required=True, help="Output directory")
     parser.add_argument("--file_names", required=True, help="Comma-separated file names")
-    parser.add_argument("--device", default="auto", help="Device (auto, cuda:0 or cpu)")
+    parser.add_argument("--device", default="cpu", choices=["cpu"], help="Jiangxi CPU inference device")
     parser.add_argument("--opacity", type=float, default=0.3, help="Overlay opacity")
     
     args = parser.parse_args()

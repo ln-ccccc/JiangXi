@@ -4,7 +4,6 @@ export function buildKmlRoiArgs({
   newTifPath,
   kmlPath,
   outputRoot,
-  device,
   limit = 0,
   year = '',
   oldYear = '',
@@ -12,11 +11,16 @@ export function buildKmlRoiArgs({
 }) {
   const args = [
     scriptPath,
-    '--old_tif', oldTifPath,
-    '--new_tif', newTifPath,
-    '--kml', kmlPath,
-    '--output_root', outputRoot,
-    '--device', device,
+    '--old_tif',
+    oldTifPath,
+    '--new_tif',
+    newTifPath,
+    '--kml',
+    kmlPath,
+    '--output_root',
+    outputRoot,
+    '--device',
+    'cpu',
   ];
 
   const limitNum = Number(limit || 0);

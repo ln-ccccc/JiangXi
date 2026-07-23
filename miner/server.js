@@ -829,7 +829,7 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       ['.kml', '.kmz']
     );
     const outputRoot = defaultOutputRoot;
-    const device = normalizeInferenceDevice(req.body?.device);
+    normalizeInferenceDevice(req.body?.device);
     const limitNum = Number(req.body?.limit || 0);
     const year = normalizePathInput(req.body?.year || '');
     const oldYear = normalizePathInput(req.body?.old_year || '');
@@ -851,7 +851,6 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       newTifPath,
       kmlPath,
       outputRoot,
-      device,
       limit: limitNum,
       year,
       oldYear,
@@ -911,11 +910,7 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       return res.status(400).json({ error: err.message });
     }
     const message = err?.message || String(err);
-    const status = /device 仅支持/.test(message)
-      ? 400
-      : /请求 cuda:0 失败|CUDA 设备/.test(message)
-        ? 409
-        : 500;
+    const status = /device 仅支持|江西项目仅支持 CPU/.test(message) ? 400 : 500;
     return res.status(status).json({
       error: 'Failed to run kml roi inference',
       detail: message,

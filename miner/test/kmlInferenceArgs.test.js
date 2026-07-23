@@ -22,23 +22,28 @@ test('buildKmlRoiArgs includes single year and omits old/new years', () => {
   assert.equal(args.includes('--new_year'), false);
 });
 
-test('buildKmlRoiArgs passes auto device through to the inference script', () => {
+test('buildKmlRoiArgs always sends the Jiangxi CPU device', () => {
   const args = buildKmlRoiArgs({
     scriptPath: '/app/backend/kml_roi_infer.py',
     oldTifPath: '/data/old.tif',
     newTifPath: '/data/new.tif',
     kmlPath: '/data/mines.kml',
     outputRoot: '/data/out',
-    device: 'auto',
+    device: 'cuda:0',
   });
 
   assert.deepEqual(args.slice(0, 12), [
     '/app/backend/kml_roi_infer.py',
-    '--old_tif', '/data/old.tif',
-    '--new_tif', '/data/new.tif',
-    '--kml', '/data/mines.kml',
-    '--output_root', '/data/out',
-    '--device', 'auto',
+    '--old_tif',
+    '/data/old.tif',
+    '--new_tif',
+    '/data/new.tif',
+    '--kml',
+    '/data/mines.kml',
+    '--output_root',
+    '/data/out',
+    '--device',
+    'cpu',
   ]);
 });
 
@@ -49,7 +54,7 @@ test('buildKmlRoiArgs includes old/new years when single year is not provided', 
     newTifPath: '/data/new.tif',
     kmlPath: '/data/mines.kml',
     outputRoot: '/data/out',
-    device: 'cuda:0',
+    device: 'cpu',
     limit: 12,
     oldYear: '2020',
     newYear: '2025',

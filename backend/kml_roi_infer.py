@@ -37,7 +37,7 @@ def main() -> int:
         help="Temporary work directory",
     )
     parser.add_argument("--model_id", default="cc-ln/CUGRS", help="MMSeg model id")
-    parser.add_argument("--device", default="auto", help="Inference device")
+    parser.add_argument("--device", default="cpu", choices=["cpu"], help="Jiangxi CPU inference device")
     parser.add_argument("--limit", type=int, default=0, help="Process first N polygons only")
     parser.add_argument("--keep_workdir", action="store_true", help="Keep work directory")
     parser.add_argument("--year", default="", help="Single snapshot year (YYYY). Stores outputs as {FID}+{YYYY}.")

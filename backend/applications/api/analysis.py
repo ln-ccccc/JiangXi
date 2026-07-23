@@ -12,7 +12,6 @@ from applications.common.utils.type_utils import items_handle
 from applications.common.utils.upload import img_url_handle
 from applications.common.utils.safe_paths import PathValidationError, resolve_managed_file, resolve_output_file
 from applications.interface.analysis import handle, spectral_index_calculation, terrain_classification
-from applications.interface.inference_device import get_gpu_capability, InvalidInferenceDevice, InferenceDeviceUnavailable
 from applications.kml_roi.service import run_kml_roi_inference
 from applications.models.analysis import Analysis
 from applications.schemas import AnalysisSchema
@@ -25,11 +24,6 @@ miner_change_output_root = repo_root / 'miner' / 'change_matrix_outputs'
 @analysis_api.before_request
 def require_analysis_auth():
     return ensure_logged_in()
-
-
-@analysis_api.get('/gpu_capability')
-def gpu_capability_api():
-    return success_api(data=get_gpu_capability())
 
 
 def _iter_flash_records():
@@ -103,7 +97,16 @@ def semantic_segmentation_api():
         return fail_api("参数异常")
 
     try:
-        terrain_classification(model_path, up_dir, generate_dir, img_list, step1_, step2_, type_=3)
+        terrain_classification(
+            model_path,
+            up_dir,
+            generate_dir,
+            img_list,
+            step1_,
+            step2_,
+            type_=3,
+            device='cpu',
+        )
         return success_api()
     except Exception as e:
         return fail_api(f"推理失败: {str(e)}")
@@ -197,7 +200,7 @@ def kml_roi_inference_api():
             new_tif_path=str(new_tif_path),
             kml_path=str(kml_path),
             output_root=str(miner_change_output_root),
-            device=req_json.get('device', 'auto'),
+            device='cpu',
             limit=int(req_json.get('limit', 0) or 0),
             year=req_json.get('year') or '',
             old_year=req_json.get('old_year') or '',
@@ -206,10 +209,6 @@ def kml_roi_inference_api():
         return success_api(data=data)
     except PathValidationError as exc:
         return fail_api(str(exc)), 400
-    except InvalidInferenceDevice as exc:
-        return fail_api(str(exc)), 400
-    except InferenceDeviceUnavailable as exc:
-        return fail_api(str(exc)), 409
     except Exception as e:
         return fail_api(str(e))
 
