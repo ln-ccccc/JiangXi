@@ -1,0 +1,10 @@
+[mysqld]
+bind-address=127.0.0.1
+port=3306
+datadir=/var/lib/jiangxi-standalone/mysql
+socket=/tmp/mysql.sock
+pid-file=/tmp/mysql.pid
+character-set-server=utf8mb4
+collation-server=utf8mb4_unicode_ci
+skip-host-cache
+skip-name-resolve

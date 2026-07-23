@@ -1,0 +1,174 @@
+x-app-env: &app-env
+  MYSQL_HOST: mysql
+  MYSQL_PORT: 3306
+  MYSQL_USERNAME: "${MYSQL_USERNAME:-geoview}"
+  MYSQL_PASSWORD: "${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}"
+  MYSQL_DATABASE: "${MYSQL_DATABASE:-geoview}"
+  ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
+  ADMIN_PASSWORD: "${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}"
+  SECRET_KEY: "${SECRET_KEY:?SECRET_KEY is required}"
+  FLASK_CONFIG: production
+  TRANSFORMERS_OFFLINE: "1"
+  HF_DATASETS_OFFLINE: "1"
+  HF_HUB_OFFLINE: "1"
+  FRONTEND_PORT: 3000
+  MINER_BACKEND_PORT: 8000
+  MINER_FRONTEND_PORT: 4000
+  MINER_MAP_PROVIDER: "${MINER_MAP_PROVIDER:-gaode}"
+  MINER_TDT_KEY: "${MINER_TDT_KEY:-}"
+  MINER_LOCAL_TILE_URL: "${MINER_LOCAL_TILE_URL:-http://localhost:8000/tiles/{z}/{x}/{y}.png}"
+  MINER_LOCAL_TMS: "${MINER_LOCAL_TMS:-0}"
+  MINER_TILE_TIF_PATH: "${MINER_TILE_TIF_PATH:-/offline_maps/dali/澶х悊鐧芥棌鑷不宸瀇鍗浘1_Level_15.tif}"
+
+  MINER_TILE_MIN_ZOOM: "${MINER_TILE_MIN_ZOOM:-8}"
+  MINER_TILE_MAX_ZOOM: "${MINER_TILE_MAX_ZOOM:-15}"
+  MINER_TILE_PROCESSES: "${MINER_TILE_PROCESSES:-4}"
+  MINER_DEFAULT_GEO_SOURCE_PATH: "${MINER_DEFAULT_GEO_SOURCE_PATH:-/app/runtime_data/348个图斑.shp}"
+  MINER_DEFAULT_KMZ_PATH: "${MINER_DEFAULT_KMZ_PATH:-/app/runtime_data/Jiangxi_NaturalMine.kmz}"
+  MINER_INFERENCE_DATA_ROOT: "${MINER_INFERENCE_DATA_ROOT:-/app/backend/bianhua_2years}"
+  MINER_ECOLOGY_WORKBOOK_PATH: "${MINER_ECOLOGY_WORKBOOK_PATH:-/app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx}"
+
+x-runtime-base: &runtime-base
+  image: ${APP_IMAGE:-geoview-runtime:current}
+  volumes:
+    - ./config.yaml:/app/config.yaml:ro
+    - ./docker:/app/docker:ro
+  restart: unless-stopped
+
+services:
+  backend:
+    <<: *runtime-base
+    container_name: cugrs-backend
+    entrypoint: ["/bin/bash", "/app/docker/start-backend.sh"]
+    environment:
+      <<: *app-env
+    ports:
+      - "5008:5008"
+    depends_on:
+      - mysql
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./docker:/app/docker:ro
+      - ./backend:/app/backend:ro
+      - ./miner/yunnan.kml:/app/miner/yunnan.kml:ro
+      - ./miner/NDVI_2year.xlsx:/app/miner/NDVI_2year.xlsx
+      - ./miner/NDBI_by_fid_2year_avg.xlsx:/app/miner/NDBI_by_fid_2year_avg.xlsx
+      - ./miner/NDWI_by_fid_2year_avg.xlsx:/app/miner/NDWI_by_fid_2year_avg.xlsx
+      - ./miner/NDSI_by_fid_2year_avg.xlsx:/app/miner/NDSI_by_fid_2year_avg.xlsx
+      - miner-outputs:/app/miner/change_matrix_outputs
+      - backend-static:/app/backend/static
+      - hf-cache:/root/.cache/huggingface
+      - ${OFFLINE_MAP_DIR:-./maps/dali}:/offline_maps/dali:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5008/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    <<: *runtime-base
+    container_name: cugrs-frontend
+    entrypoint: ["/bin/bash", "/app/docker/start-frontend.sh"]
+    environment:
+      <<: *app-env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./docker:/app/docker:ro
+      - ./frontend/src:/app/frontend/src:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  miner-api:
+    <<: *runtime-base
+    container_name: cugrs-miner-api
+    entrypoint: ["/bin/bash", "/app/docker/start-miner-api.sh"]
+    environment:
+      <<: *app-env
+      GEOVIEW_BACKEND_URL: "http://backend:5008"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - backend
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./docker:/app/docker:ro
+      - ./miner/server.js:/app/miner/server.js:ro
+      - ./miner/routes:/app/miner/routes:ro
+      - ./miner/services:/app/miner/services:ro
+      - ./miner/yunnan.kml:/app/miner/yunnan.kml:ro
+      - ./miner/NDVI_2year.xlsx:/app/miner/NDVI_2year.xlsx:ro
+      - ./miner/NDBI_by_fid_2year_avg.xlsx:/app/miner/NDBI_by_fid_2year_avg.xlsx:ro
+      - ./miner/NDWI_by_fid_2year_avg.xlsx:/app/miner/NDWI_by_fid_2year_avg.xlsx:ro
+      - ./miner/NDSI_by_fid_2year_avg.xlsx:/app/miner/NDSI_by_fid_2year_avg.xlsx:ro
+      - ./miner/data:/app/miner/data:ro
+      - ./docker/standalone/runtime_data:/app/runtime_data:ro
+      - miner-outputs:/app/miner/change_matrix_outputs
+      - miner-tiles:/app/miner/public/tiles
+      - backend-static:/app/backend/static
+      - hf-cache:/root/.cache/huggingface
+      - ${OFFLINE_MAP_DIR:-./maps/dali}:/offline_maps/dali:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/auth/session >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  miner-web:
+    <<: *runtime-base
+    container_name: cugrs-miner-web
+    entrypoint: ["/bin/bash", "/app/docker/start-miner-web.sh"]
+    environment:
+      <<: *app-env
+      VITE_MINER_API_BASE_URL: ""
+      PROXY_API_TARGET: "http://miner-api:8000"
+    ports:
+      - "4000:4000"
+    depends_on:
+      - miner-api
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./docker:/app/docker:ro
+      - ./miner/src:/app/miner/src:ro
+      - ./miner/vite.config.js:/app/miner/vite.config.js:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4000/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    image: ${MYSQL_IMAGE:-registry.openanolis.cn/openanolis/mysql:8.0.30-8.6}
+    container_name: cugrs-mysql
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-geoview}"
+      MYSQL_USER: "${MYSQL_USERNAME:-geoview}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  backend-static:
+    name: geoview_backend_static
+  mysql-data:
+    name: geoview_mysql_data
+  hf-cache:
+    name: geoview_hf_cache
+  miner-outputs:
+    name: geoview_miner_outputs
+  miner-tiles:
+    name: geoview_miner_tiles

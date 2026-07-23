@@ -1,0 +1,79 @@
+:root {
+  --jx-bg: #071923;
+  --jx-bg-elevated: #0b222b;
+  --jx-surface: #0d2630;
+  --jx-surface-muted: rgba(230, 201, 140, 0.06);
+  --jx-border: rgba(156, 231, 189, 0.22);
+  --jx-border-strong: rgba(156, 231, 189, 0.5);
+  --jx-text: #e5f1ed;
+  --jx-text-muted: #9bb0ab;
+  --jx-primary: #9ce7bd;
+  --jx-primary-hover: #b7f0d0;
+  --jx-success: #82d7a7;
+  --jx-warning: #d68058;
+  --jx-danger: #d96b6b;
+  --jx-info: #8fc6c8;
+  --jx-sand: #e6c98c;
+  --jx-radius: 10px;
+  --jx-radius-large: 16px;
+  --border-color: var(--jx-border);
+  --color-background: var(--jx-bg);
+  --color-text: var(--jx-text);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--color-text);
+  background: var(--color-background);
+  line-height: 1.6;
+  font-family:
+    'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', Bahnschrift,
+    'DIN Alternate', ui-monospace, monospace, sans-serif;
+  font-size: 15px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:focus-visible {
+  outline: 2px solid var(--jx-primary);
+  outline-offset: 3px;
+}
+
+* {
+  scrollbar-color: rgba(156, 231, 189, 0.35) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(156, 231, 189, 0.35);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

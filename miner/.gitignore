@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+logs/
+uploads/
+change_matrix_outputs/
+public/tiles/
+api-test.out.log

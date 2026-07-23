@@ -1,0 +1,30 @@
+FROM geoview-runtime:split-clean
+
+WORKDIR /app
+
+ENV STANDALONE_MODE=1 \
+    DB_BACKEND=sqlite \
+    SQLITE_PATH=/app/runtime_data/jiangxi.sqlite3 \
+    CONFIG_PATH=/app/docker/standalone/config.standalone.yaml \
+    CSV_PATH=/app/runtime_data/Mine.csv \
+    MINER_DEFAULT_GEO_SOURCE_PATH=/app/runtime_data/348个图斑.shp \
+    MINER_DEFAULT_KMZ_PATH=/app/runtime_data/Jiangxi_NaturalMine.kmz \
+    MINER_ECOLOGY_WORKBOOK_PATH=/app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx \
+    GEOVIEW_BACKEND_URL=http://127.0.0.1:5008 \
+    MINER_MAP_PROVIDER=gaode
+
+COPY backend /app/backend
+COPY frontend /app/frontend
+COPY miner /app/miner
+COPY docker /app/docker
+COPY config.yaml /app/config.yaml
+COPY docker/standalone/runtime_data /app/runtime_data
+
+RUN chmod +x /app/docker/entrypoint.sh /app/docker/*.sh /app/docker/standalone/*.sh \
+    && mkdir -p /var/lib/jiangxi-standalone /app/runtime_data
+
+EXPOSE 4000 5008
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=5 CMD ["/app/docker/standalone/healthcheck.sh"]
+
+ENTRYPOINT ["/app/docker/standalone/start-jiangxi-standalone.sh"]
