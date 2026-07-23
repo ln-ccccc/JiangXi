@@ -155,6 +155,85 @@ textarea {
   letter-spacing: 0.12em;
 }
 
+.workflow-heading__eyebrow {
+  color: var(--jx-sand);
+  font-size: 11px;
+}
+
+.workflow-heading h1 {
+  margin: 6px 0 4px;
+  color: var(--jx-text);
+  font-size: clamp(30px, 3.3vw, 48px);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.12;
+}
+
+.workflow-heading p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--jx-text-muted);
+}
+
+.workflow-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.workflow-badges span {
+  padding: 6px 10px;
+  border: 1px solid var(--jx-border);
+  border-radius: 999px;
+  background: var(--jx-surface-muted);
+  color: var(--jx-text);
+  font-family: var(--jx-font-data);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.workflow-badges span:first-child {
+  border-color: var(--jx-border-strong);
+  color: var(--jx-primary);
+}
+
+.workflow-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 24px 0 18px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--jx-border);
+  border-radius: var(--jx-radius-large);
+  background: var(--jx-border);
+  list-style: none;
+}
+
+.workflow-track li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px 16px;
+  background: var(--jx-bg-elevated);
+  color: var(--jx-text-muted);
+}
+
+.workflow-track li:first-child,
+.workflow-track li:last-child {
+  color: var(--jx-text);
+}
+
+.workflow-step__number {
+  color: var(--jx-sand);
+  font-family: var(--jx-font-data);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
 :focus-visible {
   outline: 2px solid var(--jx-primary);
   outline-offset: 3px;
@@ -520,6 +599,14 @@ textarea {
   .option-row .el-input-number {
     width: 100% !important;
   }
+
+  .workflow-badges {
+    justify-content: flex-start;
+  }
+
+  .workflow-track {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 480px) {
@@ -529,6 +616,15 @@ textarea {
 
   .el-card__body {
     padding: 12px;
+  }
+
+  .workflow-heading h1 {
+    font-size: 28px;
+  }
+
+  .workflow-track li {
+    padding: 11px 10px;
+    font-size: 13px;
   }
 }
 

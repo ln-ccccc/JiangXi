@@ -1,0 +1,119 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const frontendRoot = path.resolve(testDirectory, "..");
+const read = (...segments) =>
+  fs.readFileSync(path.join(frontendRoot, ...segments), "utf8");
+
+const segmentation = read("src", "views", "mainfun", "Segmentation.vue");
+const spectral = read("src", "views", "mainfun", "SpectralIndices.vue");
+const imageShow = read("src", "components", "ImgShow.vue");
+const tabInfo = read("src", "components", "Tabinfor.vue");
+const bottomInfo = read("src", "components", "Bottominfor.vue");
+const theme = read("src", "assets", "css", "theme-dark.css");
+const uploadUtility = read("src", "utils", "getUploadImg.js");
+
+const workflowPages = [segmentation, spectral];
+const workflowSource = workflowPages.join("\n");
+const productionSource = [
+  workflowSource,
+  imageShow,
+  tabInfo,
+  bottomInfo,
+  theme,
+  uploadUtility,
+].join("\n");
+
+test("两类分析页都呈现江西同步 CPU 四步工作流", () => {
+  for (const source of workflowPages) {
+    assert.match(source, /class="[^"]*\banalysis-workflow\b[^"]*"/);
+    assert.match(source, /workflow-step__number">01<\/span><span>数据源/);
+    assert.match(source, /workflow-step__number">02<\/span><span>参数设置/);
+    assert.match(source, /workflow-step__number">03<\/span><span>执行分析/);
+    assert.match(source, /workflow-step__number">04<\/span><span>结果预览/);
+    assert.match(source, /江西/);
+    assert.match(source, /同步分析/);
+    assert.match(source, />CPU</);
+  }
+});
+
+test("工作流保持江西同步链路且不引入云南异步或 GPU 调度", () => {
+  assert.match(
+    segmentation,
+    /upload\('地物分类','semantic_segmentation'\)/,
+  );
+  assert.match(spectral, /@click="startCompute"/);
+  assert.match(spectral, /this\.createSrc\(formData\)\.then/);
+  assert.match(spectral, /return this\.imgUpload\(/);
+  assert.match(uploadUtility, /device:\s*'cpu'/);
+  assert.doesNotMatch(productionSource, /\/api\/inference\/jobs/i);
+  assert.doesNotMatch(productionSource, /自动\s*GPU|GPU\s*回退|自动设备选择/i);
+});
+
+test("没有 tif 或 tiff 时两个执行按钮都明确禁用", () => {
+  for (const source of workflowPages) {
+    assert.match(
+      source,
+      /<el-button[^>]*:disabled="(?:!fileList\.length|fileList\.length\s*===\s*0)"[^>]*>/s,
+    );
+    assert.match(source, /请先选择 tif \/ tiff 影像/);
+  }
+});
+
+test("页面暴露等待、失败和部分成功的可感知状态", () => {
+  for (const source of workflowPages) {
+    assert.match(source, /aria-live="polite"/);
+    assert.match(source, /data-state="idle"/);
+    assert.match(source, /data-state="error"/);
+    assert.match(source, /data-state="partial"/);
+  }
+  assert.match(spectral, /计算失败/);
+  assert.match(spectral, /同步部分失败/);
+  assert.match(uploadUtility, /Flash 部分成功/);
+  assert.match(uploadUtility, /Flash 推理失败/);
+  assert.match(
+    spectral,
+    /v-if="runState === 'idle' && !fileList\.length"/,
+    "清空已完成队列后仍应保留成功或部分成功状态",
+  );
+});
+
+test("结果区提供有方向的空态、历史操作和正确简体中文", () => {
+  assert.match(imageShow, /尚无分析结果/);
+  assert.match(imageShow, /请先在上方选择 tif \/ tiff 影像并执行分析/);
+  assert.match(imageShow, /原始影像/);
+  assert.match(imageShow, /分析结果/);
+  assert.match(imageShow, /下载结果/);
+  assert.match(imageShow, /删除该组/);
+  assert.doesNotMatch(productionSource, /�/);
+});
+
+test("地物分类图例对服务端结果类型可达", () => {
+  assert.match(imageShow, /v-if="isLandClassification\(item\)"/);
+  assert.match(imageShow, /isLandClassification\(item\)\s*{/);
+  assert.match(imageShow, /地物分类/);
+  assert.match(imageShow, /semantic_segmentation/);
+  for (const label of ["草地", "林地", "建筑", "道路", "裸地", "水体"]) {
+    assert.match(imageShow, new RegExp(label));
+  }
+});
+
+test("分析工作流在三档窄屏和 reduced-motion 下保持可用", () => {
+  const styleSource = [workflowSource, imageShow, tabInfo, theme].join("\n");
+  assert.match(styleSource, /@media\s*\(max-width:\s*1100px\)/);
+  assert.match(styleSource, /@media\s*\(max-width:\s*768px\)/);
+  assert.match(styleSource, /@media\s*\(max-width:\s*480px\)/);
+  assert.match(styleSource, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+  assert.match(styleSource, /:focus-visible/);
+});
+
+test("工作流样式只使用江西令牌且页脚不再跳转外部站点", () => {
+  assert.match(workflowSource, /var\(--jx-/);
+  assert.doesNotMatch([workflowSource, imageShow].join("\n"), /#409eff/i);
+  assert.match(bottomInfo, /江西省矿山生态修复智能监测平台/);
+  assert.doesNotMatch(bottomInfo, /github|https?:\/\//i);
+});

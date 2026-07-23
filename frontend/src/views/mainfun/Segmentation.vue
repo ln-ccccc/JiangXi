@@ -1,24 +1,42 @@
 <template>
-  <div>
+  <main class="analysis-workflow segmentation-workflow">
     <Tabinfor>
       <template #left>
-        <div id="sub-title">
-          地物分类
+        <div class="workflow-heading">
+          <span class="workflow-heading__eyebrow data-label">JIANGXI · LAND RECORD</span>
+          <h1 class="atlas-title">地物分类</h1>
+          <p>对江西矿区 tif / tiff 遥感影像执行多要素地物解译，并按矿区边界归档成果。</p>
+        </div>
+      </template>
+      <template #right>
+        <div class="workflow-badges" aria-label="运行配置">
+          <span>江西</span>
+          <span>同步分析</span>
+          <span>CPU</span>
         </div>
       </template>
     </Tabinfor>
-    <el-divider />
-
-    <p>
-      请上传<span class="go-bold">tif/tiff遥感影像</span>（用于KML矿山定位）
-    </p>
+    <ol class="workflow-track" aria-label="分析步骤">
+      <li><span class="workflow-step__number">01</span><span>数据源</span></li>
+      <li><span class="workflow-step__number">02</span><span>参数设置</span></li>
+      <li><span class="workflow-step__number">03</span><span>执行分析</span></li>
+      <li><span class="workflow-step__number">04</span><span>结果预览</span></li>
+    </ol>
 
     <el-row
       type="flex"
       justify="space-evenly"
     >
       <el-col :span="24">
-        <el-card style="border: 4px dashed var(--el-border-color)">
+        <el-card class="workflow-sheet">
+          <section class="workflow-panel" data-step="01">
+            <header class="workflow-panel__header">
+              <div>
+                <span class="workflow-panel__index data-label">01 / SOURCE</span>
+                <h2 class="atlas-title">数据源</h2>
+              </div>
+              <p>选择包含江西矿区影像的文件夹，或直接选择一个或多个 tif / tiff 文件。</p>
+            </header>
           <div
             v-if="fileList.length"
             class="clear-queue"
@@ -33,7 +51,12 @@
           </div>
           <div
             class="upload-card upload-dropzone"
+            role="button"
+            tabindex="0"
+            aria-label="选择 tif 或 tiff 遥感影像文件夹"
             @click="fileClick"
+            @keydown.enter="fileClick"
+            @keydown.space.prevent="fileClick"
             @dragover.prevent
             @dragenter.prevent
             @drop.prevent="handleNativeDrop"
@@ -103,11 +126,20 @@
             @change="handleFileSelect"
           >
           <el-row justify="center">
-            <div style="color:var(--text-muted); font-size: 12px;">
+            <div class="upload-guidance">
               支持拖拽文件夹、点击选择整个文件夹，自动递归过滤非 tif / tiff 文件
             </div>
           </el-row>
+          </section>
 
+          <section class="workflow-panel" data-step="02">
+            <header class="workflow-panel__header">
+              <div>
+                <span class="workflow-panel__index data-label">02 / PARAMETERS</span>
+                <h2 class="atlas-title">参数设置</h2>
+              </div>
+              <p>填写成果年份，并按影像情况选择裁剪、增强或降噪预处理。</p>
+            </header>
           <el-row justify="center">
             <p>
               <label class="prehandle-label container">
@@ -196,14 +228,37 @@
               </label>
             </p>
           </el-row>
-          <div class="handle-button">
+          </section>
+
+          <section class="workflow-panel workflow-panel--execute" data-step="03">
+            <header class="workflow-panel__header">
+              <div>
+                <span class="workflow-panel__index data-label">03 / RUN</span>
+                <h2 class="atlas-title">执行分析</h2>
+              </div>
+              <p>使用江西固定 CPU 配置同步分析；页面会等待本批次完成后再刷新成果。</p>
+            </header>
+          <div class="handle-button execution-action">
             <el-button
               type="primary"
               class="btn-animate btn-animate__shiny"
+              :disabled="fileList.length === 0"
               @click="upload('地物分类','semantic_segmentation')"
             >
-              开始处理
+              开始地物分类
             </el-button>
+          </div>
+          <div class="run-status" aria-live="polite">
+            <p v-if="!fileList.length" data-state="idle">
+              请先选择 tif / tiff 影像，执行按钮将在数据就绪后启用。
+            </p>
+            <p v-else data-state="ready">
+              已就绪 {{ fileList.length }} 个文件；请确认四位年份后开始同步分析。
+            </p>
+            <div class="run-status__guide">
+              <span data-state="partial">部分成功：保留已生成成果，并提示失败切片数量。</span>
+              <span data-state="error">失败：显示失败原因，请检查影像格式、年份和矿区边界。</span>
+            </div>
           </div>
           <el-divider v-if="!uploadSrc.prehandle" />
           <div v-if="uploadSrc.prehandle">
@@ -318,52 +373,43 @@
               </el-col>
             </el-row>
           </div>
+          </section>
         </el-card>
       </el-col>
     </el-row>
-    <Tabinfor>
-      <template #left>
-        <div
-          id="sub-title"
-        >
-          结果图预览<i
-            class="iconfont icon-dianji"
-          />
-        </div>
-      </template>
-    </Tabinfor>
-    <el-divider />
-    <Tabinfor>
-      <template #left>
-        <p>
-          <span class="go-bold">点击图片</span>即可预览
-          <i
-            class="iconfont icon-duigou"
-          />
-          <span><span class="go-bold">滑轮滚动</span>即可放大缩小</span>
-        </p>
-      </template>
-      <template #right>
-        <div class="go-bold history-tools">
+    <section class="workflow-panel workflow-panel--results" data-step="04">
+      <Tabinfor>
+        <template #left>
+          <div class="workflow-panel__header workflow-panel__header--compact">
+            <div>
+              <span class="workflow-panel__index data-label">04 / RESULTS</span>
+              <h2 class="atlas-title">结果预览</h2>
+              <p>查看原始影像、分类成果与类别图例；选择图片可放大检查。</p>
+            </div>
+          </div>
+        </template>
+        <template #right>
+          <div class="history-tools">
           <el-button
             size="mini"
             type="danger"
             plain
-            style="margin-right: 10px;"
             @click="clearCurrentHistory"
           >
             一键清空历史
           </el-button>
           <i
             class="iconfont icon-shuaxin"
-            style="padding-right:65px"
+            role="button"
+            tabindex="0"
             @click="getMore"
+            @keydown.enter="getMore"
           ><span
             class="hidden-sm-and-down"
           >点击刷新</span></i>
         </div>
-      </template>
-    </Tabinfor>
+        </template>
+      </Tabinfor>
     <el-dialog
       v-model="cutVisible"
       :modal="false"
@@ -385,8 +431,9 @@
       :img-arr="imgArr"
       @delete-item="deleteHistoryItem"
     />
+    </section>
     <Bottominfor />
-  </div>
+  </main>
 </template>
 
 <script>
@@ -680,23 +727,16 @@ export default {
 };
 </script>
 <style lang="less" scoped>
-* {
-  font-family: SimHei sans-serif;
-}
-#sub-title {
-  font-size: 25px;
-}
-#sub-title:hover:after {
-  left: 0;
-  right: 0;
-  width: 220px;
+.analysis-workflow {
+  width: min(100%, 1480px);
+  margin: 0 auto;
+  color: var(--jx-text);
 }
 
 .clear-queue {
-  position: absolute;
-  left: 5px;
-  top: 10%;
-  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
 }
 
 .upload-dropzone {
@@ -706,12 +746,17 @@ export default {
   cursor: pointer;
 }
 
+.upload-dropzone:focus-visible {
+  outline: 2px solid var(--jx-primary);
+  outline-offset: 3px;
+}
+
 .upload-dropzone .iconfont {
   display: block;
   font-size: 38px;
   line-height: 1;
   margin-bottom: 8px;
-  color: var(--theme--color);
+  color: var(--jx-primary);
 }
 
 .upload-dropzone .el-upload__text {
@@ -743,6 +788,12 @@ export default {
 .upload-dropzone + .el-row,
 .upload-dropzone ~ .el-row {
   margin-top: 8px;
+}
+
+.upload-guidance {
+  margin-top: 8px;
+  color: var(--jx-text-muted);
+  font-size: 12px;
 }
 
 .selected-files {
@@ -782,6 +833,176 @@ export default {
 
 .el-radio /deep/ .el-radio__input {
   margin-top: 0;
+}
+
+.workflow-sheet {
+  border-color: var(--jx-border) !important;
+}
+
+.workflow-panel {
+  position: relative;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--jx-border);
+}
+
+.workflow-panel:first-child {
+  padding-top: 4px;
+}
+
+.workflow-panel:last-child {
+  border-bottom: 0;
+}
+
+.workflow-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 20px;
+}
+
+.workflow-panel__header h2 {
+  margin: 3px 0 0;
+  color: var(--jx-text);
+  font-size: 24px;
+  font-weight: 650;
+}
+
+.workflow-panel__header > p {
+  max-width: 620px;
+  margin: 4px 0 0;
+  color: var(--jx-text-muted);
+}
+
+.workflow-panel__index {
+  color: var(--jx-sand);
+  font-size: 11px;
+}
+
+.workflow-panel--execute {
+  padding-bottom: 8px;
+}
+
+.workflow-panel--results {
+  margin-top: 22px;
+  padding: 24px;
+  border: 1px solid var(--jx-border);
+  border-radius: var(--jx-radius-large);
+  background: var(--jx-surface);
+}
+
+.workflow-panel__header--compact {
+  margin-bottom: 0;
+}
+
+.workflow-panel__header--compact p {
+  margin: 6px 0 0;
+  color: var(--jx-text-muted);
+}
+
+.execution-action {
+  display: flex;
+  justify-content: flex-start;
+  margin: 0;
+}
+
+.execution-action :deep(.el-button) {
+  min-width: 210px;
+}
+
+.run-status {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--jx-border);
+  border-radius: var(--jx-radius);
+  background: var(--jx-surface-muted);
+  color: var(--jx-text-muted);
+}
+
+.run-status p {
+  margin: 0;
+}
+
+.run-status [data-state="ready"] {
+  color: var(--jx-success);
+}
+
+.run-status__guide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.run-status [data-state="partial"] {
+  color: var(--jx-warning);
+}
+
+.run-status [data-state="error"] {
+  color: var(--jx-danger);
+}
+
+.history-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.history-tools .icon-shuaxin {
+  color: var(--jx-primary);
+  cursor: pointer;
+}
+
+.history-tools .icon-shuaxin:focus-visible {
+  outline: 2px solid var(--jx-primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1100px) {
+  .workflow-panel__header {
+    gap: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .workflow-panel,
+  .workflow-panel--results {
+    padding: 18px 14px;
+  }
+
+  .workflow-panel__header {
+    display: block;
+  }
+
+  .workflow-panel__header > p {
+    margin-top: 8px;
+  }
+
+  .run-status__guide {
+    grid-template-columns: 1fr;
+  }
+
+  .execution-action :deep(.el-button) {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .workflow-panel,
+  .workflow-panel--results {
+    padding: 16px 10px;
+  }
+
+  .workflow-panel__header h2 {
+    font-size: 21px;
+  }
+
+  .history-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 </style>
