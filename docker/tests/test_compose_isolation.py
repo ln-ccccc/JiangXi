@@ -71,6 +71,7 @@ class ComposeIsolationTests(unittest.TestCase):
 
     def test_shared_app_environment_uses_jiangxi_auth_and_public_origins(self):
         environment = self.prod["services"]["backend"]["environment"]
+        self.assertEqual(environment.get("DB_BACKEND"), "mysql")
         self.assertEqual(environment.get("SESSION_COOKIE_NAME"), "jiangxi_session")
         self.assertEqual(
             environment["CORS_ALLOWED_ORIGINS"],
@@ -245,6 +246,7 @@ class EnvironmentExampleTests(unittest.TestCase):
                 values[key] = value
 
         self.assertEqual(values["APP_IMAGE"], "jiangxi-runtime:current")
+        self.assertEqual(values["DB_BACKEND"], "mysql")
         self.assertEqual(values["SESSION_COOKIE_NAME"], "jiangxi_session")
         self.assertEqual(
             values["CORS_ALLOWED_ORIGINS"],

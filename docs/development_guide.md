@@ -33,10 +33,13 @@ D:\项目\JiangXi\JiangXi-Platform
 前端入口必须由以下变量显式配置：
 
 ```text
+DB_BACKEND=mysql
 VITE_GEOVIEW_URL=http://127.0.0.1:4174/
 VUE_APP_MINER_URL=http://127.0.0.1:4173/
 VUE_APP_BACKEND_URL=http://127.0.0.1:5178/
 ```
+
+`DB_BACKEND=mysql` 必须显式保留，用于覆盖运行镜像中的单机 SQLite 默认值，确保独立栈连接 `jiangxi-mysql` 与 `jiangxi_mysql_data`。
 
 缺少入口配置时，界面应禁用入口并显示错误，不得回退到其他项目、其他端口或其他路由。
 

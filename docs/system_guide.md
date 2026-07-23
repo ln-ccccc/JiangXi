@@ -27,6 +27,7 @@ jiangxi_miner_tiles
 ```
 
 MySQL 基础镜像由 `.env.example` 中的 `MYSQL_IMAGE` 指定；其容器与数据卷仍属于江西命名空间。
+Compose 显式设置 `DB_BACKEND=mysql`，避免继承运行镜像的单机 SQLite 配置。
 
 ## 3. 认证与导航
 

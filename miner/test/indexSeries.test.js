@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import test from 'node:test';
 
-import { buildIndicesPayload, calculateStats } from '../services/indexSeries.js';
+import {
+  buildIndicesPayload,
+  calculateStats,
+  resolveIndexSourcePath,
+} from '../services/indexSeries.js';
+
+test('legacy index workbooks are resolved only inside the controlled Jiangxi data directory', () => {
+  assert.equal(
+    resolveIndexSourcePath('NDVI_2year.xlsx', '/app/miner'),
+    path.resolve('/app/miner', 'data', 'NDVI_2year.xlsx')
+  );
+});
 
 test('calculateStats returns no_data when no series exists', () => {
   assert.deepEqual(calculateStats([]), {
@@ -22,9 +34,17 @@ test('buildIndicesPayload marks missing source files as unavailable', () => {
     },
     availability: {
       ndvi: { available: true, source_file: 'NDVI_2year.xlsx', reason: null },
-      ndbi: { available: false, source_file: 'NDBI_by_fid_2year_avg.xlsx', reason: 'missing_source_file' },
+      ndbi: {
+        available: false,
+        source_file: 'NDBI_by_fid_2year_avg.xlsx',
+        reason: 'missing_source_file',
+      },
       ndwi: { available: true, source_file: 'NDWI_by_fid_2year_avg.xlsx', reason: null },
-      ndsi: { available: false, source_file: 'NDSI_by_fid_2year_avg.xlsx', reason: 'missing_source_file' },
+      ndsi: {
+        available: false,
+        source_file: 'NDSI_by_fid_2year_avg.xlsx',
+        reason: 'missing_source_file',
+      },
     },
   });
 

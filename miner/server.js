@@ -26,7 +26,12 @@ import {
 } from './services/defaultJiangxiSource.js';
 import { buildKmlRoiArgs } from './services/kmlInferenceArgs.js';
 import { normalizeInferenceDevice } from './services/inferenceDevicePolicy.js';
-import { buildIndicesPayload, calculateStats, INDEX_SOURCE_FILES } from './services/indexSeries.js';
+import {
+  buildIndicesPayload,
+  calculateStats,
+  INDEX_SOURCE_FILES,
+  resolveIndexSourcePath,
+} from './services/indexSeries.js';
 import { loadJiangxiGeoJsonFromSource } from './services/jiangxiGeoJsonSource.js';
 import { saveKmlUpload } from './services/kmlUpload.js';
 import { buildEmptyTilePng, resolveLocalTilePath } from './services/localTileService.js';
@@ -395,7 +400,7 @@ function rowsFromSheet(sheet, valueRegex) {
 }
 
 async function loadIndexData(filePath, valueRegex) {
-  const fullPath = path.resolve(process.cwd(), filePath);
+  const fullPath = resolveIndexSourcePath(filePath);
   const result = {
     dataMap: {},
     available: false,

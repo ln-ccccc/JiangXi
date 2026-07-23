@@ -1,9 +1,15 @@
+import path from 'node:path';
+
 export const INDEX_SOURCE_FILES = {
   ndvi: 'NDVI_2year.xlsx',
   ndbi: 'NDBI_by_fid_2year_avg.xlsx',
   ndwi: 'NDWI_by_fid_2year_avg.xlsx',
   ndsi: 'NDSI_by_fid_2year_avg.xlsx',
 };
+
+export function resolveIndexSourcePath(filePath, minerRoot = process.cwd()) {
+  return path.resolve(minerRoot, 'data', path.basename(filePath));
+}
 
 export function calculateStats(data) {
   if (!data || data.length === 0) {
@@ -28,7 +34,7 @@ export function calculateStats(data) {
   const sumXX = years.reduce((sum, year) => sum + year * year, 0);
   const denom = n * sumXX - sumX * sumX;
   const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
-  const mkTrend = slope > 0.0005 ? 'upward' : (slope < -0.0005 ? 'downward' : 'stable');
+  const mkTrend = slope > 0.0005 ? 'upward' : slope < -0.0005 ? 'downward' : 'stable';
 
   return {
     mean: Number(mean.toFixed(3)),
@@ -58,8 +64,10 @@ export function buildIndicesPayload({ fid, sourceData = {}, availability = {} })
     const available = sourceAvailable && hasMineData;
     const sourceFile = status.source_file || INDEX_SOURCE_FILES[key];
     const reason = !sourceAvailable
-      ? (status.reason || 'missing_source_file')
-      : (hasMineData ? null : 'missing_mine_data');
+      ? status.reason || 'missing_source_file'
+      : hasMineData
+        ? null
+        : 'missing_mine_data';
 
     payload[key] = {
       data: rawData,
