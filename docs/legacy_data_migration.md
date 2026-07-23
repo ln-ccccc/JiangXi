@@ -1,57 +1,85 @@
-# 旧版数据迁移说明
+# 江西人工确认成果迁移规则
 
-## 目的
+## 1. 默认策略
 
-`backend/migrate_legacy_project_data.py` 用于把旧版全局成果补录到项目工作台，包括：
+江西独立工程从权威江西种子重建，不默认迁移任何旧运行态，包括：
 
-- 历史矿山绑定
-- 历史变化矩阵输出目录
-- 历史分析记录
-- 缺失的 `NDBI` / `NDSI` 指数工作簿
+- 数据库与用户会话
+- 模型和依赖缓存
+- 上传缓存与临时文件
+- 历史推理结果
+- 地图瓦片与中间产物
+- 未确认归属的分析记录或成果文件
 
-迁移逻辑只做 upsert，不删除现有项目、绑定和数据集。
+不得连接云南 Docker 网络，不得挂载云南工程目录，不得复用其数据库、命名卷、容器或镜像。
 
-## 运行前提
+## 2. 权威重建基线
 
-真实历史成果不在 `backend` 工作树里，而在 Docker 运行态：
+江西基线数据为：
 
-- `geoview_miner_outputs` 卷：历史 `change_matrix_outputs`
-- `geoview_backend_static` 卷：历史上传/结果图
-- MySQL：项目元数据与旧版 `analysis` 记录
-
-因此执行迁移时，必须让脚本同时看到：
-
-- `/app/backend`
-- `/app/miner`
-- `/app/miner/change_matrix_outputs`
-- `/app/backend/static`
-
-## 推荐执行方式
-
-在和当前容器相同的 Docker 网络里启动一次性容器执行：
-
-```powershell
-docker run --rm --entrypoint /bin/sh --network yunnan_default `
-  -e MYSQL_HOST=mysql `
-  -e MYSQL_PORT=3306 `
-  -e MYSQL_USERNAME=paddle_rs `
-  -e MYSQL_PASSWORD=Yqx090315. `
-  -e MYSQL_DATABASE=paddle_rs `
-  -e FLASK_CONFIG=production `
-  -e SECRET_KEY=<your-secret-key> `
-  -e ADMIN_USERNAME=admin `
-  -e ADMIN_PASSWORD=<your-admin-password> `
-  -v "D:/项目/YunNan/backend:/app/backend" `
-  -v "D:/项目/YunNan/miner:/app/miner" `
-  -v geoview_miner_outputs:/app/miner/change_matrix_outputs `
-  -v geoview_backend_static:/app/backend/static `
-  geoview-runtime:split-clean `
-  -lc "cd /app/backend && python migrate_legacy_project_data.py --project-name 历史成果迁移项目 --manager admin"
+```text
+docker/standalone/runtime_data/Jiangxi_NaturalMine.kmz
+docker/standalone/runtime_data/348个图斑.shp
+docker/standalone/runtime_data/348个图斑.shx
+docker/standalone/runtime_data/348个图斑.dbf
+docker/standalone/runtime_data/348个图斑.prj
+miner/data/348图斑_TableMERNet无图像预测结果.xlsx
 ```
 
-## 迁移后检查
+新的江西数据库使用独立卷 `jiangxi_mysql_data` 初始化。缓存与结果分别写入江西自己的 `jiangxi_hf_cache`、`jiangxi_miner_outputs`、`jiangxi_backend_static` 和 `jiangxi_miner_tiles`。
 
-- 项目列表中应出现 `历史成果迁移项目`
-- `miner/` 下应存在 `NDBI_by_fid_2year_avg.xlsx` 与 `NDSI_by_fid_2year_avg.xlsx`
-- `GET /api/projects` 返回的历史项目应包含迁移后的矿山数和数据集数
-- `GET /api/mines/indices?fid=<fid>` 不应再因为缺少 `NDBI/NDSI` 工作簿而直接报缺文件
+## 3. 可迁移成果的准入条件
+
+只有同时满足以下条件的成果才能迁移：
+
+1. 业务人员人工确认成果属于江西。
+2. 文件内容、空间范围、矿区标识和年份可核对。
+3. 来源位置可追溯，且以只读方式检查。
+4. 目标位置位于江西受控目录或江西命名卷。
+5. 迁移前后校验值一致。
+6. 迁移记录经过指定复核人确认。
+
+任何一项无法确认时，保持“不迁移”，不得使用名称相似、目录相近或旧系统可见作为归属依据。
+
+## 4. 迁移记录
+
+每批成果至少记录：
+
+| 字段 | 要求 |
+| --- | --- |
+| 成果名称 | 文件或数据集名称 |
+| 江西归属依据 | 矿区、行政区、项目编号或业务确认单 |
+| 原始来源 | 只记录经批准的来源位置，不写密码或密钥 |
+| 目标位置 | 江西工程内受控目录或命名卷 |
+| 文件大小 | 迁移前后均记录 |
+| 校验算法与值 | 推荐 SHA-256 |
+| 迁移时间 | 使用完整日期和时间 |
+| 执行人 / 复核人 | 两个角色分别登记 |
+| 验证结果 | 可读性、业务归属、应用加载结果 |
+
+PowerShell 文件校验示例：
+
+```powershell
+Get-FileHash -Algorithm SHA256 -LiteralPath '<经批准的源文件>'
+Get-FileHash -Algorithm SHA256 -LiteralPath '<江西目标文件>'
+```
+
+## 5. 执行顺序
+
+1. 从本仓库权威种子启动空白江西栈。
+2. 备份当前江西目标卷或目标目录。
+3. 只读核对候选成果并填写迁移记录。
+4. 经人工批准后，将成果复制到预先确定的江西受控目标。
+5. 比较大小和 SHA-256 校验值。
+6. 在江西应用中检查成果可读、矿区归属和年份。
+7. 在迁移记录中填写最终结果；失败时撤回该批文件并保留原因。
+
+## 6. 禁止事项
+
+- 不整库导入旧数据库。
+- 不直接挂载旧命名卷作为江西运行卷。
+- 不迁移缓存、会话、临时上传或未审查推理目录。
+- 不为了补齐缺失数据而自动回退到其他省份路径。
+- 不在迁移文档或命令中保存真实凭据。
+
+迁移是人工确认后的例外流程，不是部署的默认步骤。

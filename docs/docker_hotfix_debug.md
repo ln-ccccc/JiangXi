@@ -1,110 +1,87 @@
-# Docker 调试与热修指令
+# 江西 Docker 调试与受控热修
 
-本文档用于当前 Docker 部署方式：`docker-compose.prod.yml`，对应容器名为 `cugrs-backend`、`cugrs-frontend`、`cugrs-miner-api`、`cugrs-miner-web`、`cugrs-mysql`。
+本文适用于 `D:\项目\JiangXi\JiangXi-Platform` 的 `docker-compose.prod.yml`。只排查江西容器，不操作云南工程或资源。
 
-## 1. 查看状态
+## 1. 状态与日志
 
-```bash
-cd /path/to/GeoView
-docker compose -f docker-compose.prod.yml ps
-docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+```powershell
+Set-Location 'D:\项目\JiangXi\JiangXi-Platform'
+docker compose --env-file .env -f docker-compose.prod.yml ps
+docker ps -a --filter 'name=jiangxi-' --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+docker logs --tail 200 jiangxi-backend
+docker logs --tail 200 jiangxi-frontend
+docker logs --tail 200 jiangxi-miner-api
+docker logs --tail 200 jiangxi-miner-web
+docker logs --tail 120 jiangxi-mysql
 ```
 
-## 2. 查看日志
+## 2. 容器内只读检查
 
-```bash
-docker logs --tail 200 cugrs-backend
-docker logs --tail 200 cugrs-miner-api
-docker logs --tail 120 cugrs-mysql
-docker logs -f --tail 200 cugrs-miner-web
+```powershell
+docker exec jiangxi-backend bash -lc 'python -V; ls -lah /app/backend; ls -lah /app/runtime_data'
+docker exec jiangxi-miner-api bash -lc 'node -v; ls -lah /app/miner; ls -lah /app/runtime_data'
+docker exec jiangxi-mysql sh -lc 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent'
 ```
 
-## 3. 进入容器排查
+重点确认：
 
-```bash
-docker exec -it cugrs-backend bash
-docker exec -it cugrs-miner-api bash
-docker exec -it cugrs-mysql bash
+- `/app/runtime_data/Jiangxi_NaturalMine.kmz` 存在。
+- `/app/runtime_data/348个图斑.shp` 及配套文件存在。
+- `/app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx` 存在。
+- 数据路径不指向其他省份工程。
+
+## 3. 公开入口检查
+
+```powershell
+curl.exe -I 'http://127.0.0.1:4173/'
+curl.exe -I 'http://127.0.0.1:4174/'
+curl.exe -I 'http://127.0.0.1:5178/'
 ```
 
-容器内常用检查：
+浏览器使用：
 
-```bash
-cd /app
-python -V
-node -v
-ls -lah /app/backend
-ls -lah /app/frontend
-ls -lah /app/miner
-ls -lah /offline_maps/dali
-echo "$MINER_TILE_TIF_PATH"
+- `http://127.0.0.1:4173/#/map`
+- `http://127.0.0.1:4174/#/segmentation`
+
+Miner API 与 MySQL 只通过容器健康检查和日志排查，不增加宿主机端口。
+
+## 4. 配置与会话排查
+
+```powershell
+docker compose --env-file .env -f docker-compose.prod.yml config
+docker exec jiangxi-backend bash -lc 'printf "%s\n" "$SESSION_COOKIE_NAME" "$CORS_ALLOWED_ORIGINS"'
 ```
 
-## 4. HTTP 健康检查
+预期 Cookie 名为 `jiangxi_session`，允许来源只包含 `127.0.0.1:4173` 与 `127.0.0.1:4174`。两个江西前端应连接同一后端；一个前端登录后进入另一个前端不应再次输入密码。
 
-```bash
-curl -I http://127.0.0.1:3000/
-curl -I http://127.0.0.1:4000/
-curl -I http://127.0.0.1:5008/
-curl -I http://127.0.0.1:8000/api/stats
-curl -I http://127.0.0.1:8000/tiles/5/24/13.png
+入口异常时核对：
+
+```text
+VITE_GEOVIEW_URL=http://127.0.0.1:4174/
+VUE_APP_MINER_URL=http://127.0.0.1:4173/
+VUE_APP_BACKEND_URL=http://127.0.0.1:5178/
 ```
 
-说明：
+缺少配置应出现明确错误；发现自动跳往其他地址时，应停止验收并修复配置或代码，不能用临时地址掩盖。
 
-- `http://127.0.0.1:8000/` 返回 `404` 是正常现象。
-- `/tiles/5/24/13.png` 返回 `200 image/png` 才表示离线底图链路正常。
+## 5. 受控重建
 
-## 5. 只重启应用容器
+源码或配置修复必须先落到本仓库、完成审查和测试，再重建江西应用容器：
 
-```bash
-docker compose -f docker-compose.prod.yml up -d --force-recreate backend frontend miner-api miner-web
-docker logs --tail 200 cugrs-backend
-docker logs --tail 200 cugrs-miner-api
+```powershell
+docker compose --env-file .env -f docker-compose.prod.yml up -d --force-recreate backend frontend miner-api miner-web
+docker compose --env-file .env -f docker-compose.prod.yml ps
 ```
 
-## 6. 容器名冲突
+不要把文件直接复制进运行容器作为正式交付；这种改动会在容器重建后丢失，也无法审计。
 
-```bash
-docker rm -f cugrs-backend cugrs-frontend cugrs-miner-api cugrs-miner-web cugrs-mysql
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
-```
+## 6. 默认 CPU 与可选 GPU
 
-## 7. 底图灰底排查
+默认只使用 `docker-compose.prod.yml`，解译为同步 CPU。`docker-compose.gpu.yml` 仅供显式技术验证，不能据此宣称江西具备自动设备选择或 GPU 异常回退能力。
 
-先确认宿主机目录存在数据：
+## 7. 安全边界
 
-```bash
-ls -lah offline_bundle/maps/dali
-```
-
-再用正确变量重启：
-
-```bash
-export APP_IMAGE=geoview-runtime:current
-export MYSQL_IMAGE=registry.openanolis.cn/openanolis/mysql:8.0.30-8.6
-export OFFLINE_MAP_DIR="$(pwd)/offline_bundle/maps/dali"
-export MINER_TILE_TIF_PATH="/offline_maps/dali/澶х悊鐧芥棌鑷不宸瀇鍗浘1_Level_15.tif"
-export MINER_MAP_PROVIDER=local
-export MINER_LOCAL_TILE_URL='http://localhost:8000/tiles/{z}/{x}/{y}.png'
-
-docker compose -f docker-compose.prod.yml up -d --force-recreate backend miner-api miner-web
-docker exec cugrs-miner-api sh -lc 'echo "$MINER_TILE_TIF_PATH"; ls -lah /offline_maps/dali'
-curl -I http://127.0.0.1:8000/tiles/5/24/13.png
-```
-
-## 8. 临时热修：覆盖容器内文件
-
-适合快速验证问题。容器重建后会丢失，需要再固化到源码或镜像。
-
-```bash
-docker cp backend/applications/api/analysis.py cugrs-backend:/app/backend/applications/api/analysis.py
-docker compose -f docker-compose.prod.yml up -d --force-recreate backend
-docker logs --tail 200 cugrs-backend
-```
-
-## 9. 离线包热修：源码重建镜像
-
-当前交付目录未包含 `hotfix_rebuild.sh`、`source/GeoView_source_*.tar.gz` 等镜像重建材料，不能直接在 `offline_bundle` 中执行源码热修重打包。
-
-如需重建镜像，请先补齐源码包和热修脚本；当前目录可直接验证的交付物仅包括 `docker-compose.prod.yml`、`config.yaml`、`offline_bundle/images/*` 与 `offline_bundle/volumes/*`。
+- 日志和诊断输出不得包含真实密码、密钥或完整 Cookie。
+- 不使用 `down -v`、强制删除容器或清空数据库作为常规排障手段。
+- 不连接、停止、删除或挂载云南工程资源。
+- 所有宿主机端口保持绑定 `127.0.0.1`。

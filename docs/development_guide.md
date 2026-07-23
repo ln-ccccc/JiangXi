@@ -1,133 +1,111 @@
-# 云南矿山监测项目开发文档与规范
+# 江西独立工程开发指南
 
-> 当前江西交付规范、受控文件目录和本地质量门禁见 [development_standard.md](development_standard.md)。部署前请同时核对 [delivery_checklist.md](delivery_checklist.md)。
+项目根目录固定为：
 
-## 1. 项目结构
+```text
+D:\项目\JiangXi\JiangXi-Platform
+```
 
-- `miner/`：矿山监测主系统，包含 Vite/Vue 前端与 `server.js` 提供的 Miner API。
-- `backend/`：Python/Flask 与遥感解译、KML ROI、光谱指数等算法服务。
-- `frontend/`：旧 GeoView 前端。除非任务明确要求，不在 miner 优化任务中重构该目录。
-- `docs/`：开发、部署、测试与运行文档。
+本文只描述江西工程。云南工程及其运行资源不属于本仓库，开发、测试和部署时不得连接、挂载或复用。
 
-## 2. 服务与端口
+## 1. 目录职责
 
-- Miner Web：`miner` 的 Vite 开发服务，默认 `http://localhost:4000/`。
-- Miner API：`miner/server.js`，默认 `http://localhost:8000/`。
-- 后端 Flask：以 `backend` 现有启动脚本为准，供 GeoView 或算法服务调用。
+- `miner/`：江西 Miner 地图前端与 Miner API 源码。
+- `frontend/`：江西解译前端，包含地物分类与光谱指数页面。
+- `backend/`：江西业务后端、同步批量解译与结果服务。
+- `docker/`：容器启动脚本及江西运行种子数据。
+- `docs/`：开发、部署、运维和验收文档。
+- `docker-compose.prod.yml`：默认 CPU 部署编排。
+- `docker-compose.gpu.yml`：可选 GPU 资源覆盖文件，不是默认启动方式。
 
-如端口被占用，应优先改本地启动参数，不要直接修改接口契约或硬编码端口。
+## 2. 运行契约
 
-## 3. 常用命令
+公开入口只有：
+
+- Miner 地图：`http://127.0.0.1:4173/#/map`
+- 江西解译平台：`http://127.0.0.1:4174/#/segmentation`
+- 业务后端：`http://127.0.0.1:5178`
+
+所有公开端口只绑定 `127.0.0.1`。Miner API 与 MySQL 仅允许通过 Compose 内部网络访问。应用容器、命名卷和运行镜像使用 `jiangxi-*` 命名空间。
+
+两个江西前端连接同一业务后端，Cookie 名固定为 `jiangxi_session`。任一前端完成登录后，另一前端复用同一会话；退出登录后两端会话同时失效。
+
+前端入口必须由以下变量显式配置：
+
+```text
+VITE_GEOVIEW_URL=http://127.0.0.1:4174/
+VUE_APP_MINER_URL=http://127.0.0.1:4173/
+VUE_APP_BACKEND_URL=http://127.0.0.1:5178/
+```
+
+缺少入口配置时，界面应禁用入口并显示错误，不得回退到其他项目、其他端口或其他路由。
+
+## 3. 功能边界
+
+- 江西解译保留地物分类与光谱指数计算。
+- 默认执行方式为同步批量请求，前端等待本次请求完成。
+- 默认设备为 CPU，不接入异步任务查询、自动设备选择或 GPU 异常回退流程。
+- 可选 GPU 覆盖文件仅用于显式技术验证；启用前必须单独确认镜像、驱动和业务行为。
+
+## 4. 权威数据
+
+默认种子数据位于 `docker/standalone/runtime_data/`：
+
+- `Jiangxi_NaturalMine.kmz`
+- `348个图斑.shp` 及同名 `.shx`、`.dbf`、`.prj`
+
+生态诊断权威工作簿位于：
+
+```text
+miner/data/348图斑_TableMERNet无图像预测结果.xlsx
+```
+
+不得用其他省份数据、旧缓存或历史推理结果作为江西缺失数据的自动回退。
+
+## 5. 本地质量命令
+
+Miner：
 
 ```powershell
-cd miner
-npm install
-npm test
-node --check server.js
+Set-Location 'D:\项目\JiangXi\JiangXi-Platform\miner'
+npm ci
+npm run verify
+```
+
+江西解译前端：
+
+```powershell
+Set-Location 'D:\项目\JiangXi\JiangXi-Platform\frontend'
+npm ci
+npm run test:backend-url
+npm run test:navigation
+npm run test:ui
 npm run build
 ```
 
-```powershell
-cd frontend
-npm install
-npm run build
-```
+后端：
 
 ```powershell
-cd backend
-python -m unittest test_spectral_indices.py
-python -m unittest test_new_features.py
+Set-Location 'D:\项目\JiangXi\JiangXi-Platform\backend'
+python -m unittest discover -p 'test_*.py'
 ```
 
-## 4. Miner API 契约
+部署配置：
 
-### `POST /api/kml/upload`
-
-Request:
-
-```json
-{
-  "filename": "example.kml",
-  "content": "<kml>...</kml>"
-}
+```powershell
+Set-Location 'D:\项目\JiangXi\JiangXi-Platform'
+Copy-Item .env.example .env
+# 编辑未跟踪的 .env，替换全部密码和密钥占位符。
+docker compose --env-file .env -f docker-compose.prod.yml config
 ```
 
-Success:
+测试结果必须按实际执行情况记录；没有启动容器或没有执行浏览器流程时，不得写成已通过。
 
-```json
-{
-  "kml_path": "D:\\项目\\YunNan\\miner\\uploads\\kml\\example.kml"
-}
-```
+## 6. 修改与交付边界
 
-Failure:
+- 不修改云南工程，不复用其容器、镜像、卷、数据库或数据路径。
+- 不提交 `.env`、密码、密钥、数据库、缓存、日志和推理结果。
+- API、环境变量、部署命令或数据目录发生变化时，同步更新对应文档。
+- 每次交付列出修改文件、实际验证命令、结果、未验证项与风险。
 
-- 非 `.kml` 文件：`400`
-- 空内容：`400`
-- 保存失败：`400`
-
-错误响应应包含可读的 `error`，并尽量提供 `next` 排查建议。
-
-### `POST /api/inference/kml-roi`
-
-保留现有字段，并支持：
-
-- `year`：单年份推理参数。
-- `old_year`：基准年份。
-- `new_year`：最新年份。
-
-当 `year` 存在时，优先使用单年份模式；否则传递 `old_year/new_year`。
-
-### `GET /api/mines/trend-report`
-
-Query:
-
-- `class_name=forest|grassland|building|road|bareground|water`
-- `direction=upward|downward|stable|all`
-
-Response 至少包含：
-
-- `mine_total`
-- `coverage`
-- `available_classes`
-- `filters`
-- `class_trends.selected_class`
-- `tables.selected_class_rows`
-
-趋势统计必须来自真实 `class_ratio_percent.json` 等结果文件；无数据时返回空表和覆盖率信息，不伪造全 0 趋势。
-
-## 5. 前端规范
-
-- 主界面文案默认使用中文，按钮文案必须与实际行为一致，例如导出 CSV 时写“导出 CSV”。
-- 页面级失败必须可见：数据加载失败、趋势统计失败、推理失败不能静默降级为 0 数据。
-- 删除矿山等高风险入口只有在后端接口真实支持并经过验证后才允许展示。
-- 地图首次加载可自动缩放到全量边界；筛选刷新不应反复打断用户视角，搜索命中时只定位目标矿山。
-
-## 6. 编码边界
-
-- 优先复用现有目录和组件，不做无关目录重构。
-- 不为“未来可能需要”新增配置中心、插件机制或抽象层。
-- 不批量格式化无关文件。
-- 修改 API、配置、命令或部署流程时必须同步更新文档。
-- 错误信息至少说明失败原因、失败位置或下一步排查方向。
-
-## 7. 测试分层
-
-- Node 单元测试：覆盖纯函数、接口参数构造、文件保存校验、趋势统计计算。
-- 静态检查：`node --check server.js`。
-- 构建测试：`npm run build`。
-- Python 单元测试：运行 `backend` 现有 unittest。
-- API 集成测试：启动服务后验证 KML 上传、趋势报告、基础 stats。
-- UI 检查：首页、趋势弹窗、推理弹窗、筛选/搜索/重置、错误态。
-
-## 8. 交付要求
-
-每次开发完成后必须列出：
-
-- 改了什么。
-- 为什么这样改。
-- 实际执行的测试命令。
-- 每条测试结果。
-- 未验证项、原因与风险。
-
-测试记录建议使用 [test_report_template.md](./test_report_template.md)。
+开发规范见 [development_standard.md](development_standard.md)，交付前核对 [delivery_checklist.md](delivery_checklist.md)。

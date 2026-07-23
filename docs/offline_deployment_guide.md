@@ -1,97 +1,101 @@
-# GeoView 离线部署指南
+# 江西独立工程部署指南
 
-本文档是离线环境的最小部署流程。完整服务说明与交付约束见同目录下的 `system_guide.md`。
+本文说明无外网环境下使用现有 Compose 部署江西工程。当前仓库不包含离线镜像归档；镜像归档必须由交付方另行提供并校验，不能从其他省份工程复用。
 
-## 1. 目录要求
+## 1. 部署目录与前提
 
-在项目根目录执行：
+在固定根目录执行：
 
-```bash
-cd /path/to/GeoView
+```powershell
+Set-Location 'D:\项目\JiangXi\JiangXi-Platform'
 ```
 
-确认关键文件存在：
+确认关键文件与江西种子数据存在：
 
-```bash
-test -f docker-compose.prod.yml
-test -f config.yaml
-test -f offline_bundle/images/geoview_runtime_current.tar
-test -f offline_bundle/images/mysql_8.0.30-8.6.tar
-test -f offline_bundle/maps/dali/澶х悊鐧芥棌鑷不宸瀇鍗浘1_Level_15.tif
+```powershell
+Test-Path docker-compose.prod.yml
+Test-Path config.yaml
+Test-Path .env.example
+Test-Path 'docker/standalone/runtime_data/Jiangxi_NaturalMine.kmz'
+Test-Path 'docker/standalone/runtime_data/348个图斑.shp'
+Test-Path 'docker/standalone/runtime_data/348个图斑.shx'
+Test-Path 'docker/standalone/runtime_data/348个图斑.dbf'
+Test-Path 'docker/standalone/runtime_data/348个图斑.prj'
+Test-Path 'miner/data/348图斑_TableMERNet无图像预测结果.xlsx'
 ```
 
-## 2. 加载镜像
+默认运行镜像标签为 `jiangxi-runtime:current`。MySQL 镜像标签以 `.env.example` 的 `MYSQL_IMAGE` 为准。离线现场应在启动前分别加载交付方提供的镜像归档，并用 `docker image inspect` 确认标签存在；本文不假定归档文件名。
 
-```bash
-docker load -i offline_bundle/images/geoview_runtime_current.tar
-docker load -i offline_bundle/images/mysql_8.0.30-8.6.tar
+## 2. 创建部署环境文件
+
+```powershell
+Copy-Item .env.example .env
 ```
 
-## 3. 启动
+编辑未跟踪的 `.env`，至少替换以下占位符：
 
-```bash
-export APP_IMAGE=geoview-runtime:current
-export MYSQL_IMAGE=registry.openanolis.cn/openanolis/mysql:8.0.30-8.6
-export ADMIN_PASSWORD='<强密码>'
-export SECRET_KEY='<临时或正式密钥>'
-export MINER_DEFAULT_KMZ_PATH='/app/runtime_data/Jiangxi_NaturalMine.kmz'
-export MINER_MAP_PROVIDER=gaode
-
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
+```text
+ADMIN_PASSWORD=<管理员强密码>
+SECRET_KEY=<随机应用密钥>
+MYSQL_PASSWORD=<数据库用户强密码>
+MYSQL_ROOT_PASSWORD=<数据库根用户强密码>
 ```
 
-说明：
+不要在文档、命令历史、聊天记录或版本库中写入真实值。保留以下江西配置：
 
-- 上述脚本是当前江西区域最小验收启动方式，优先验证江西权威 KMZ 源与在线卫星底图链路。
-- 江西 Shapefile、KMZ 与运行数据必须通过容器卷挂载到 `/app/runtime_data`；部署配置不得使用 Windows 宿主机绝对路径。
-- 建议先从 `.env.example` 创建未跟踪的 `.env`，再设置所有管理员、应用和数据库密钥。MySQL 默认不发布端口。
-- 如果现场必须完全离线运行底图，再额外设置 `OFFLINE_MAP_DIR`、`MINER_TILE_TIF_PATH`、`MINER_LOCAL_TILE_URL`，并把 `MINER_MAP_PROVIDER` 切回 `local`。
-- `docker-compose.prod.yml` 中仍保留离线瓦片挂载能力，因此离线模式和江西最小联调模式可以按需切换。
+```text
+APP_IMAGE=jiangxi-runtime:current
+SESSION_COOKIE_NAME=jiangxi_session
+VITE_GEOVIEW_URL=http://127.0.0.1:4174/
+VUE_APP_MINER_URL=http://127.0.0.1:4173/
+VUE_APP_BACKEND_URL=http://127.0.0.1:5178/
+MINER_DEFAULT_KMZ_PATH=/app/runtime_data/Jiangxi_NaturalMine.kmz
+MINER_DEFAULT_GEO_SOURCE_PATH=/app/runtime_data/348个图斑.shp
+MINER_ECOLOGY_WORKBOOK_PATH=/app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx
+```
+
+## 3. 校验并启动默认 CPU 栈
+
+```powershell
+docker compose --env-file .env -f docker-compose.prod.yml config
+docker compose --env-file .env -f docker-compose.prod.yml up -d
+docker compose --env-file .env -f docker-compose.prod.yml ps
+```
+
+默认解译方式为同步 CPU。不要在默认启动命令中叠加 `docker-compose.gpu.yml`。
 
 ## 4. 验证
 
-```bash
-docker compose -f docker-compose.prod.yml ps
-curl -I http://127.0.0.1:3000/
-curl -I http://127.0.0.1:4000/
-curl -I http://127.0.0.1:5008/
-curl -I http://127.0.0.1:8000/api/stats
+```powershell
+curl.exe -I 'http://127.0.0.1:4173/'
+curl.exe -I 'http://127.0.0.1:4174/'
+curl.exe -I 'http://127.0.0.1:5178/'
 ```
 
-江西区域最小验收还应补充人工检查：
+人工验收：
 
-- 登录 `http://127.0.0.1:4000/` 后，工作台标题与默认项目体现江西口径。
-- 地图页筛选项、主流程文案中不再出现“云南 / 大理 / 曲靖”。
-- 若当前采用 `MINER_MAP_PROVIDER=gaode`，浏览器网络面板应能看到在线卫星底图请求。
+1. 打开 `http://127.0.0.1:4173/#/map` 并使用江西管理员账号登录。
+2. 从 Miner 进入 `http://127.0.0.1:4174/#/segmentation`，确认不再次要求密码。
+3. 确认页面身份为江西项目，执行方式显示同步 CPU。
+4. 返回 Miner，确认会话保持。
+5. 退出登录，确认两个江西前端同时失效。
+6. 确认缺失入口配置时显示错误，不回退到其他项目。
 
-仅当切回 `MINER_MAP_PROVIDER=local` 时，再检查：
+Miner API 与 MySQL 仅在江西 Docker 网络内部，不能通过宿主机端口访问。Compose 展开结果中的宿主机端口必须全部绑定 `127.0.0.1`。
 
-```bash
-curl -I http://127.0.0.1:8000/tiles/5/24/13.png
+## 5. 可选 GPU 技术覆盖
+
+仅在已准备 `jiangxi-runtime:gpu`、主机驱动与 Docker GPU 运行环境，并且有单独验证计划时使用：
+
+```powershell
+docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.gpu.yml config
+docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.gpu.yml up -d
 ```
 
-此时 `/tiles/5/24/13.png` 返回 `200` 才表示离线底图链路正常。
+该覆盖文件只声明 GPU 镜像和资源，不代表默认使用 GPU，也不提供自动设备选择或 GPU 异常时回退 CPU 的能力。
 
-## 5. 常见问题
+## 6. 数据初始化与迁移
 
-容器名冲突：
+江西数据库应从本仓库权威种子重建。默认不导入旧数据库、缓存或推理结果。人工确认的江西成果按 [legacy_data_migration.md](legacy_data_migration.md) 登记来源、目标和校验结果后再迁移。
 
-```bash
-docker rm -f cugrs-backend cugrs-frontend cugrs-miner-api cugrs-miner-web cugrs-mysql
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
-```
-
-底图灰底或瓦片 `404`：
-
-```bash
-docker exec cugrs-miner-api sh -lc 'echo "$MINER_TILE_TIF_PATH"; ls -lah /offline_maps/dali'
-curl -I http://127.0.0.1:8000/tiles/5/24/13.png
-```
-
-重点检查：
-
-- `OFFLINE_MAP_DIR` 是否指向宿主机上真实存在的 `offline_bundle/maps/dali`
-- `MINER_TILE_TIF_PATH` 是否是容器内路径 `/offline_maps/dali/澶х悊鐧芥棌鑷不宸瀇鍗浘1_Level_15.tif`
-- `MINER_DEFAULT_KMZ_PATH` 是否显式指向 `/app/runtime_data/Jiangxi_NaturalMine.kmz`
-- `MINER_MAP_PROVIDER` 是否与当前验收模式一致：江西最小联调用 `gaode`，纯离线底图用 `local`
-- `docker-compose.prod.yml` 是否使用当前镜像名 `geoview-runtime:current`
+云南工程及其 Docker 网络、容器、镜像、卷、数据库和文件目录保持不变，部署命令不得引用或挂载。

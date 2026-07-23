@@ -1,9 +1,50 @@
-# 江西交付清单
+# 江西独立工程交付清单
 
-- [ ] 使用 `.env.example` 创建未跟踪的 `.env`，替换所有管理员、应用和数据库密钥。
-- [ ] 将江西运行数据放入 `docker/standalone/runtime_data`，确认包含 Shapefile 全部配套文件、KMZ 与 `Mine.csv`。
-- [ ] 执行 `docker compose -f docker-compose.prod.yml config`，确认未显示 Windows 宿主机路径且未发布 MySQL 端口。
-- [ ] 运行 `miner` 的 `format:check`、`lint`、`test`、`build`，以及后端 Ruff 与单元测试。
-- [ ] 启动后使用管理员账号完成登录、江西图斑加载、项目导出、备份恢复和 KML ROI 推理的最小人工验收。
+## 工程与配置
 
-已知限制：这是单管理员内网系统；数据、备份和推理结果保存在容器或服务端受控目录，不支持客户端指定任意输出目录。
+- [ ] 当前根目录为 `D:\项目\JiangXi\JiangXi-Platform`。
+- [ ] 从 `.env.example` 创建未跟踪的 `.env`，只在 `.env` 中填写真实密码和密钥。
+- [ ] `APP_IMAGE=jiangxi-runtime:current`，默认启动未叠加 GPU 覆盖文件。
+- [ ] `SESSION_COOKIE_NAME=jiangxi_session`。
+- [ ] `VITE_GEOVIEW_URL`、`VUE_APP_MINER_URL`、`VUE_APP_BACKEND_URL` 分别指向 `4174`、`4173`、`5178` 的江西地址。
+- [ ] 缺少入口配置时显示错误并禁用入口，没有其他项目或旧地址回退。
+
+## 数据与隔离
+
+- [ ] `Jiangxi_NaturalMine.kmz`、`348个图斑.shp` 及配套文件位于 `docker/standalone/runtime_data/`。
+- [ ] 权威工作簿 `348图斑_TableMERNet无图像预测结果.xlsx` 位于 `miner/data/`。
+- [ ] 江西数据库从权威种子重建，没有默认导入旧数据库、缓存或推理结果。
+- [ ] 如迁移人工确认的江西成果，已记录来源、目标、大小、SHA-256、执行人、复核人与验证结果。
+- [ ] 云南工程及其代码、容器、镜像、卷、数据库和运行数据没有被修改、挂载或复用。
+
+## Compose 与运行资源
+
+- [ ] 执行 `docker compose --env-file .env -f docker-compose.prod.yml config` 成功。
+- [ ] 宿主机仅发布 `127.0.0.1:4173`、`127.0.0.1:4174`、`127.0.0.1:5178`。
+- [ ] Miner API 与 MySQL 未发布宿主机端口。
+- [ ] 应用镜像、容器和命名卷使用 `jiangxi-*` 命名空间。
+- [ ] 五个江西服务均处于预期的 running 或 healthy 状态。
+
+## 登录与导航
+
+- [ ] 登录 `http://127.0.0.1:4173/#/map` 成功。
+- [ ] 从 Miner 打开 `http://127.0.0.1:4174/#/segmentation` 时不再次输入密码。
+- [ ] 从解译平台返回 Miner 后会话保持。
+- [ ] 任一前端退出后，两个江西前端会话同时失效。
+- [ ] 江西 Cookie 与云南 Cookie 可同时存在且互不覆盖。
+
+## 业务与界面
+
+- [ ] 江西地物分类按同步 CPU 流程完成一次实际验收。
+- [ ] 江西光谱指数按同步 CPU 流程完成一次实际验收。
+- [ ] 前端没有异步任务查询、自动设备选择或 GPU 异常回退说明。
+- [ ] 在 `1440×900`、`1280×720`、`390×844` 完成视觉检查。
+- [ ] 加载、空数据、失败、禁用、键盘焦点与窄屏状态已人工检查。
+
+## 验证记录
+
+- [ ] 记录实际执行的测试、构建、Compose 校验和浏览器步骤及结果。
+- [ ] 未执行项明确标为“未验证”，并写明原因、风险和建议后续操作。
+- [ ] 提交只包含本次获准范围内的文件，不包含 `.env` 或运行产物。
+
+已知边界：默认解译为同步 CPU；`docker-compose.gpu.yml` 只是可选技术覆盖文件，不代表默认 GPU、自动设备选择或异常回退能力。

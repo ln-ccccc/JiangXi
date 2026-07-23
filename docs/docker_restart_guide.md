@@ -1,83 +1,95 @@
-# Docker 重启与排障
+# 江西 Docker 重启与排障
+
+所有命令都在 `D:\项目\JiangXi\JiangXi-Platform` 执行，并使用未跟踪的 `.env`。命令不带 `-v`，不会删除江西命名卷。
 
 ## 1. 标准重启
 
-```bash
-cd /path/to/GeoView
-docker compose -f docker-compose.prod.yml restart
-docker compose -f docker-compose.prod.yml ps
+```powershell
+Set-Location 'D:\项目\JiangXi\JiangXi-Platform'
+docker compose --env-file .env -f docker-compose.prod.yml restart
+docker compose --env-file .env -f docker-compose.prod.yml ps
 ```
 
-当前编排会启动 `backend`、`frontend`、`miner-api`、`miner-web`、`mysql` 五个服务。
+编排包含 `backend`、`frontend`、`miner-api`、`miner-web` 和 `mysql` 五个服务，对应容器均使用 `jiangxi-` 前缀。
 
 ## 2. 重建应用容器
 
-不清理 MySQL 和业务数据卷：
+只重建应用服务，保留 `jiangxi_mysql_data`、缓存与结果卷：
 
-```bash
-docker compose -f docker-compose.prod.yml up -d --force-recreate backend frontend miner-api miner-web
-docker logs --tail 200 cugrs-backend
-docker logs --tail 200 cugrs-miner-api
+```powershell
+docker compose --env-file .env -f docker-compose.prod.yml up -d --force-recreate backend frontend miner-api miner-web
+docker logs --tail 200 jiangxi-backend
+docker logs --tail 200 jiangxi-miner-api
+docker compose --env-file .env -f docker-compose.prod.yml ps
 ```
 
-## 3. 完整停止与启动
+## 3. 完整停止与重新启动
 
-```bash
-docker compose -f docker-compose.prod.yml down
-
-export APP_IMAGE=geoview-runtime:current
-export MYSQL_IMAGE=registry.openanolis.cn/openanolis/mysql:8.0.30-8.6
-export OFFLINE_MAP_DIR="$(pwd)/offline_bundle/maps/dali"
-export MINER_TILE_TIF_PATH="/offline_maps/dali/澶х悊鐧芥棌鑷不宸瀇鍗浘1_Level_15.tif"
-export MINER_MAP_PROVIDER=local
-export MINER_LOCAL_TILE_URL='http://localhost:8000/tiles/{z}/{x}/{y}.png'
-
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
-docker compose -f docker-compose.prod.yml ps
+```powershell
+docker compose --env-file .env -f docker-compose.prod.yml down
+docker compose --env-file .env -f docker-compose.prod.yml config
+docker compose --env-file .env -f docker-compose.prod.yml up -d --remove-orphans
+docker compose --env-file .env -f docker-compose.prod.yml ps
 ```
 
-## 4. 容器名冲突
+不要附加 `-v`，除非已经单独备份且明确获准删除江西数据库和结果卷。
 
-报错示例：`container name "/cugrs-mysql" is already in use`
+## 4. 公开入口检查
 
-```bash
-docker rm -f cugrs-backend cugrs-frontend cugrs-miner-api cugrs-miner-web cugrs-mysql
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
+```powershell
+curl.exe -I 'http://127.0.0.1:4173/'
+curl.exe -I 'http://127.0.0.1:4174/'
+curl.exe -I 'http://127.0.0.1:5178/'
 ```
 
-## 5. config.yaml 挂载错误
+浏览器验收地址：
 
-报错包含：`/app/config.yaml ... not a directory`
+- `http://127.0.0.1:4173/#/map`
+- `http://127.0.0.1:4174/#/segmentation`
 
-检查：
+Miner API 与 MySQL 没有宿主机验证地址；使用 `docker compose ... ps` 与容器日志确认其健康状态。
 
-```bash
-ls -lah config.yaml
+## 5. 常见问题
+
+### 容器名冲突
+
+先只读定位占用者，不要直接删除未知容器：
+
+```powershell
+docker ps -a --filter 'name=jiangxi-' --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
 ```
 
-修复：
+确认冲突容器属于本江西工程后，使用本工程 Compose 的 `down` 再重新启动。不得停止或删除云南容器。
 
-```bash
-rm -rf config.yaml
-cp -f offline_bundle/config.yaml ./config.yaml
-docker compose -f docker-compose.prod.yml up -d --force-recreate backend frontend miner-api miner-web
+### 配置展开失败
+
+```powershell
+Test-Path .env
+Test-Path config.yaml
+docker compose --env-file .env -f docker-compose.prod.yml config
 ```
 
-## 6. 灰底图或瓦片 404
+若提示缺少变量，编辑 `.env` 并替换 `.env.example` 中对应占位符；不要把真实密码写回模板或提交到 Git。
 
-```bash
-docker exec cugrs-miner-api sh -lc 'echo "$MINER_TILE_TIF_PATH"; ls -lah /offline_maps/dali'
-curl -I http://127.0.0.1:8000/tiles/5/24/13.png
+### 页面无法访问
+
+```powershell
+docker compose --env-file .env -f docker-compose.prod.yml ps
+docker logs --tail 200 jiangxi-miner-web
+docker logs --tail 200 jiangxi-frontend
+docker logs --tail 200 jiangxi-backend
 ```
 
-判断：
+确认端口只绑定 `127.0.0.1`，且本机没有其他进程占用 `4173`、`4174`、`5178`。
 
-- `200 image/png`：底图链路正常
-- `404`：通常是 `OFFLINE_MAP_DIR` 未挂到真实 tif 目录，或 `MINER_TILE_TIF_PATH` 文件名不匹配
+### 入口按钮不可用
 
-当前推荐：
+核对 `.env`：
 
-```bash
-export OFFLINE_MAP_DIR="$(pwd)/offline_bundle/maps/dali"
-export MINER_TILE_TIF_PATH="/offline_maps/dali/澶х悊鐧芥棌鑷不宸瀇鍗浘1_Level_15.tif"
+```text
+VITE_GEOVIEW_URL=http://127.0.0.1:4174/
+VUE_APP_MINER_URL=http://127.0.0.1:4173/
+VUE_APP_BACKEND_URL=http://127.0.0.1:5178/
 ```
+
+缺少配置时应用会明确报错，不会自动跳转到其他项目地址。

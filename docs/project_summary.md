@@ -1,65 +1,54 @@
-# GeoView 项目概览
+# 江西独立工程概览
 
-## 1. 系统组成
+## 1. 项目定位
 
-- GeoView 前端：Vue + Element Plus，端口 `3000`
-- GeoView 后端：Flask/Python，端口 `5008`
-- Miner 前端：Vue/Vite，端口 `4000`
-- Miner 后端：Node/Express，端口 `8000`
-- MySQL：容器内 `3306`，宿主机映射 `3307`
+`D:\项目\JiangXi\JiangXi-Platform` 是江西省矿山生态修复智能监测平台的独立根仓库，包含：
 
-## 2. 当前主要功能
+- Miner 地图端
+- 江西解译前端
+- 江西业务后端
+- Miner API
+- MySQL 与 Docker 编排
+- 江西权威种子数据和受控结果目录
 
-- 地表覆盖分类：上传 GeoTIFF，执行 KML ROI 推理，结果同步到 Miner 输出目录。
-- 光谱指数计算：支持 NDVI、NDWI、NDBI、NDSI，生成统计结果、预览图和历史记录。
-- Miner 展示：默认按江西口径工作，读取 `D:\项目\江西数据\Jiangxi_NaturalMine.kmz`、变化矩阵输出和指数数据，提供地图展示、趋势统计和导出。
-- 联调模式：江西区域最小验收优先使用在线卫星底图 `gaode`；如需纯离线底图，可继续挂载 `offline_bundle/maps/dali` 并切回本地瓦片模式。
+云南工程及其代码、容器、镜像、命名卷、数据库和运行数据保持不变。江西部署不连接、不挂载、不复用这些资源。
 
-## 3. 当前部署方式
+## 2. 公开入口
 
-生产/离线部署统一使用：
+- Miner 地图：`http://127.0.0.1:4173/#/map`
+- 江西解译平台：`http://127.0.0.1:4174/#/segmentation`
+- 业务后端：`http://127.0.0.1:5178`
 
-```text
-docker-compose.prod.yml
-APP_IMAGE=geoview-runtime:current
-MYSQL_IMAGE=registry.openanolis.cn/openanolis/mysql:8.0.30-8.6
-```
+公开端口全部只绑定 `127.0.0.1`。Miner API 与 MySQL 只在江西 Docker 网络内部开放。
 
-江西区域最小联调建议显式提供以下环境变量：
+## 3. 身份与导航
 
-```text
-ADMIN_PASSWORD=<强密码>
-SECRET_KEY=<临时或正式密钥>
-MINER_DEFAULT_KMZ_PATH=D:\项目\江西数据\Jiangxi_NaturalMine.kmz
-MINER_MAP_PROVIDER=gaode
-```
+两个江西前端连接同一个江西业务后端，通过 `jiangxi_session` 共享登录会话。登录任一前端后可直接进入另一前端；退出登录后两端同时失效。
 
-如需启用本地离线瓦片，再补充：
+Miner 只跳转到江西解译入口，解译平台只返回江西 Miner。入口配置缺失时显示错误并禁用入口，不回退到其他项目或其他端口。
 
-```text
-OFFLINE_MAP_DIR=/path/to/GeoView/offline_bundle/maps/dali
-MINER_TILE_TIF_PATH=/offline_maps/dali/澶х悊鐧芥棌鑷不宸瀇鍗浘1_Level_15.tif
-MINER_LOCAL_TILE_URL=http://localhost:8000/tiles/{z}/{x}/{y}.png
-```
+## 4. 功能边界
 
-## 4. 关键验证点
+- 地物分类：同步批量推理，默认 CPU。
+- 光谱指数：保留现有计算、预览和历史结果能力。
+- 不使用异步任务查询。
+- 不提供自动设备选择。
+- 不提供 GPU 异常时自动回退 CPU。
 
-- `http://localhost:3000/`：GeoView 前端
-- `http://localhost:4000/`：Miner 前端
-- `http://localhost:5008/`：GeoView 后端
-- `http://localhost:8000/api/stats`：Miner 后端 API
-- `http://localhost:8000/api/projects`：项目工作台 API
+`docker-compose.gpu.yml` 是可选技术覆盖文件，仅声明 GPU 镜像与资源；默认部署仍使用 `docker-compose.prod.yml` 和 `jiangxi-runtime:current`。
 
-江西区域验收时，还应检查：
+## 5. 江西权威数据
 
-- 默认业务数据源为 `D:\项目\江西数据\Jiangxi_NaturalMine.kmz`
-- 工作台默认项目体现“江西历史成果迁移项目”口径
-- 地图页筛选项与主流程文案中不再出现“云南 / 大理 / 曲靖”
+- `docker/standalone/runtime_data/Jiangxi_NaturalMine.kmz`
+- `docker/standalone/runtime_data/348个图斑.shp` 及同名配套文件
+- `miner/data/348图斑_TableMERNet无图像预测结果.xlsx`
 
-`http://localhost:8000/` 根路径返回 `404` 是正常现象。
+数据库从江西权威种子重建。旧数据库、缓存和推理结果不默认迁移；只有人工确认属于江西的成果才可按迁移规则登记后导入。
 
-## 5. 交付文档入口
+## 6. Docker 命名空间
 
-- 根目录主文档：`docs/`
-- 离线包镜像副本：`offline_bundle/docs/`
-- 两处文档应与根目录 `docker-compose.prod.yml` 的当前拆分式五服务编排保持一致
+- 应用镜像：`jiangxi-runtime:current`；可选 `jiangxi-runtime:gpu`
+- 容器：`jiangxi-backend`、`jiangxi-frontend`、`jiangxi-miner-api`、`jiangxi-miner-web`、`jiangxi-mysql`
+- 命名卷：`jiangxi_backend_static`、`jiangxi_mysql_data`、`jiangxi_hf_cache`、`jiangxi_miner_outputs`、`jiangxi_miner_tiles`
+
+部署步骤见 [offline_deployment_guide.md](offline_deployment_guide.md)，系统边界见 [system_guide.md](system_guide.md)。
