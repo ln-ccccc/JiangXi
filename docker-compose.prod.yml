@@ -40,7 +40,7 @@ x-app-env: &app-env
   JIANGXI_MMSEG_CONFIG_PATH: "${JIANGXI_MMSEG_CONFIG_PATH:-/app/backend/model/jiangxi/config.py}"
   JIANGXI_MMSEG_CHECKPOINT_PATH: "${JIANGXI_MMSEG_CHECKPOINT_PATH:-/app/backend/model/jiangxi/model.pth}"
   JIANGXI_MMSEG_METADATA_PATH: "${JIANGXI_MMSEG_METADATA_PATH:-/app/backend/model/jiangxi/metadata.json}"
-  JIANGXI_MMSEG_SOURCE_ROOT: "${JIANGXI_MMSEG_SOURCE_ROOT:-}"
+  JIANGXI_MMSEG_SOURCE_ROOT: "${JIANGXI_MMSEG_SOURCE_ROOT:-/app/backend/model/jiangxi/dinov3_swinV1}"
 
 x-runtime-base: &runtime-base
   image: ${APP_IMAGE:-jiangxi-runtime:current}
@@ -66,6 +66,7 @@ services:
       - ./backend/applications:/app/backend/applications:ro
       - ./backend/app.py:/app/backend/app.py:ro
       - ./backend/kml_roi_infer.py:/app/backend/kml_roi_infer.py:ro
+      - ./backend/model/jiangxi:/app/backend/model/jiangxi:ro
       - ./miner/data:/app/miner/data:ro
       - index-data:/app/miner/index-data
       - ./docker/standalone/runtime_data:/app/runtime_data:ro

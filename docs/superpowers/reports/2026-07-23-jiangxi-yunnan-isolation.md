@@ -16,7 +16,7 @@
 - 光谱指数实际计算、江西矿区内统计与 Miner 指数同步；
 - 桌面、低分辨率桌面和手机窄屏布局。
 
-唯一未通过的业务验收项是地物分类实际出图。工程中没有江西专用、CPU 兼容的六类地物分类配置、权重和元数据，不能用旧云南模型冒充。当前接口会快速明确报告“江西地物分类模型文件不存在”，不会再加载云南权重或等待到内存耗尽。
+地物分类模型已迁移到江西受控目录并完成实际出图。运行时使用只含 `state_dict` 的 CPU 推理 checkpoint，不携带训练优化器状态；配置、权重、元数据和定制源码均通过只读挂载接入 `jiangxi-backend`。使用用户上传影像完成命令行与 HTTP 接口双重验收，均匹配并写入 FID 22，失败瓦片为 0。
 
 ## 2. 根因
 
@@ -32,7 +32,7 @@
 | 分类上传后找不到影像 | 前端传 `static/upload/...`，后端只接受 basename | 只允许受控前缀并归一化到受控上传根目录 |
 | MMSeg 子进程导入失败 | 子进程没有加入后端包根目录 | 显式引导后端包路径 |
 | 运行镜像 ABI 错误 | 旧镜像 PyTorch 2.7 CUDA 与 MMCV 扩展不兼容 | 当前江西四个应用统一使用 PyTorch 2.2.2 CPU 镜像 |
-| 旧六类模型污染 | 镜像内唯一六类配置指向云南数据，5.9 GB 权重在 CPU 推理时 OOM | 取消硬编码，只接受江西专用模型环境变量；删除江西 GPU 部署入口 |
+| 旧六类模型污染 | 归档六类配置指向云南训练目录，完整训练 checkpoint 携带优化器状态并在 CPU 推理时耗尽内存 | 迁移到江西受控目录，江西化有效配置，生成 1.97 GB 推理 checkpoint，并以哈希元数据绑定；删除江西 GPU 部署入口 |
 | Flask 重载 | 生产启动仍启用 debug/reloader | 生产环境关闭 debug 和 reloader |
 
 ## 3. 独立架构与地址
@@ -45,13 +45,13 @@
 | 江西 Miner API | 仅江西 Docker 网络 | `jiangxi-miner-api` |
 | 江西 MySQL | 仅江西 Docker 网络 | `jiangxi-mysql`、`jiangxi_mysql_data` |
 
-四个应用容器均使用 `jiangxi-runtime:current`，实际镜像 ID 为 `sha256:9cb2df04970d...`，健康状态均为 `healthy`，`OOMKilled=false`。公开端口只绑定 `127.0.0.1`。旧审查容器 `geoview-jiangxi-review` 保留为停止状态，没有删除。
+四个应用容器均使用 `jiangxi-runtime:current`，实际镜像 ID 为 `sha256:39d4bef8281652914c8e26db6187eaf445630d4a6ad647d19f18c7f68e6b70db`，健康状态均为 `healthy`。新镜像已内置江西模型并删除父镜像残留的旧 `mmseg_config`；四个运行容器均验证旧目录不存在。公开端口只绑定 `127.0.0.1`。旧审查容器 `geoview-jiangxi-review` 保留为停止状态，没有删除。
 
 ## 4. 两省功能矩阵
 
 | 能力 | 江西解译平台 | 云南解译平台 |
 | --- | --- | --- |
-| 地物分类 | 保留同步入口；等待江西专用 CPU 模型资产 | 保留现有异步任务 |
+| 地物分类 | 保留同步入口；六类模型已迁移并通过 CPU 实际推理 | 保留现有异步任务 |
 | 光谱指数 | 同步计算，已完成真实接口验收 | 保持现状 |
 | 推理设备 | 固定 CPU，无 GPU 覆盖 | 现有自动选择与回退保持不变 |
 | 矿区数据 | `Jiangxi_NaturalMine.kmz`，348 个多边形图斑 | 云南 KML 保持不变 |
@@ -75,9 +75,9 @@
 | `JIANGXI_MMSEG_CONFIG_PATH` | `/app/backend/model/jiangxi/config.py` |
 | `JIANGXI_MMSEG_CHECKPOINT_PATH` | `/app/backend/model/jiangxi/model.pth` |
 | `JIANGXI_MMSEG_METADATA_PATH` | `/app/backend/model/jiangxi/metadata.json` |
-| `JIANGXI_MMSEG_SOURCE_ROOT` | 可选，默认空 |
+| `JIANGXI_MMSEG_SOURCE_ROOT` | `/app/backend/model/jiangxi/dinov3_swinV1` |
 
-模型资产路径必须位于受控江西模型根目录。元数据必须声明 `region=jiangxi`，六类顺序必须为 `grassland, forest, building, road, bareground, water`，并通过 SHA-256 绑定配置与权重。模型加载后还会校验实际 `dataset_meta.classes` 和分类头类别数。当前配置、权重和元数据文件不存在，这是地物分类阻断的直接原因。
+模型资产路径必须位于受控江西模型根目录。元数据声明 `region=jiangxi`，六类顺序为 `grassland, forest, building, road, bareground, water`，并通过 SHA-256 绑定配置、权重与定制 Python 源码树。模型加载后还会校验实际 `dataset_meta.classes` 和分类头类别数。standalone 镜像内置江西资产；Compose 仅在江西后端叠加同目录只读挂载，云南工程不复用该目录。
 
 ## 6. 数据记录
 
@@ -91,6 +91,16 @@
 - 首个 FID 为 23，与 Miner 的 `FID_1=23` 对齐。
 
 光谱指数真实验收使用合成五波段 GeoTIFF，覆盖 FID 23。NDVI 结果为：平均值 `0.05699160695075989`、有效像元 22,286，已验证同步到 Miner API。该数据仅用于验收，不是生产成果。
+
+### 模型迁移记录
+
+- 来源：`D:\项目\JiangXi\YunNan_prechange_20260703_223508\backend\model\mmseg_config` 只读归档；源训练 checkpoint SHA-256 为 `17985c633ec81a1b981421af8828b38c235994dfd1f3c61cf05649ce9b2044e3`。
+- 目标：`backend/model/jiangxi`，运行时主权重 `model.pth` 为仅含 `meta + state_dict` 的推理 checkpoint，大小 1,970,599,978 字节，SHA-256 为 `419acab8cbf8934e7f5bc19eeb28c37f52bee93258de50c54e76babc5a369b97`。
+- 配置：`config.py` SHA-256 为 `604c625d42f3e88f75af56bafe398b732e0fc177af8099ab50dd2eec148ee36b`；有效数据路径改为 `/app/runtime_data/jiangxi_dataset`，不再引用云南训练目录。
+- 依赖：DINOv3 与 Swin 预训练权重的迁移前后 SHA-256 分别保持 `eadcf0ff...64f48` 和 `2f1a310c...06915`；运行时因完整参数已在主 checkpoint 中，关闭重复预训练初始化以降低内存峰值。
+- 定制源码：迁移 MMSeg 与 DINOv3 必需源码；DINOv3 Hub 仅导出 backbone，避免加载本任务未使用且与 CPU PyTorch 不兼容的 CUDA 评估模块。1211 个 Python 文件的确定性树哈希为 `f98964d7b6e25ee9b0d095a4273b9172a9fec7583199de40afa04cb0b4f17f7f`，运行前强制校验。
+- 等价审计：`backend/tools/migrate_jiangxi_checkpoint.py --verify-only` 已逐项核对源/目标 834 个状态项；834 项均为张量，键、形状、dtype 和张量值全部一致，源/目标文件哈希同时匹配。
+- 边界：模型参数没有重新训练；源训练 checkpoint 的历史元数据曾记录云南训练目录。本次迁移只改变运行配置、部署边界和 checkpoint 包装，不声称完成江西样本再训练，江西精度仍需使用标注数据单独评估。
 
 ### 待用户确认清理的测试数据
 
@@ -109,7 +119,7 @@
 
 - `frontend/`：江西登录页、应用壳、侧栏、地物分类和光谱指数四步工作流、状态与响应式设计、导航和合同测试；
 - `miner/`：江西品牌、地图工作区、解译入口、共享认证代理、固定 CPU 请求、可写指数目录及测试；
-- `backend/`：会话/CORS、上传路径、同步 CPU 推理、江西模型隔离、KMZ ROI、指数同步、生产启动及测试；
+- `backend/`：会话/CORS、上传路径、同步 CPU 推理、江西模型隔离、模型资产与定制源码、checkpoint 迁移审计工具、KMZ ROI、指数同步、生产启动及测试；
 - `docker-compose.prod.yml`、`.env.example`、`docker/`：江西端口、容器、卷、运行变量、CPU 启动与独立数据；
 - `docs/`：部署、开发、用户、系统、迁移、验收与本报告。
 
@@ -129,7 +139,8 @@
 
 | 验证项 | 结果 |
 | --- | --- |
-| Docker 隔离与源码合同 | 24/24 通过 |
+| Docker 隔离与源码合同 | 29/29 通过 |
+| 模型调用、固定 CPU 与 ROI 状态回归 | 16/16 通过 |
 | 江西解译前端合同 | 后端地址 4/4、导航 10/10、工作流 10/10、主题检查通过 |
 | 江西解译前端生产构建 | 通过；仅有既有包体积/Browserslist/深度选择器警告 |
 | Miner 测试 | 77/77 通过 |
@@ -141,18 +152,17 @@
 | 浏览器导航 | Miner ↔ 江西解译平台正确，不进入云南页面 |
 | 响应式视觉 | 1440×900、1280×720、390×844 已检查 |
 | 光谱指数 | 实际 NDVI 计算、矿区统计、历史结果和 Miner 同步通过 |
-| 地物分类 | 未通过；审查修复后全部瓦片失败返回 HTTP 500，明确缺少江西模型文件，不再包装为成功 |
+| 地物分类 | 通过；用户上传 TIFF 匹配 FID 22；命令行 63.927 秒、切换新镜像前 HTTP 55.181 秒、切换后 HTTP 75.025 秒，均写入 1 个 FID、失败瓦片 0；HTTP 200、`success=true` |
 | 云南回归 | 3000/4000 页面与 5008 会话健康接口 HTTP 200，四个应用容器 healthy，三项基准哈希不变 |
 
 后端两项失败是 `test_safe_paths.py` 把 Windows 路径 `C:/managed-output` 放入 Linux 容器后进行字符串相等比较；其余 65 项通过，新增测试全部通过。未为本次任务修改这两个无关的跨平台测试。
 
 ## 9. 后续动作
 
-要完成地物分类验收，需要提供：
+地物分类运行链路已完成，后续只剩产品验收与模型质量评估：
 
-1. 江西专用的六类地物分类配置文件；
-2. 与配置匹配、可在当前 PyTorch 2.2.2 CPU 环境加载的权重；
-3. 声明 `region=jiangxi`、固定六类顺序和配置/权重 SHA-256 的 `metadata.json`；
-4. 如模型包含自定义 MMSeg 源码，提供对应源码根目录。
+1. 用户在 `http://127.0.0.1:4174/#/segmentation` 使用同一影像检查页面状态、Flash 结果卡和成果图；
+2. 使用江西标注样本评估六类精度，确认归档模型是否满足江西业务标准；
+3. 用户确认后再清理前述合成光谱测试数据和旧审查容器。
 
-不能把现有五类云/影/雪/水/地模型替代为六类地物分类，也不能继续使用配置中含 `/home/featurize/data/yunnan_dataset` 的旧云南权重。
+不得用五类云/影/雪/水/地模型替代本六类模型；如后续更换或重新训练权重，必须同步更新 `metadata.json` 中的类别顺序、区域和 SHA-256。

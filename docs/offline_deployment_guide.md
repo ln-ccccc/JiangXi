@@ -85,18 +85,31 @@ Miner API 与 MySQL 仅在江西 Docker 网络内部，不能通过宿主机端�
 
 ## 5. 江西地物分类模型
 
-在 `.env` 中配置受控根目录 `JIANGXI_MMSEG_MODEL_ROOT` 以及配置、权重、元数据路径；模型包含自定义源码时再配置 `JIANGXI_MMSEG_SOURCE_ROOT`。所有路径必须位于受控根目录内。`metadata.json` 必须包含江西标识、固定六类顺序，以及配置和权重的 SHA-256：
+在 `.env` 中配置受控根目录 `JIANGXI_MMSEG_MODEL_ROOT` 以及配置、权重、元数据和源码路径。当前六类模型固定使用 `JIANGXI_MMSEG_SOURCE_ROOT=/app/backend/model/jiangxi/dinov3_swinV1`。所有路径必须位于受控根目录内。模型资产位于 `backend/model/jiangxi`，该目录不进入 Git，但必须随离线交付包提供；Docker 构建会把它打入江西镜像并删除父镜像残留的旧 `mmseg_config`，Compose 同时以只读挂载接入后端。
+
+`metadata.json` 必须包含江西标识、固定六类顺序，以及配置、推理权重和定制 Python 源码树的 SHA-256：
 
 ```json
 {
   "region": "jiangxi",
   "classes": ["grassland", "forest", "building", "road", "bareground", "water"],
   "config_sha256": "<config.py 的 64 位 SHA-256>",
-  "checkpoint_sha256": "<model.pth 的 64 位 SHA-256>"
+  "checkpoint_sha256": "<model.pth 的 64 位 SHA-256>",
+  "source_sha256": "<源码树内全部 .py 文件的确定性 64 位 SHA-256>",
+  "source_file_count": 1211
 }
 ```
 
-后端会校验文件哈希；模型加载后还会核对实际 `dataset_meta.classes` 和分类头类别数。未配置、越界、哈希错误或实际类别不匹配时会明确失败，不使用云南模型。
+后端会校验文件哈希和源码文件数；模型加载后还会核对实际 `dataset_meta.classes` 和分类头类别数。未配置、越界、哈希错误或实际类别不匹配时会明确失败，不使用云南模型。
+
+归档训练 checkpoint 转换和审计使用：
+
+```powershell
+python backend/tools/migrate_jiangxi_checkpoint.py --source <训练checkpoint> --output backend/model/jiangxi/model.pth
+python backend/tools/migrate_jiangxi_checkpoint.py --source <训练checkpoint> --output backend/model/jiangxi/model.pth --verify-only --expected-source-sha256 <源哈希> --expected-output-sha256 <目标哈希>
+```
+
+脚本会验证六类元数据，并逐项比较 `state_dict` 的键、形状、dtype 和张量值。
 
 ## 6. 数据初始化与迁移
 

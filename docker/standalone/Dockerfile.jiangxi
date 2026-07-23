@@ -15,6 +15,7 @@ ENV STANDALONE_MODE=1 \
     JIANGXI_MMSEG_CONFIG_PATH=/app/backend/model/jiangxi/config.py \
     JIANGXI_MMSEG_CHECKPOINT_PATH=/app/backend/model/jiangxi/model.pth \
     JIANGXI_MMSEG_METADATA_PATH=/app/backend/model/jiangxi/metadata.json \
+    JIANGXI_MMSEG_SOURCE_ROOT=/app/backend/model/jiangxi/dinov3_swinV1 \
     GEOVIEW_BACKEND_URL=http://127.0.0.1:5008 \
     MINER_MAP_PROVIDER=gaode
 
@@ -25,7 +26,12 @@ COPY docker /app/docker
 COPY config.yaml /app/config.yaml
 COPY docker/standalone/runtime_data /app/runtime_data
 
-RUN chmod +x /app/docker/entrypoint.sh /app/docker/*.sh /app/docker/standalone/*.sh \
+RUN rm -rf -- /app/backend/model/mmseg_config \
+    && test -f /app/backend/model/jiangxi/config.py \
+    && test -f /app/backend/model/jiangxi/model.pth \
+    && test -f /app/backend/model/jiangxi/metadata.json \
+    && test -d /app/backend/model/jiangxi/dinov3_swinV1 \
+    && chmod +x /app/docker/entrypoint.sh /app/docker/*.sh /app/docker/standalone/*.sh \
     && mkdir -p /var/lib/jiangxi-standalone /app/runtime_data
 
 EXPOSE 3000 4000 5008

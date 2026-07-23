@@ -8,6 +8,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 PROD_PATH = ROOT / "docker-compose.prod.yml"
+JIANGXI_DOCKERFILE_PATH = ROOT / "docker" / "standalone" / "Dockerfile.jiangxi"
+DOCKERIGNORE_PATH = ROOT / ".dockerignore"
 
 
 def normalize_mount(mount):
@@ -15,15 +17,28 @@ def normalize_mount(mount):
         parts = mount.split(":", 2)
         source = parts[0]
         target = parts[1]
+        options = parts[2].split(",") if len(parts) > 2 else []
         mount_type = "bind" if source.startswith((".", "/")) else "volume"
-        return mount_type, source, target
+        return mount_type, source, target, "ro" in options
 
     source = mount.get("source") or mount.get("src")
     target = mount.get("target") or mount.get("dst") or mount.get("destination")
     mount_type = mount.get("type") or (
         "bind" if source and source.startswith((".", "/")) else "volume"
     )
-    return mount_type, source, target
+    return mount_type, source, target, bool(mount.get("read_only", False))
+
+
+def is_allowed_jiangxi_model_mount(
+    service_name, mount_type, source, target, read_only
+):
+    return (
+        service_name == "backend"
+        and mount_type == "bind"
+        and source == "./backend/model/jiangxi"
+        and target == "/app/backend/model/jiangxi"
+        and read_only
+    )
 
 
 def mount_overlays_backend_model(target):
@@ -100,7 +115,7 @@ class ComposeIsolationTests(unittest.TestCase):
         )
         self.assertEqual(
             environment["JIANGXI_MMSEG_SOURCE_ROOT"],
-            "${JIANGXI_MMSEG_SOURCE_ROOT:-}",
+            "${JIANGXI_MMSEG_SOURCE_ROOT:-/app/backend/model/jiangxi/dinov3_swinV1}",
         )
 
     def test_backend_and_miner_api_share_backend_auth_configuration(self):
@@ -149,24 +164,56 @@ class ComposeIsolationTests(unittest.TestCase):
         self.assertIn(runtime_mount, miner_api_mounts)
         self.assertNotIn("node_modules", self.prod_text)
 
+    def test_standalone_image_removes_legacy_model_and_bundles_jiangxi_model(self):
+        dockerfile = JIANGXI_DOCKERFILE_PATH.read_text(encoding="utf-8")
+        dockerignore = DOCKERIGNORE_PATH.read_text(encoding="utf-8")
+        self.assertIn(
+            "rm -rf -- /app/backend/model/mmseg_config",
+            dockerfile,
+        )
+        self.assertIn(
+            "test -f /app/backend/model/jiangxi/metadata.json",
+            dockerfile,
+        )
+        self.assertIn("backend/model/*", dockerignore)
+        self.assertIn("!backend/model/jiangxi", dockerignore)
+        self.assertIn("!backend/model/jiangxi/**", dockerignore)
+
+    def test_backend_mounts_only_jiangxi_model_assets_read_only(self):
+        services = self.prod["services"]
+        expected_mount = (
+            "./backend/model/jiangxi:/app/backend/model/jiangxi:ro"
+        )
+        self.assertIn(expected_mount, services["backend"]["volumes"])
+        for service_name, service in services.items():
+            if service_name != "backend":
+                self.assertNotIn(expected_mount, service.get("volumes", []))
+
     def test_relative_bind_sources_exist_and_no_mount_overlays_backend_model(self):
+        allowed_model_mount_count = 0
         for service_name, service in self.prod["services"].items():
             for raw_mount in service.get("volumes", []):
-                mount_type, source, target = normalize_mount(raw_mount)
+                mount_type, source, target, read_only = normalize_mount(raw_mount)
                 if mount_type == "bind" and source and not Path(source).is_absolute():
                     self.assertTrue(
                         (ROOT / source).exists(),
                         f"{service_name} bind source does not exist: {source}",
                     )
+                if is_allowed_jiangxi_model_mount(
+                    service_name, mount_type, source, target, read_only
+                ):
+                    allowed_model_mount_count += 1
+                    continue
                 self.assertFalse(
                     mount_overlays_backend_model(target),
                     f"{service_name} mount overlays image backend/model: {target}",
                 )
+        self.assertEqual(allowed_model_mount_count, 1)
 
     def test_mount_parser_supports_short_and_long_compose_syntax(self):
         self.assertEqual(
             normalize_mount("./backend/app.py:/app/backend/app.py:ro"),
-            ("bind", "./backend/app.py", "/app/backend/app.py"),
+            ("bind", "./backend/app.py", "/app/backend/app.py", True),
         )
         self.assertEqual(
             normalize_mount(
@@ -177,7 +224,31 @@ class ComposeIsolationTests(unittest.TestCase):
                     "read_only": True,
                 }
             ),
-            ("bind", "./frontend/public", "/app/frontend/public"),
+            ("bind", "./frontend/public", "/app/frontend/public", True),
+        )
+
+    def test_model_mount_contract_rejects_writable_or_duplicate_mounts(self):
+        mount = normalize_mount(
+            {
+                "type": "bind",
+                "source": "./backend/model/jiangxi",
+                "target": "/app/backend/model/jiangxi",
+                "read_only": False,
+            }
+        )
+        self.assertEqual(
+            mount,
+            (
+                "bind",
+                "./backend/model/jiangxi",
+                "/app/backend/model/jiangxi",
+                False,
+            ),
+        )
+        self.assertFalse(is_allowed_jiangxi_model_mount("backend", *mount))
+        read_only_mount = (*mount[:3], True)
+        self.assertTrue(
+            is_allowed_jiangxi_model_mount("backend", *read_only_mount)
         )
 
     def test_runtime_mounts_use_only_existing_jiangxi_workbook_and_frontend_public(self):
@@ -296,7 +367,10 @@ class EnvironmentExampleTests(unittest.TestCase):
             values["JIANGXI_MMSEG_METADATA_PATH"],
             "/app/backend/model/jiangxi/metadata.json",
         )
-        self.assertEqual(values["JIANGXI_MMSEG_SOURCE_ROOT"], "")
+        self.assertEqual(
+            values["JIANGXI_MMSEG_SOURCE_ROOT"],
+            "/app/backend/model/jiangxi/dinov3_swinV1",
+        )
 
 
 if __name__ == "__main__":

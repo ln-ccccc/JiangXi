@@ -46,6 +46,24 @@ def _verified_sha256(path: Path) -> str:
     return _file_sha256(str(path), stat.st_size, stat.st_mtime_ns)
 
 
+def _source_tree_sha256(source_root: Path) -> Tuple[str, int]:
+    digest = hashlib.sha256()
+    files = sorted(
+        (path for path in source_root.rglob("*.py") if path.is_file()),
+        key=lambda path: path.relative_to(source_root).as_posix(),
+    )
+    for path in files:
+        relative = path.relative_to(source_root).as_posix().encode("utf-8")
+        size = path.stat().st_size
+        digest.update(len(relative).to_bytes(8, "big"))
+        digest.update(relative)
+        digest.update(size.to_bytes(8, "big"))
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    return digest.hexdigest(), len(files)
+
+
 def _patch_mmdet_mmcv_guard() -> None:
     mmdet_init = "/opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmdet/__init__.py"
     if not os.path.exists(mmdet_init):
@@ -124,8 +142,24 @@ def get_model_paths(model_id: str) -> Tuple[str, str]:
         if _verified_sha256(checkpoint_path) != expected_checkpoint_hash:
             raise RuntimeError("江西地物分类模型权重 SHA-256 不匹配")
 
-        if source_root_text and not asset_paths[3].is_dir():
-            raise RuntimeError(f"江西地物分类模型源码目录不存在：{asset_paths[3]}")
+        if source_root_text:
+            source_root = asset_paths[3]
+            if not source_root.is_dir():
+                raise RuntimeError(f"江西地物分类模型源码目录不存在：{source_root}")
+            expected_source_hash = str(
+                model_metadata.get("source_sha256", "")
+            ).lower()
+            try:
+                expected_source_count = int(model_metadata.get("source_file_count", 0))
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError("江西地物分类模型元数据的源码文件数无效") from exc
+            if len(expected_source_hash) != 64 or expected_source_count <= 0:
+                raise RuntimeError("江西地物分类模型元数据缺少有效的源码 SHA-256 绑定")
+            actual_source_hash, actual_source_count = _source_tree_sha256(source_root)
+            if actual_source_count != expected_source_count:
+                raise RuntimeError("江西地物分类模型源码文件数不匹配")
+            if actual_source_hash != expected_source_hash:
+                raise RuntimeError("江西地物分类模型源码 SHA-256 不匹配")
         return str(config_path), str(checkpoint_path)
     raise ValueError(f"Unknown MMSeg model: {model_id}")
 

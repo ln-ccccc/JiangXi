@@ -13,6 +13,19 @@ from applications.interface.mmseg_segmentation import _validate_loaded_model_con
 ROOT = Path(__file__).resolve().parent
 
 
+def source_tree_sha256(source_root: Path):
+    digest = hashlib.sha256()
+    files = sorted(path for path in source_root.rglob("*.py") if path.is_file())
+    for path in files:
+        relative = path.relative_to(source_root).as_posix().encode("utf-8")
+        content = path.read_bytes()
+        digest.update(len(relative).to_bytes(8, "big"))
+        digest.update(relative)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest(), len(files)
+
+
 class TestJiangxiCpuContract(unittest.TestCase):
     def test_public_analysis_api_forces_cpu_and_exposes_no_gpu_capability(self):
         source = (ROOT / "applications" / "api" / "analysis.py").read_text(
@@ -179,6 +192,44 @@ class TestJiangxiCpuContract(unittest.TestCase):
                 clear=True,
             ):
                 with self.assertRaisesRegex(RuntimeError, "权重 SHA-256 不匹配"):
+                    get_model_paths("cc-ln/CUGRS")
+
+    def test_mmseg_rejects_custom_source_not_bound_to_metadata(self):
+        with TemporaryDirectory() as tmp_dir:
+            model_root = Path(tmp_dir) / "jiangxi"
+            source_root = model_root / "source"
+            source_root.mkdir(parents=True)
+            source_file = source_root / "custom_backbone.py"
+            source_file.write_text("VALUE = 1\n", encoding="utf-8")
+            config = model_root / "config.py"
+            checkpoint = model_root / "model.pth"
+            metadata = model_root / "metadata.json"
+            config.write_text("# jiangxi model\n", encoding="utf-8")
+            checkpoint.write_bytes(b"checkpoint")
+            source_hash, source_count = source_tree_sha256(source_root)
+            metadata.write_text(
+                '{"region":"jiangxi","classes":["grassland","forest",'
+                '"building","road","bareground","water"],'
+                f'"config_sha256":"{hashlib.sha256(config.read_bytes()).hexdigest()}",'
+                f'"checkpoint_sha256":"{hashlib.sha256(checkpoint.read_bytes()).hexdigest()}",'
+                f'"source_sha256":"{source_hash}",'
+                f'"source_file_count":{source_count}}}',
+                encoding="utf-8",
+            )
+            environment = {
+                "JIANGXI_MMSEG_MODEL_ROOT": str(model_root),
+                "JIANGXI_MMSEG_CONFIG_PATH": str(config),
+                "JIANGXI_MMSEG_CHECKPOINT_PATH": str(checkpoint),
+                "JIANGXI_MMSEG_METADATA_PATH": str(metadata),
+                "JIANGXI_MMSEG_SOURCE_ROOT": str(source_root),
+            }
+            with patch.dict(os.environ, environment, clear=True):
+                self.assertEqual(
+                    get_model_paths("cc-ln/CUGRS"),
+                    (str(config.resolve()), str(checkpoint.resolve())),
+                )
+                source_file.write_text("VALUE = 2\n", encoding="utf-8")
+                with self.assertRaisesRegex(RuntimeError, "源码 SHA-256 不匹配"):
                     get_model_paths("cc-ln/CUGRS")
 
     def test_loaded_model_contract_checks_runtime_classes_and_head_count(self):
