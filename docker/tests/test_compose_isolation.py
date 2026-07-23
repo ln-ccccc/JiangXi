@@ -83,6 +83,10 @@ class ComposeIsolationTests(unittest.TestCase):
         self.assertEqual(environment["MINER_INDEX_DATA_DIR"], "/app/miner/index-data")
         self.assertEqual(environment["KML_ROI_INPUT_ROOT"], "/app/backend/static/upload")
         self.assertEqual(
+            environment["JIANGXI_MMSEG_MODEL_ROOT"],
+            "${JIANGXI_MMSEG_MODEL_ROOT:-/app/backend/model/jiangxi}",
+        )
+        self.assertEqual(
             environment["JIANGXI_MMSEG_CONFIG_PATH"],
             "${JIANGXI_MMSEG_CONFIG_PATH:-/app/backend/model/jiangxi/config.py}",
         )
@@ -91,8 +95,12 @@ class ComposeIsolationTests(unittest.TestCase):
             "${JIANGXI_MMSEG_CHECKPOINT_PATH:-/app/backend/model/jiangxi/model.pth}",
         )
         self.assertEqual(
+            environment["JIANGXI_MMSEG_METADATA_PATH"],
+            "${JIANGXI_MMSEG_METADATA_PATH:-/app/backend/model/jiangxi/metadata.json}",
+        )
+        self.assertEqual(
             environment["JIANGXI_MMSEG_SOURCE_ROOT"],
-            "${JIANGXI_MMSEG_SOURCE_ROOT:-/app/backend/model/jiangxi/source}",
+            "${JIANGXI_MMSEG_SOURCE_ROOT:-}",
         )
 
     def test_backend_and_miner_api_share_backend_auth_configuration(self):
@@ -273,6 +281,10 @@ class EnvironmentExampleTests(unittest.TestCase):
         self.assertEqual(values["MYSQL_USERNAME"], "jiangxi")
         self.assertEqual(values["MYSQL_DATABASE"], "jiangxi")
         self.assertEqual(
+            values["JIANGXI_MMSEG_MODEL_ROOT"],
+            "/app/backend/model/jiangxi",
+        )
+        self.assertEqual(
             values["JIANGXI_MMSEG_CONFIG_PATH"],
             "/app/backend/model/jiangxi/config.py",
         )
@@ -280,6 +292,11 @@ class EnvironmentExampleTests(unittest.TestCase):
             values["JIANGXI_MMSEG_CHECKPOINT_PATH"],
             "/app/backend/model/jiangxi/model.pth",
         )
+        self.assertEqual(
+            values["JIANGXI_MMSEG_METADATA_PATH"],
+            "/app/backend/model/jiangxi/metadata.json",
+        )
+        self.assertEqual(values["JIANGXI_MMSEG_SOURCE_ROOT"], "")
 
 
 if __name__ == "__main__":

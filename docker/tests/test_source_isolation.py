@@ -59,6 +59,13 @@ class JiangxiSourceIsolationTests(unittest.TestCase):
         self.assertNotIn("model/mmseg_config", source)
         self.assertIn("JIANGXI_MMSEG_SOURCE_ROOT", source)
 
+    def test_standalone_image_uses_controlled_upload_root(self):
+        source = (
+            ROOT / "docker" / "standalone" / "Dockerfile.jiangxi"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("KML_ROI_INPUT_ROOT=/app/backend/static/upload", source)
+
     def test_default_jiangxi_kmz_contains_all_polygon_boundaries(self):
         kmz_path = (
             ROOT

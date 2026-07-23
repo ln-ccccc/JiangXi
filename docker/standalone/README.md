@@ -54,4 +54,4 @@ docker run -d --name geoview-jiangxi --env-file .env -p 127.0.0.1:4173:4000 -p 1
 
 ## 地物分类模型
 
-独立镜像固定使用 CPU。运行地物分类前，必须提供江西专用且 CPU 兼容的六类模型配置与权重，并通过 `JIANGXI_MMSEG_CONFIG_PATH`、`JIANGXI_MMSEG_CHECKPOINT_PATH` 和可选的 `JIANGXI_MMSEG_SOURCE_ROOT` 指向容器内文件。工程不会自动选择 GPU，也不会回退到云南模型。
+独立镜像固定使用 CPU。运行地物分类前，必须在 `JIANGXI_MMSEG_MODEL_ROOT` 内提供江西专用且 CPU 兼容的配置、权重和 `metadata.json`，并通过对应环境变量指向文件；自定义源码目录可选。元数据必须声明 `region=jiangxi`、六类固定顺序以及配置/权重 SHA-256。模型加载后还会校验实际类别和分类头数量。工程不会自动选择 GPU，也不会回退到云南模型。

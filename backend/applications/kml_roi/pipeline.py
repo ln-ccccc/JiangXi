@@ -73,8 +73,15 @@ def run_kml_roi_pipeline(
         device=device,
     )
     dist = distribute_outputs(matched_fids, mmseg_out_dir, output_root, variants_by_fid, tile_dir=tile_dir)
+    written_fids = int(dist.get("written_fids", 0) or 0)
+    if written_fids == 0:
+        run_status = "failed"
+    elif failed_tiles or dist.get("missing_fids"):
+        run_status = "partial"
+    else:
+        run_status = "completed"
     summary = {
-        "status": "completed",
+        "status": run_status,
         "total_features": len(features),
         "matched_fids": len(matched_fids),
         "matched_fid_list": matched_fids,

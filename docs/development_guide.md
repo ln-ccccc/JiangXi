@@ -47,7 +47,7 @@ VUE_APP_BACKEND_URL=http://127.0.0.1:5178/
 - 江西解译保留地物分类与光谱指数计算。
 - 默认执行方式为同步批量请求，前端等待本次请求完成。
 - 设备固定为 CPU，不接入异步任务查询、自动设备选择或 GPU 异常回退流程。
-- 地物分类通过 `JIANGXI_MMSEG_CONFIG_PATH`、`JIANGXI_MMSEG_CHECKPOINT_PATH` 和可选的 `JIANGXI_MMSEG_SOURCE_ROOT` 指向江西专用模型；缺失时接口明确失败，不使用其他省份模型。
+- 地物分类资产必须位于 `JIANGXI_MMSEG_MODEL_ROOT` 受控目录内，通过配置、权重、元数据路径和可选的 `JIANGXI_MMSEG_SOURCE_ROOT` 指向江西专用模型；元数据绑定文件 SHA-256，加载后再校验实际六类顺序和分类头数量；任一项不匹配时明确失败，不使用其他省份模型。
 
 ## 4. 权威数据
 

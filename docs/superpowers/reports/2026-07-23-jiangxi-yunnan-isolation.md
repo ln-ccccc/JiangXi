@@ -16,7 +16,7 @@
 - 光谱指数实际计算、江西矿区内统计与 Miner 指数同步；
 - 桌面、低分辨率桌面和手机窄屏布局。
 
-唯一未通过的业务验收项是地物分类实际出图。工程中没有江西专用、CPU 兼容的六类地物分类配置与权重，不能用旧云南模型冒充。当前接口会在约 1 秒内明确报告“江西地物分类模型文件不存在”，不会再加载云南权重或等待到内存耗尽。
+唯一未通过的业务验收项是地物分类实际出图。工程中没有江西专用、CPU 兼容的六类地物分类配置、权重和元数据，不能用旧云南模型冒充。当前接口会快速明确报告“江西地物分类模型文件不存在”，不会再加载云南权重或等待到内存耗尽。
 
 ## 2. 根因
 
@@ -71,11 +71,13 @@
 | `MINER_DEFAULT_KMZ_PATH` | `/app/runtime_data/Jiangxi_NaturalMine.kmz` |
 | `MINER_INDEX_DATA_DIR` | `/app/miner/index-data` |
 | `KML_ROI_INPUT_ROOT` | `/app/backend/static/upload` |
+| `JIANGXI_MMSEG_MODEL_ROOT` | `/app/backend/model/jiangxi` |
 | `JIANGXI_MMSEG_CONFIG_PATH` | `/app/backend/model/jiangxi/config.py` |
 | `JIANGXI_MMSEG_CHECKPOINT_PATH` | `/app/backend/model/jiangxi/model.pth` |
-| `JIANGXI_MMSEG_SOURCE_ROOT` | `/app/backend/model/jiangxi/source` |
+| `JIANGXI_MMSEG_METADATA_PATH` | `/app/backend/model/jiangxi/metadata.json` |
+| `JIANGXI_MMSEG_SOURCE_ROOT` | 可选，默认空 |
 
-最后三项必须指向镜像或受控运行环境中的江西模型资产。目前对应文件不存在，这是地物分类阻断的直接原因。
+模型资产路径必须位于受控江西模型根目录。元数据必须声明 `region=jiangxi`，六类顺序必须为 `grassland, forest, building, road, bareground, water`，并通过 SHA-256 绑定配置与权重。模型加载后还会校验实际 `dataset_meta.classes` 和分类头类别数。当前配置、权重和元数据文件不存在，这是地物分类阻断的直接原因。
 
 ## 6. 数据记录
 
@@ -127,22 +129,22 @@
 
 | 验证项 | 结果 |
 | --- | --- |
-| Docker 隔离与源码合同 | 21/21 通过 |
+| Docker 隔离与源码合同 | 24/24 通过 |
 | 江西解译前端合同 | 后端地址 4/4、导航 10/10、工作流 10/10、主题检查通过 |
 | 江西解译前端生产构建 | 通过；仅有既有包体积/Browserslist/深度选择器警告 |
 | Miner 测试 | 77/77 通过 |
 | Miner 格式、Lint、构建 | 通过；Lint 0 error、18 个既有 warning |
-| 后端完整测试（CPU Linux 镜像） | 61 项中 59 项通过；2 项既有 Windows 路径断言在 Linux 下失败 |
+| 后端完整测试（CPU Linux 镜像） | 67 项中 65 项通过；2 项既有 Windows 路径断言在 Linux 下失败 |
 | CORS 预检 | 200，允许来源为 4174 |
 | 共享会话 | Miner 登录可访问江西后端；Cookie 为 `jiangxi_session` |
 | 同步退出 | 后端和 Miner 会话同时变为未认证 |
 | 浏览器导航 | Miner ↔ 江西解译平台正确，不进入云南页面 |
 | 响应式视觉 | 1440×900、1280×720、390×844 已检查 |
 | 光谱指数 | 实际 NDVI 计算、矿区统计、历史结果和 Miner 同步通过 |
-| 地物分类 | 未通过；1.22 秒返回 matched=1、written=0、failed=1，明确缺少江西模型文件 |
+| 地物分类 | 未通过；审查修复后全部瓦片失败返回 HTTP 500，明确缺少江西模型文件，不再包装为成功 |
 | 云南回归 | 三个入口 HTTP 200，三项基准哈希不变 |
 
-后端两项失败是 `test_safe_paths.py` 把 Windows 路径 `C:/managed-output` 放入 Linux 容器后进行字符串相等比较；其余 59 项通过，新增测试全部通过。未为本次任务修改这两个无关的跨平台测试。
+后端两项失败是 `test_safe_paths.py` 把 Windows 路径 `C:/managed-output` 放入 Linux 容器后进行字符串相等比较；其余 65 项通过，新增测试全部通过。未为本次任务修改这两个无关的跨平台测试。
 
 ## 9. 后续动作
 
@@ -150,8 +152,7 @@
 
 1. 江西专用的六类地物分类配置文件；
 2. 与配置匹配、可在当前 PyTorch 2.2.2 CPU 环境加载的权重；
-3. 如模型包含自定义 MMSeg 源码，提供对应源码根目录；
-4. 确认六类标签顺序与江西前端图例一致。
+3. 声明 `region=jiangxi`、固定六类顺序和配置/权重 SHA-256 的 `metadata.json`；
+4. 如模型包含自定义 MMSeg 源码，提供对应源码根目录。
 
 不能把现有五类云/影/雪/水/地模型替代为六类地物分类，也不能继续使用配置中含 `/home/featurize/data/yunnan_dataset` 的旧云南权重。
-

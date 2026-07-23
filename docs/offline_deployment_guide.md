@@ -85,7 +85,18 @@ Miner API 与 MySQL 仅在江西 Docker 网络内部，不能通过宿主机端�
 
 ## 5. 江西地物分类模型
 
-在 `.env` 中配置 `JIANGXI_MMSEG_CONFIG_PATH`、`JIANGXI_MMSEG_CHECKPOINT_PATH`，模型包含自定义源码时再配置 `JIANGXI_MMSEG_SOURCE_ROOT`。路径必须指向容器内的江西专用 CPU 模型资产；未配置或文件不存在时，后端会快速返回明确错误，不会使用云南模型。
+在 `.env` 中配置受控根目录 `JIANGXI_MMSEG_MODEL_ROOT` 以及配置、权重、元数据路径；模型包含自定义源码时再配置 `JIANGXI_MMSEG_SOURCE_ROOT`。所有路径必须位于受控根目录内。`metadata.json` 必须包含江西标识、固定六类顺序，以及配置和权重的 SHA-256：
+
+```json
+{
+  "region": "jiangxi",
+  "classes": ["grassland", "forest", "building", "road", "bareground", "water"],
+  "config_sha256": "<config.py 的 64 位 SHA-256>",
+  "checkpoint_sha256": "<model.pth 的 64 位 SHA-256>"
+}
+```
+
+后端会校验文件哈希；模型加载后还会核对实际 `dataset_meta.classes` 和分类头类别数。未配置、越界、哈希错误或实际类别不匹配时会明确失败，不使用云南模型。
 
 ## 6. 数据初始化与迁移
 

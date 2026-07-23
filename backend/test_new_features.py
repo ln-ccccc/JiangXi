@@ -192,6 +192,39 @@ class TestNewFeatures(unittest.TestCase):
         finally:
             shutil.rmtree(input_root, ignore_errors=True)
 
+    def test_kml_roi_inference_returns_failure_when_all_tiles_fail(self):
+        input_root = Path(tempfile.mkdtemp(prefix="roi-failed-input-"))
+        kml_root = Path(tempfile.mkdtemp(prefix="roi-failed-kml-"))
+        (input_root / "old.tif").write_bytes(b"tif")
+        (kml_root / "roi.kml").write_text("<kml></kml>", encoding="utf-8")
+        self.app.config["KML_ROI_INPUT_ROOT"] = str(input_root)
+        self.app.config["KML_ROI_KML_ROOT"] = str(kml_root)
+        self.login_as_admin()
+        try:
+            with patch("applications.api.analysis.run_kml_roi_inference") as run_inference:
+                run_inference.return_value = {
+                    "status": "failed",
+                    "matched_fids": 1,
+                    "written_fids": 0,
+                    "failed_tiles": ["23+2026_tile.png"],
+                    "tile_errors": {
+                        "23+2026_tile.png": "江西地物分类模型文件不存在"
+                    },
+                }
+                response = self.client.post(
+                    "/api/analysis/kml_roi_inference",
+                    json={"old_tif_path": "old.tif", "kml_path": "roi.kml"},
+                )
+
+            body = self._json(response)
+            self.assertEqual(response.status_code, 500)
+            self.assertFalse(body["success"])
+            self.assertEqual(body["data"]["status"], "failed")
+            self.assertIn("江西地物分类模型文件不存在", body["msg"])
+        finally:
+            shutil.rmtree(input_root, ignore_errors=True)
+            shutil.rmtree(kml_root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

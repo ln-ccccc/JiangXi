@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Blueprint, current_app, request, send_from_directory
+from flask import Blueprint, current_app, jsonify, request, send_from_directory
 from sqlalchemy import desc
 
 from applications.auth.guard import ensure_logged_in
@@ -218,6 +218,17 @@ def kml_roi_inference_api():
             old_year=req_json.get('old_year') or '',
             new_year=req_json.get('new_year') or '',
         )
+        if data.get("status") == "failed":
+            errors = data.get("tile_errors") or {}
+            detail = next(iter(errors.values()), "地物分类未生成任何结果")
+            return jsonify(
+                success=False,
+                code=1,
+                msg=str(detail),
+                data=data,
+            ), 500
+        if data.get("status") == "partial":
+            return success_api(msg="地物分类部分成功", data=data)
         return success_api(data=data)
     except PathValidationError as exc:
         return fail_api(str(exc)), 400

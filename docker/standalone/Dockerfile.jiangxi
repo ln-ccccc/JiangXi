@@ -10,6 +10,11 @@ ENV STANDALONE_MODE=1 \
     MINER_DEFAULT_GEO_SOURCE_PATH=/app/runtime_data/348个图斑.shp \
     MINER_DEFAULT_KMZ_PATH=/app/runtime_data/Jiangxi_NaturalMine.kmz \
     MINER_ECOLOGY_WORKBOOK_PATH=/app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx \
+    KML_ROI_INPUT_ROOT=/app/backend/static/upload \
+    JIANGXI_MMSEG_MODEL_ROOT=/app/backend/model/jiangxi \
+    JIANGXI_MMSEG_CONFIG_PATH=/app/backend/model/jiangxi/config.py \
+    JIANGXI_MMSEG_CHECKPOINT_PATH=/app/backend/model/jiangxi/model.pth \
+    JIANGXI_MMSEG_METADATA_PATH=/app/backend/model/jiangxi/metadata.json \
     GEOVIEW_BACKEND_URL=http://127.0.0.1:5008 \
     MINER_MAP_PROVIDER=gaode
 

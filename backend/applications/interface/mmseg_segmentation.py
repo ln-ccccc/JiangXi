@@ -49,6 +49,22 @@ PALETTE = [
 CLASS_NAMES = ['grassland', 'forest', 'building', 'road', 'bareground', 'water']
 
 
+def _validate_loaded_model_contract(model) -> None:
+    runtime_classes = list((getattr(model, "dataset_meta", None) or {}).get("classes") or [])
+    if runtime_classes != CLASS_NAMES:
+        raise RuntimeError(
+            "江西地物分类模型运行时类别顺序不匹配：" + ", ".join(runtime_classes)
+        )
+
+    decode_head = getattr(model, "decode_head", None)
+    heads = decode_head if isinstance(decode_head, (list, tuple)) else [decode_head]
+    class_counts = [getattr(head, "num_classes", None) for head in heads if head is not None]
+    if not class_counts or any(count != len(CLASS_NAMES) for count in class_counts):
+        raise RuntimeError(
+            f"江西地物分类模型分类头类别数必须为 {len(CLASS_NAMES)}"
+        )
+
+
 def load_rs_image_with_gdal(img_path: str, to_float32: bool = True) -> Optional[np.ndarray]:
     """
     使用 GDAL 加载遥感图像，支持多波段 GeoTIFF
@@ -175,6 +191,7 @@ def run_inference(
     # 初始化模型
     print(f"[MMSeg] Loading model from {checkpoint_file}", file=sys.stderr)
     model = init_model(config_file, checkpoint_file, device=effective_device)
+    _validate_loaded_model_contract(model)
     if effective_device == "cuda:0":
         import torch
         torch.cuda.reset_peak_memory_stats(0)

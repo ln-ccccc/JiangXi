@@ -1,10 +1,13 @@
 import os
+import hashlib
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from applications.interface.mmseg_inference_caller import get_model_paths
+from applications.interface.mmseg_segmentation import _validate_loaded_model_contract
 
 
 ROOT = Path(__file__).resolve().parent
@@ -60,15 +63,27 @@ class TestJiangxiCpuContract(unittest.TestCase):
 
     def test_mmseg_accepts_existing_jiangxi_model_assets(self):
         with TemporaryDirectory() as tmp_dir:
-            config = Path(tmp_dir) / "config.py"
-            checkpoint = Path(tmp_dir) / "model.pth"
+            model_root = Path(tmp_dir) / "jiangxi"
+            model_root.mkdir()
+            config = model_root / "config.py"
+            checkpoint = model_root / "model.pth"
+            metadata = model_root / "metadata.json"
             config.write_text("# jiangxi model\n", encoding="utf-8")
             checkpoint.write_bytes(b"checkpoint")
+            metadata.write_text(
+                '{"region":"jiangxi","classes":["grassland","forest",'
+                '"building","road","bareground","water"],'
+                f'"config_sha256":"{hashlib.sha256(config.read_bytes()).hexdigest()}",'
+                f'"checkpoint_sha256":"{hashlib.sha256(checkpoint.read_bytes()).hexdigest()}"}}',
+                encoding="utf-8",
+            )
             with patch.dict(
                 os.environ,
                 {
+                    "JIANGXI_MMSEG_MODEL_ROOT": str(model_root),
                     "JIANGXI_MMSEG_CONFIG_PATH": str(config),
                     "JIANGXI_MMSEG_CHECKPOINT_PATH": str(checkpoint),
+                    "JIANGXI_MMSEG_METADATA_PATH": str(metadata),
                 },
                 clear=True,
             ):
@@ -76,6 +91,125 @@ class TestJiangxiCpuContract(unittest.TestCase):
                     get_model_paths("cc-ln/CUGRS"),
                     (str(config.resolve()), str(checkpoint.resolve())),
                 )
+
+    def test_mmseg_rejects_assets_outside_controlled_jiangxi_root(self):
+        with TemporaryDirectory() as tmp_dir:
+            model_root = Path(tmp_dir) / "jiangxi"
+            outside = Path(tmp_dir) / "other"
+            model_root.mkdir()
+            outside.mkdir()
+            config = outside / "config.py"
+            checkpoint = outside / "model.pth"
+            metadata = outside / "metadata.json"
+            config.write_text("# other model\n", encoding="utf-8")
+            checkpoint.write_bytes(b"checkpoint")
+            metadata.write_text(
+                '{"region":"jiangxi","classes":["grassland","forest",'
+                '"building","road","bareground","water"],'
+                f'"config_sha256":"{hashlib.sha256(config.read_bytes()).hexdigest()}",'
+                f'"checkpoint_sha256":"{hashlib.sha256(checkpoint.read_bytes()).hexdigest()}"}}',
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "JIANGXI_MMSEG_MODEL_ROOT": str(model_root),
+                    "JIANGXI_MMSEG_CONFIG_PATH": str(config),
+                    "JIANGXI_MMSEG_CHECKPOINT_PATH": str(checkpoint),
+                    "JIANGXI_MMSEG_METADATA_PATH": str(metadata),
+                },
+                clear=True,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "受控目录"):
+                    get_model_paths("cc-ln/CUGRS")
+
+    def test_mmseg_rejects_wrong_class_order(self):
+        with TemporaryDirectory() as tmp_dir:
+            model_root = Path(tmp_dir) / "jiangxi"
+            model_root.mkdir()
+            config = model_root / "config.py"
+            checkpoint = model_root / "model.pth"
+            metadata = model_root / "metadata.json"
+            config.write_text("# jiangxi model\n", encoding="utf-8")
+            checkpoint.write_bytes(b"checkpoint")
+            metadata.write_text(
+                '{"region":"jiangxi","classes":["water","forest",'
+                '"building","road","bareground","grassland"],'
+                f'"config_sha256":"{hashlib.sha256(config.read_bytes()).hexdigest()}",'
+                f'"checkpoint_sha256":"{hashlib.sha256(checkpoint.read_bytes()).hexdigest()}"}}',
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "JIANGXI_MMSEG_MODEL_ROOT": str(model_root),
+                    "JIANGXI_MMSEG_CONFIG_PATH": str(config),
+                    "JIANGXI_MMSEG_CHECKPOINT_PATH": str(checkpoint),
+                    "JIANGXI_MMSEG_METADATA_PATH": str(metadata),
+                },
+                clear=True,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "六类标签顺序不匹配"):
+                    get_model_paths("cc-ln/CUGRS")
+
+    def test_mmseg_rejects_checkpoint_not_bound_to_metadata(self):
+        with TemporaryDirectory() as tmp_dir:
+            model_root = Path(tmp_dir) / "jiangxi"
+            model_root.mkdir()
+            config = model_root / "config.py"
+            checkpoint = model_root / "model.pth"
+            metadata = model_root / "metadata.json"
+            config.write_text("# jiangxi model\n", encoding="utf-8")
+            checkpoint.write_bytes(b"checkpoint")
+            metadata.write_text(
+                '{"region":"jiangxi","classes":["grassland","forest",'
+                '"building","road","bareground","water"],'
+                f'"config_sha256":"{hashlib.sha256(config.read_bytes()).hexdigest()}",'
+                f'"checkpoint_sha256":"{hashlib.sha256(b"other").hexdigest()}"}}',
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "JIANGXI_MMSEG_MODEL_ROOT": str(model_root),
+                    "JIANGXI_MMSEG_CONFIG_PATH": str(config),
+                    "JIANGXI_MMSEG_CHECKPOINT_PATH": str(checkpoint),
+                    "JIANGXI_MMSEG_METADATA_PATH": str(metadata),
+                },
+                clear=True,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "权重 SHA-256 不匹配"):
+                    get_model_paths("cc-ln/CUGRS")
+
+    def test_loaded_model_contract_checks_runtime_classes_and_head_count(self):
+        valid_model = SimpleNamespace(
+            dataset_meta={
+                "classes": (
+                    "grassland",
+                    "forest",
+                    "building",
+                    "road",
+                    "bareground",
+                    "water",
+                )
+            },
+            decode_head=SimpleNamespace(num_classes=6),
+        )
+        _validate_loaded_model_contract(valid_model)
+
+        wrong_classes = SimpleNamespace(
+            dataset_meta={"classes": ("water", "forest")},
+            decode_head=SimpleNamespace(num_classes=6),
+        )
+        with self.assertRaisesRegex(RuntimeError, "运行时类别顺序不匹配"):
+            _validate_loaded_model_contract(wrong_classes)
+
+        wrong_head = SimpleNamespace(
+            dataset_meta=valid_model.dataset_meta,
+            decode_head=SimpleNamespace(num_classes=5),
+        )
+        with self.assertRaisesRegex(RuntimeError, "分类头类别数必须为 6"):
+            _validate_loaded_model_contract(wrong_head)
 
 
 if __name__ == "__main__":
