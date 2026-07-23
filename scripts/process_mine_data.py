@@ -2,6 +2,7 @@ import geopandas as gpd
 import pandas as pd
 import json
 import os
+from pathlib import Path
 
 def convert_shp_to_geojson(shp_path, output_path):
     print(f"Loading Shapefile from {shp_path}...")
@@ -74,14 +75,26 @@ def process_excel(xlsx_path, output_path):
     print(f"Processed Excel data saved to {output_path}")
 
 if __name__ == "__main__":
-    # Ensure data directory exists
-    os.makedirs("miner/data", exist_ok=True)
-    
-    shp_file = r"D:\Wechat\record\xwechat_files\wxid_w50x2jimjwr821_56b0\msg\file\2026-06\基础数据\348个图斑.shp"
-    xlsx_file = r"D:\项目\JiangXi\YunNan_prechange_20260703_223508\348图斑_TableMERNet无图像预测结果.xlsx"
-    
-    geojson_out = "miner/data/mines_348.json"
-    attr_out = "miner/data/indices_2013_2025.json"
+    project_root = Path(__file__).resolve().parents[1]
+    runtime_data = project_root / "docker" / "standalone" / "runtime_data"
+    miner_data = project_root / "miner" / "data"
+    miner_data.mkdir(parents=True, exist_ok=True)
+
+    shp_file = Path(
+        os.getenv(
+            "MINER_DEFAULT_GEO_SOURCE_PATH",
+            runtime_data / "348个图斑.shp",
+        )
+    )
+    xlsx_file = Path(
+        os.getenv(
+            "MINER_ECOLOGY_WORKBOOK_PATH",
+            miner_data / "348图斑_TableMERNet无图像预测结果.xlsx",
+        )
+    )
+
+    geojson_out = miner_data / "mines_348.json"
+    attr_out = miner_data / "indices_2013_2025.json"
     
     convert_shp_to_geojson(shp_file, geojson_out)
     process_excel(xlsx_file, attr_out)

@@ -99,8 +99,7 @@ export function useWeather() {
   onMounted(() => {
     updateDateTime();
     timeInterval = setInterval(updateDateTime, 1000);
-    // Initial fetch for a default location (e.g., Dali) if needed, 
-    // or let the map trigger it.
+    // Weather data is requested only after the Jiangxi map supplies coordinates.
   });
 
   onUnmounted(() => {
