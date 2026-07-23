@@ -3,7 +3,12 @@
     class="atlas-shell"
     :class="{ 'sidebar-is-collapsed': isCollapse }"
   >
-    <el-aside class="atlas-sidebar-region" width="auto">
+    <el-aside
+      class="atlas-sidebar-region"
+      width="auto"
+      :inert="isMobileDrawerClosed"
+      :aria-hidden="isMobileDrawerClosed ? 'true' : undefined"
+    >
       <AsideVue
         :is-collapse="isCollapse"
         :active-index="activeIndex"
@@ -23,6 +28,7 @@
       <el-header class="platform-header" height="68px">
         <div class="header-layout">
           <button
+            ref="sidebarToggle"
             class="sidebar-toggle"
             type="button"
             :aria-expanded="!isCollapse"
@@ -68,8 +74,14 @@ export default {
   data() {
     return {
       isCollapse: false,
+      isMobileViewport: false,
       activeIndex: this.$route.path,
     };
+  },
+  computed: {
+    isMobileDrawerClosed() {
+      return this.isMobileViewport && this.isCollapse;
+    },
   },
   watch: {
     "$route.path"(path) {
@@ -88,15 +100,25 @@ export default {
   },
   methods: {
     syncCollapse() {
-      this.isCollapse = document.documentElement.clientWidth <= 1100;
+      const viewportWidth = document.documentElement.clientWidth;
+      this.isMobileViewport = viewportWidth <= 768;
+      this.isCollapse = viewportWidth <= 1100;
     },
     goCollapse() {
+      const closesMobileDrawer = this.isMobileViewport && !this.isCollapse;
       this.isCollapse = !this.isCollapse;
+      if (closesMobileDrawer) this.focusMenuButton();
     },
     closeSidebarOnMobile() {
-      if (document.documentElement.clientWidth <= 768) {
+      if (this.isMobileViewport && !this.isCollapse) {
         this.isCollapse = true;
+        this.focusMenuButton();
       }
+    },
+    focusMenuButton() {
+      this.$nextTick(() => {
+        this.$refs.sidebarToggle?.focus();
+      });
     },
   },
 };

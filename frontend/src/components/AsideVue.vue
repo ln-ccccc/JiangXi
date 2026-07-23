@@ -14,7 +14,7 @@
         type="button"
         aria-label="进入地物分类"
         title="进入地物分类"
-        @click="goSegmentation"
+        @click="handleAtlasMarkClick"
       >
         赣
       </button>
@@ -94,6 +94,10 @@ export default {
   methods: {
     goSegmentation,
     goSpectralIndices,
+    handleAtlasMarkClick() {
+      goSegmentation.call(this);
+      this.$emit("navigate");
+    },
     goShow() {
       this.$message.success("江西生态图册已就绪，请选择地物分类或光谱指数");
     },

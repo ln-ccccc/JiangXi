@@ -6,7 +6,7 @@
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
     "test:backend-url": "node --test test/backendUrl.test.mjs",
-    "test:navigation": "node --test test/platformNavigation.test.mjs test/tablogin.contract.test.mjs",
+    "test:navigation": "node --test test/platformNavigation.test.mjs test/tablogin.contract.test.mjs test/applicationShell.contract.test.mjs",
     "test:ui": "node scripts/verify-brand-theme.cjs"
   },
   "dependencies": {

@@ -181,6 +181,14 @@ assert.match(styleSources, /@media\s*\(max-width:\s*768px\)/);
 assert.match(styleSources, /@media\s*\(max-width:\s*480px\)/);
 assert.match(styleSources, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
 assert.match(theme, /:focus-visible/);
+assert.match(
+  theme,
+  /\.el-button:focus-visible,\s*\.el-menu-item:focus-visible,\s*\.el-input__inner:focus-visible,\s*\.el-textarea__inner:focus-visible,\s*\.el-select__input:focus-visible,\s*\.el-input-number__input:focus-visible,\s*\.el-switch:focus-visible,\s*\.el-upload:focus-visible\s*{[^}]*outline:\s*2px solid var\(--jx-primary\)\s*!important;[^}]*outline-offset:\s*3px\s*!important;[^}]*}/s,
+);
+assert.match(
+  theme,
+  /\.el-checkbox__original:focus-visible\s*\+\s*\.el-checkbox__inner,\s*\.el-radio__original:focus-visible\s*\+\s*\.el-radio__inner\s*{[^}]*box-shadow:\s*0 0 0 2px var\(--jx-primary\)\s*!important;[^}]*}/s,
+);
 assert.match(theme, /Noto Serif SC/);
 assert.match(theme, /Microsoft YaHei/);
 assert.match(theme, /Bahnschrift/);

@@ -160,6 +160,23 @@ textarea {
   outline-offset: 3px;
 }
 
+.el-button:focus-visible,
+.el-menu-item:focus-visible,
+.el-input__inner:focus-visible,
+.el-textarea__inner:focus-visible,
+.el-select__input:focus-visible,
+.el-input-number__input:focus-visible,
+.el-switch:focus-visible,
+.el-upload:focus-visible {
+  outline: 2px solid var(--jx-primary) !important;
+  outline-offset: 3px !important;
+}
+
+.el-checkbox__original:focus-visible + .el-checkbox__inner,
+.el-radio__original:focus-visible + .el-radio__inner {
+  box-shadow: 0 0 0 2px var(--jx-primary) !important;
+}
+
 .el-container,
 .el-main {
   background: transparent;
