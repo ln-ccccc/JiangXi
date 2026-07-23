@@ -137,6 +137,30 @@ class TestNewFeatures(unittest.TestCase):
             shutil.rmtree(input_root, ignore_errors=True)
             shutil.rmtree(kml_root, ignore_errors=True)
 
+    def test_kml_roi_inference_uses_configured_default_kmz_filename(self):
+        input_root = Path(tempfile.mkdtemp(prefix="roi-config-input-"))
+        kml_root = Path(tempfile.mkdtemp(prefix="roi-config-kml-"))
+        (input_root / "old.tif").write_bytes(b"tif")
+        configured_kmz = kml_root / "configured-default.kmz"
+        configured_kmz.write_bytes(b"kmz")
+        self.app.config["KML_ROI_INPUT_ROOT"] = str(input_root)
+        self.app.config["KML_ROI_KML_ROOT"] = str(kml_root)
+        self.app.config["MINER_DEFAULT_KMZ_PATH"] = "/outside/configured-default.kmz"
+        self.login_as_admin()
+        try:
+            with patch("applications.api.analysis.run_kml_roi_inference") as run_inference:
+                run_inference.return_value = {"ok": True}
+                response = self.client.post(
+                    "/api/analysis/kml_roi_inference",
+                    json={"old_tif_path": "old.tif"},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(run_inference.call_args.kwargs["kml_path"], str(configured_kmz))
+        finally:
+            shutil.rmtree(input_root, ignore_errors=True)
+            shutil.rmtree(kml_root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

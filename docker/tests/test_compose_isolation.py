@@ -98,12 +98,61 @@ class ComposeIsolationTests(unittest.TestCase):
         self.assertIn(runtime_mount, miner_api_mounts)
         self.assertNotIn("node_modules", self.prod_text)
 
+    def test_runtime_mounts_use_only_existing_jiangxi_workbook_and_frontend_public(self):
+        services = self.prod["services"]
+        backend_mounts = services["backend"]["volumes"]
+        miner_api_mounts = services["miner-api"]["volumes"]
+        all_runtime_mounts = backend_mounts + miner_api_mounts
+        for workbook_name in (
+            "NDVI_2year.xlsx",
+            "NDBI_by_fid_2year_avg.xlsx",
+            "NDWI_by_fid_2year_avg.xlsx",
+            "NDSI_by_fid_2year_avg.xlsx",
+        ):
+            self.assertFalse(any(workbook_name in mount for mount in all_runtime_mounts))
+
+        authoritative_workbook_mount = "./miner/data:/app/miner/data:ro"
+        self.assertIn(authoritative_workbook_mount, backend_mounts)
+        self.assertIn(authoritative_workbook_mount, miner_api_mounts)
+        self.assertIn(
+            "./frontend/public:/app/frontend/public:ro",
+            services["frontend"]["volumes"],
+        )
+        self.assertNotIn("node_modules", self.prod_text)
+
+    def test_active_map_configuration_has_no_dali_or_localhost_fallback(self):
+        docker_code = "\n".join(
+            [
+                (ROOT / "docker" / "generate_miner_tiles.py").read_text(encoding="utf-8"),
+                (ROOT / "docker" / "write-runtime-env.py").read_text(encoding="utf-8"),
+            ]
+        )
+        active_runtime = self.prod_text + docker_code
+        self.assertNotIn("/offline_maps/dali", active_runtime)
+        self.assertNotIn("maps/dali", active_runtime)
+        self.assertNotIn("localhost:8000", active_runtime)
+        environment = self.prod["services"]["backend"]["environment"]
+        self.assertEqual(
+            environment["MINER_LOCAL_TILE_URL"],
+            "${MINER_LOCAL_TILE_URL:-/tiles/{z}/{x}/{y}.png}",
+        )
+        self.assertEqual(environment["MINER_TILE_TIF_PATH"], "${MINER_TILE_TIF_PATH:-}")
+
+    def test_mysql_defaults_are_jiangxi_scoped(self):
+        app_environment = self.prod["services"]["backend"]["environment"]
+        mysql_environment = self.prod["services"]["mysql"]["environment"]
+        self.assertEqual(app_environment["MYSQL_USERNAME"], "${MYSQL_USERNAME:-jiangxi}")
+        self.assertEqual(app_environment["MYSQL_DATABASE"], "${MYSQL_DATABASE:-jiangxi}")
+        self.assertEqual(mysql_environment["MYSQL_USER"], "${MYSQL_USERNAME:-jiangxi}")
+        self.assertEqual(mysql_environment["MYSQL_DATABASE"], "${MYSQL_DATABASE:-jiangxi}")
+
     def test_active_runtime_has_no_yunnan_source_fallback(self):
         analysis_source = (ROOT / "backend" / "applications" / "api" / "analysis.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("yunnan.kml", (self.prod_text + analysis_source).lower())
-        self.assertIn("Jiangxi_NaturalMine.kmz", analysis_source)
+        self.assertNotIn('"Jiangxi_NaturalMine.kmz"', analysis_source)
+        self.assertIn('current_app.config["MINER_DEFAULT_KMZ_PATH"]', analysis_source)
 
     def test_default_jiangxi_data_paths_are_explicit(self):
         environment = self.prod["services"]["backend"]["environment"]
@@ -144,6 +193,8 @@ class EnvironmentExampleTests(unittest.TestCase):
         self.assertEqual(values["VITE_GEOVIEW_URL"], "http://127.0.0.1:4174/")
         self.assertEqual(values["VUE_APP_MINER_URL"], "http://127.0.0.1:4173/")
         self.assertEqual(values["VUE_APP_BACKEND_URL"], "http://127.0.0.1:5178/")
+        self.assertEqual(values["MYSQL_USERNAME"], "jiangxi")
+        self.assertEqual(values["MYSQL_DATABASE"], "jiangxi")
 
 
 if __name__ == "__main__":

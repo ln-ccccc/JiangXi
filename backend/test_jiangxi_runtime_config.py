@@ -28,6 +28,12 @@ class JiangxiRuntimeConfigTests(unittest.TestCase):
     def test_kml_runtime_root_uses_mounted_jiangxi_data(self):
         self.assertEqual(CONFIG_MODULE.BaseConfig.KML_ROI_KML_ROOT, "/app/runtime_data")
 
+    def test_default_kmz_path_uses_mounted_jiangxi_data(self):
+        self.assertEqual(
+            getattr(CONFIG_MODULE.BaseConfig, "MINER_DEFAULT_KMZ_PATH", None),
+            "/app/runtime_data/Jiangxi_NaturalMine.kmz",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

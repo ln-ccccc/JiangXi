@@ -178,6 +178,7 @@ def kml_roi_inference_api():
             raise PathValidationError("不支持自定义输出目录")
         input_root = current_app.config["KML_ROI_INPUT_ROOT"]
         kml_root = current_app.config["KML_ROI_KML_ROOT"]
+        default_kmz_name = Path(current_app.config["MINER_DEFAULT_KMZ_PATH"]).name
         old_tif_path = resolve_managed_file(input_root, req_json.get("old_tif_path"), {".tif", ".tiff"})
         new_tif_path = resolve_managed_file(
             input_root,
@@ -186,7 +187,7 @@ def kml_roi_inference_api():
         )
         kml_path = resolve_managed_file(
             kml_root,
-            req_json.get("kml_path") or "Jiangxi_NaturalMine.kmz",
+            req_json.get("kml_path") or default_kmz_name,
             {".kml", ".kmz"},
         )
         if not old_tif_path.is_file() or not new_tif_path.is_file() or not kml_path.is_file():

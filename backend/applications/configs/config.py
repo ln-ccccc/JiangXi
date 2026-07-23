@@ -68,6 +68,9 @@ class BaseConfig:
         Path(__file__).resolve().parents[2] / "bianhua_2years"
     )
     KML_ROI_KML_ROOT = os.getenv("KML_ROI_KML_ROOT") or "/app/runtime_data"
+    MINER_DEFAULT_KMZ_PATH = (
+        os.getenv("MINER_DEFAULT_KMZ_PATH") or "/app/runtime_data/Jiangxi_NaturalMine.kmz"
+    )
 
     # mysql 配置
     MYSQL_USERNAME = os.getenv('MYSQL_USERNAME') or "root"

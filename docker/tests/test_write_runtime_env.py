@@ -64,6 +64,7 @@ class RuntimePublicUrlTests(unittest.TestCase):
         self.assertIn("VUE_APP_BACKEND_URL=", frontend_env)
         self.assertIn("VUE_APP_MINER_URL=", frontend_env)
         self.assertIn('VITE_GEOVIEW_URL=""', miner_env)
+        self.assertIn("VITE_MINER_LOCAL_TILE_URL=/tiles/{z}/{x}/{y}.png", miner_env)
         combined = frontend_env + miner_env
         self.assertNotIn("http://localhost:3000", combined)
         self.assertNotIn("http://localhost:4000", combined)

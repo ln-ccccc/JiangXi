@@ -1,4 +1,3 @@
-import glob
 import os
 import subprocess
 from pathlib import Path
@@ -27,24 +26,11 @@ def existing_zoom_levels(tile_root: Path) -> list[int]:
 
 
 def resolve_source_tif() -> Path | None:
-    configured = str(os.environ.get("MINER_TILE_TIF_PATH", "")).strip().rstrip("n")
-    if configured:
-        candidate = Path(configured)
-        if candidate.exists() and candidate.is_file():
-            return candidate
-        if candidate.parent.exists():
-            tif_candidates = sorted(candidate.parent.glob("*.tif"))
-            level_candidates = [path for path in tif_candidates if "Level_15" in path.name]
-            if level_candidates:
-                return level_candidates[0]
-            if len(tif_candidates) == 1:
-                return tif_candidates[0]
-
-    for pattern in ("/offline_maps/dali/*Level_15.tif", "/offline_maps/dali/*.tif"):
-        matches = sorted(Path(path) for path in glob.glob(pattern))
-        if matches:
-            return matches[0]
-    return None
+    configured = str(os.environ.get("MINER_TILE_TIF_PATH", "")).strip()
+    if not configured:
+        return None
+    candidate = Path(configured)
+    return candidate if candidate.exists() and candidate.is_file() else None
 
 
 def main() -> int:
@@ -60,7 +46,14 @@ def main() -> int:
     source_tif = resolve_source_tif()
 
     if source_tif is None:
-        print("[miner-tiles] No source tif found under /offline_maps/dali, skip generation.", flush=True)
+        configured = str(os.environ.get("MINER_TILE_TIF_PATH", "")).strip()
+        if configured:
+            print(
+                f"[miner-tiles] MINER_TILE_TIF_PATH does not point to a file: {configured}; skip generation.",
+                flush=True,
+            )
+        else:
+            print("[miner-tiles] MINER_TILE_TIF_PATH is not configured; skip generation.", flush=True)
         return 0
 
     tile_root.mkdir(parents=True, exist_ok=True)

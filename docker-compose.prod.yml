@@ -1,9 +1,9 @@
 x-app-env: &app-env
   MYSQL_HOST: mysql
   MYSQL_PORT: 3306
-  MYSQL_USERNAME: "${MYSQL_USERNAME:-geoview}"
+  MYSQL_USERNAME: "${MYSQL_USERNAME:-jiangxi}"
   MYSQL_PASSWORD: "${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}"
-  MYSQL_DATABASE: "${MYSQL_DATABASE:-geoview}"
+  MYSQL_DATABASE: "${MYSQL_DATABASE:-jiangxi}"
   ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
   ADMIN_PASSWORD: "${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}"
   SECRET_KEY: "${SECRET_KEY:?SECRET_KEY is required}"
@@ -22,9 +22,9 @@ x-app-env: &app-env
   VUE_APP_BACKEND_URL: http://127.0.0.1:5178/
   MINER_MAP_PROVIDER: "${MINER_MAP_PROVIDER:-gaode}"
   MINER_TDT_KEY: "${MINER_TDT_KEY:-}"
-  MINER_LOCAL_TILE_URL: "${MINER_LOCAL_TILE_URL:-http://localhost:8000/tiles/{z}/{x}/{y}.png}"
+  MINER_LOCAL_TILE_URL: "${MINER_LOCAL_TILE_URL:-/tiles/{z}/{x}/{y}.png}"
   MINER_LOCAL_TMS: "${MINER_LOCAL_TMS:-0}"
-  MINER_TILE_TIF_PATH: "${MINER_TILE_TIF_PATH:-/offline_maps/dali/澶х悊鐧芥棌鑷不宸瀇鍗浘1_Level_15.tif}"
+  MINER_TILE_TIF_PATH: "${MINER_TILE_TIF_PATH:-}"
 
   MINER_TILE_MIN_ZOOM: "${MINER_TILE_MIN_ZOOM:-8}"
   MINER_TILE_MAX_ZOOM: "${MINER_TILE_MAX_ZOOM:-15}"
@@ -58,16 +58,11 @@ services:
       - ./backend/applications:/app/backend/applications:ro
       - ./backend/app.py:/app/backend/app.py:ro
       - ./backend/kml_roi_infer.py:/app/backend/kml_roi_infer.py:ro
-      - ./miner/NDVI_2year.xlsx:/app/miner/NDVI_2year.xlsx
-      - ./miner/NDBI_by_fid_2year_avg.xlsx:/app/miner/NDBI_by_fid_2year_avg.xlsx
-      - ./miner/NDWI_by_fid_2year_avg.xlsx:/app/miner/NDWI_by_fid_2year_avg.xlsx
-      - ./miner/NDSI_by_fid_2year_avg.xlsx:/app/miner/NDSI_by_fid_2year_avg.xlsx
       - ./miner/data:/app/miner/data:ro
       - ./docker/standalone/runtime_data:/app/runtime_data:ro
       - miner-outputs:/app/miner/change_matrix_outputs
       - backend-static:/app/backend/static
       - hf-cache:/root/.cache/huggingface
-      - ${OFFLINE_MAP_DIR:-./maps/dali}:/offline_maps/dali:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5008/ >/dev/null || exit 1"]
       interval: 30s
@@ -88,6 +83,7 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./docker:/app/docker:ro
       - ./frontend/src:/app/frontend/src:ro
+      - ./frontend/public:/app/frontend/public:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1"]
       interval: 30s
@@ -109,17 +105,12 @@ services:
       - ./miner/server.js:/app/miner/server.js:ro
       - ./miner/routes:/app/miner/routes:ro
       - ./miner/services:/app/miner/services:ro
-      - ./miner/NDVI_2year.xlsx:/app/miner/NDVI_2year.xlsx:ro
-      - ./miner/NDBI_by_fid_2year_avg.xlsx:/app/miner/NDBI_by_fid_2year_avg.xlsx:ro
-      - ./miner/NDWI_by_fid_2year_avg.xlsx:/app/miner/NDWI_by_fid_2year_avg.xlsx:ro
-      - ./miner/NDSI_by_fid_2year_avg.xlsx:/app/miner/NDSI_by_fid_2year_avg.xlsx:ro
       - ./miner/data:/app/miner/data:ro
       - ./docker/standalone/runtime_data:/app/runtime_data:ro
       - miner-outputs:/app/miner/change_matrix_outputs
       - miner-tiles:/app/miner/public/tiles
       - backend-static:/app/backend/static
       - hf-cache:/root/.cache/huggingface
-      - ${OFFLINE_MAP_DIR:-./maps/dali}:/offline_maps/dali:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/auth/session >/dev/null || exit 1"]
       interval: 30s
@@ -155,8 +146,8 @@ services:
     command: --default-authentication-plugin=mysql_native_password
     environment:
       MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}"
-      MYSQL_DATABASE: "${MYSQL_DATABASE:-geoview}"
-      MYSQL_USER: "${MYSQL_USERNAME:-geoview}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-jiangxi}"
+      MYSQL_USER: "${MYSQL_USERNAME:-jiangxi}"
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}"
     volumes:
       - mysql-data:/var/lib/mysql

@@ -27,7 +27,6 @@ def main():
     backend_host = host_cfg.get("backend", "0.0.0.0")
     backend_port = int(port_cfg.get("backend", 5008))
     miner_enabled = "true" if miner_cfg.get("enabled", False) else "false"
-    miner_backend_port = int(miner_cfg.get("backend_port", 8000))
     backend_url = os.environ.get("VUE_APP_BACKEND_URL", "")
     miner_url = os.environ.get("VUE_APP_MINER_URL", "")
 
@@ -58,7 +57,7 @@ def main():
         f"VITE_MINER_API_BASE_URL={miner_api_base_url}",
         f"VITE_MINER_MAP_PROVIDER={os.environ.get('MINER_MAP_PROVIDER', 'local')}",
         f"VITE_TDT_KEY={os.environ.get('MINER_TDT_KEY', '')}",
-        f"VITE_MINER_LOCAL_TILE_URL={os.environ.get('MINER_LOCAL_TILE_URL', f'http://localhost:{miner_backend_port}/tiles/{{z}}/{{x}}/{{y}}.png')}",
+        f"VITE_MINER_LOCAL_TILE_URL={os.environ.get('MINER_LOCAL_TILE_URL', '/tiles/{z}/{x}/{y}.png')}",
         f"VITE_MINER_LOCAL_TMS={os.environ.get('MINER_LOCAL_TMS', '0')}",
         f"VITE_MINER_LOCAL_MAX_NATIVE_ZOOM={local_max_native_zoom}",
         "",
