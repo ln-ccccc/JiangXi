@@ -186,7 +186,7 @@ def kml_roi_inference_api():
         )
         kml_path = resolve_managed_file(
             kml_root,
-            req_json.get("kml_path") or "yunnan.kml",
+            req_json.get("kml_path") or "Jiangxi_NaturalMine.kmz",
             {".kml", ".kmz"},
         )
         if not old_tif_path.is_file() or not new_tif_path.is_file() or not kml_path.is_file():

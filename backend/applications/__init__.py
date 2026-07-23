@@ -13,15 +13,7 @@ from applications.extensions import db, init_plugs
 
 def _build_allowed_origins(app):
     configured = app.config.get('CORS_ALLOWED_ORIGINS')
-    if configured:
-        return [item.strip() for item in str(configured).split(',') if item.strip()]
-
-    hosts = ('localhost', '127.0.0.1')
-    ports = {
-        int(app.config.get('FRONTEND_PORT', 3000) or 3000),
-        int(app.config.get('MINER_FRONTEND_PORT', 4000) or 4000),
-    }
-    return [f'http://{host}:{port}' for host in hosts for port in sorted(ports)]
+    return [item.strip() for item in str(configured or '').split(',') if item.strip()]
 
 
 def create_app(config_name=None):

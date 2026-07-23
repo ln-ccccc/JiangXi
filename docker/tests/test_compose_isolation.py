@@ -1,0 +1,150 @@
+"""Docker Compose isolation regression tests for the Jiangxi deployment."""
+
+import unittest
+from pathlib import Path
+
+import yaml
+
+
+ROOT = Path(__file__).resolve().parents[2]
+PROD_PATH = ROOT / "docker-compose.prod.yml"
+GPU_PATH = ROOT / "docker-compose.gpu.yml"
+
+
+class ComposeIsolationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.prod_text = PROD_PATH.read_text(encoding="utf-8")
+        cls.prod = yaml.safe_load(cls.prod_text)
+        cls.gpu = yaml.safe_load(GPU_PATH.read_text(encoding="utf-8"))
+
+    def test_jiangxi_image_and_container_names_are_isolated(self):
+        services = self.prod["services"]
+        self.assertEqual(services["backend"]["image"], "${APP_IMAGE:-jiangxi-runtime:current}")
+        self.assertEqual(
+            {name: service["container_name"] for name, service in services.items()},
+            {
+                "backend": "jiangxi-backend",
+                "frontend": "jiangxi-frontend",
+                "miner-api": "jiangxi-miner-api",
+                "miner-web": "jiangxi-miner-web",
+                "mysql": "jiangxi-mysql",
+            },
+        )
+
+    def test_only_browser_entrypoints_are_published_on_loopback(self):
+        services = self.prod["services"]
+        self.assertEqual(services["backend"]["ports"], ["127.0.0.1:5178:5008"])
+        self.assertEqual(services["frontend"]["ports"], ["127.0.0.1:4174:3000"])
+        self.assertEqual(services["miner-web"]["ports"], ["127.0.0.1:4173:4000"])
+        self.assertNotIn("ports", services["miner-api"])
+        self.assertNotIn("ports", services["mysql"])
+
+    def test_shared_app_environment_uses_jiangxi_auth_and_public_origins(self):
+        environment = self.prod["services"]["backend"]["environment"]
+        self.assertEqual(environment.get("SESSION_COOKIE_NAME"), "jiangxi_session")
+        self.assertEqual(
+            environment["CORS_ALLOWED_ORIGINS"],
+            "http://127.0.0.1:4173,http://127.0.0.1:4174",
+        )
+        self.assertEqual(environment["FRONTEND_PORT"], 3000)
+        self.assertEqual(environment["MINER_FRONTEND_PORT"], 4000)
+        self.assertEqual(environment["VITE_GEOVIEW_URL"], "http://127.0.0.1:4174/")
+        self.assertEqual(environment["VUE_APP_MINER_URL"], "http://127.0.0.1:4173/")
+        self.assertEqual(environment["VUE_APP_BACKEND_URL"], "http://127.0.0.1:5178/")
+
+    def test_backend_and_miner_api_share_backend_auth_configuration(self):
+        services = self.prod["services"]
+        shared_keys = {
+            "SECRET_KEY",
+            "MYSQL_HOST",
+            "MYSQL_PORT",
+            "MYSQL_USERNAME",
+            "MYSQL_PASSWORD",
+            "MYSQL_DATABASE",
+        }
+        for key in shared_keys:
+            self.assertEqual(
+                services["backend"]["environment"][key],
+                services["miner-api"]["environment"][key],
+            )
+        self.assertEqual(
+            services["miner-api"]["environment"]["GEOVIEW_BACKEND_URL"],
+            "http://backend:5008",
+        )
+
+    def test_named_volumes_are_jiangxi_scoped(self):
+        self.assertEqual(
+            {name: value["name"] for name, value in self.prod["volumes"].items()},
+            {
+                "backend-static": "jiangxi_backend_static",
+                "mysql-data": "jiangxi_mysql_data",
+                "hf-cache": "jiangxi_hf_cache",
+                "miner-outputs": "jiangxi_miner_outputs",
+                "miner-tiles": "jiangxi_miner_tiles",
+            },
+        )
+
+    def test_runtime_mounts_preserve_image_model_and_use_jiangxi_data(self):
+        services = self.prod["services"]
+        backend_mounts = services["backend"]["volumes"]
+        miner_api_mounts = services["miner-api"]["volumes"]
+        self.assertNotIn("./backend:/app/backend:ro", backend_mounts)
+        self.assertIn("./backend/applications:/app/backend/applications:ro", backend_mounts)
+        self.assertIn("./backend/app.py:/app/backend/app.py:ro", backend_mounts)
+        self.assertIn("./backend/kml_roi_infer.py:/app/backend/kml_roi_infer.py:ro", backend_mounts)
+        runtime_mount = "./docker/standalone/runtime_data:/app/runtime_data:ro"
+        self.assertIn(runtime_mount, backend_mounts)
+        self.assertIn(runtime_mount, miner_api_mounts)
+        self.assertNotIn("node_modules", self.prod_text)
+
+    def test_active_runtime_has_no_yunnan_source_fallback(self):
+        analysis_source = (ROOT / "backend" / "applications" / "api" / "analysis.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("yunnan.kml", (self.prod_text + analysis_source).lower())
+        self.assertIn("Jiangxi_NaturalMine.kmz", analysis_source)
+
+    def test_default_jiangxi_data_paths_are_explicit(self):
+        environment = self.prod["services"]["backend"]["environment"]
+        self.assertEqual(
+            environment["MINER_DEFAULT_KMZ_PATH"],
+            "${MINER_DEFAULT_KMZ_PATH:-/app/runtime_data/Jiangxi_NaturalMine.kmz}",
+        )
+        self.assertEqual(
+            environment["MINER_DEFAULT_GEO_SOURCE_PATH"],
+            "${MINER_DEFAULT_GEO_SOURCE_PATH:-/app/runtime_data/348个图斑.shp}",
+        )
+        self.assertEqual(
+            environment["MINER_ECOLOGY_WORKBOOK_PATH"],
+            "${MINER_ECOLOGY_WORKBOOK_PATH:-/app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx}",
+        )
+
+    def test_gpu_overlay_uses_jiangxi_gpu_image_for_compute_services(self):
+        services = self.gpu["services"]
+        self.assertEqual(services["backend"].get("image"), "jiangxi-runtime:gpu")
+        self.assertEqual(services["miner-api"].get("image"), "jiangxi-runtime:gpu")
+
+
+class EnvironmentExampleTests(unittest.TestCase):
+    def test_example_defaults_match_jiangxi_compose_contract(self):
+        values = {}
+        for raw_line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                values[key] = value
+
+        self.assertEqual(values["APP_IMAGE"], "jiangxi-runtime:current")
+        self.assertEqual(values["SESSION_COOKIE_NAME"], "jiangxi_session")
+        self.assertEqual(
+            values["CORS_ALLOWED_ORIGINS"],
+            "http://127.0.0.1:4173,http://127.0.0.1:4174",
+        )
+        self.assertEqual(values["VITE_GEOVIEW_URL"], "http://127.0.0.1:4174/")
+        self.assertEqual(values["VUE_APP_MINER_URL"], "http://127.0.0.1:4173/")
+        self.assertEqual(values["VUE_APP_BACKEND_URL"], "http://127.0.0.1:5178/")
+
+
+if __name__ == "__main__":
+    unittest.main()

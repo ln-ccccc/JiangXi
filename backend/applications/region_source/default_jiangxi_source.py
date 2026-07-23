@@ -1,9 +1,12 @@
+import os
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 from xml.etree import ElementTree as ET
 
-DEFAULT_JIANGXI_KMZ_PATH = Path(r"D:\项目\江西数据\Jiangxi_NaturalMine.kmz")
+DEFAULT_JIANGXI_KMZ_PATH = Path(
+    os.getenv("MINER_DEFAULT_KMZ_PATH") or "/app/runtime_data/Jiangxi_NaturalMine.kmz"
+)
 
 
 def resolve_default_jiangxi_kmz(candidate=None) -> Path:

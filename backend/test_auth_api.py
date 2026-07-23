@@ -109,14 +109,37 @@ class TestAuthAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.headers.get("Access-Control-Allow-Origin"))
 
-    def test_allowed_local_origin_receives_cors_headers(self):
+    def test_allowed_jiangxi_origin_receives_credentialed_cors_headers(self):
+        response = self.client.get(
+            "/api/auth/session",
+            headers={"Origin": "http://127.0.0.1:4174"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "http://127.0.0.1:4174")
+        self.assertEqual(response.headers.get("Access-Control-Allow-Credentials"), "true")
+
+    def test_generic_frontend_origin_is_not_allowed(self):
         response = self.client.get(
             "/api/auth/session",
             headers={"Origin": "http://localhost:3000"},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "http://localhost:3000")
-        self.assertEqual(response.headers.get("Access-Control-Allow-Credentials"), "true")
+        self.assertIsNone(response.headers.get("Access-Control-Allow-Origin"))
+
+    def test_login_uses_jiangxi_cookie_scope_and_security_attributes(self):
+        self.sync_admin("Secret123!")
+
+        response = self.client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "Secret123!"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        cookie = response.headers.get("Set-Cookie")
+        self.assertTrue(cookie.startswith("jiangxi_session="), cookie)
+        self.assertIn("Path=/", cookie)
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Lax", cookie)
 
 
 if __name__ == "__main__":

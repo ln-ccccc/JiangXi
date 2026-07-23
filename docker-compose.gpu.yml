@@ -1,11 +1,13 @@
 # Apply with: docker compose -f docker-compose.prod.yml -f docker-compose.gpu.yml up -d
 services:
   backend:
+    image: jiangxi-runtime:gpu
     gpus: all
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
   miner-api:
+    image: jiangxi-runtime:gpu
     gpus: all
     environment:
       NVIDIA_VISIBLE_DEVICES: all

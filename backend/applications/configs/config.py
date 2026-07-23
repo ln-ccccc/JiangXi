@@ -45,10 +45,15 @@ class BaseConfig:
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
     FRONTEND_PORT = int(os.getenv('FRONTEND_PORT') or 3000)
     MINER_FRONTEND_PORT = int(os.getenv('MINER_FRONTEND_PORT') or 4000)
+    SESSION_COOKIE_NAME = os.getenv('SESSION_COOKIE_NAME') or 'jiangxi_session'
+    SESSION_COOKIE_PATH = '/'
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
     SESSION_COOKIE_SECURE = _bool_env('SESSION_COOKIE_SECURE', False)
-    CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '')
+    CORS_ALLOWED_ORIGINS = os.getenv(
+        'CORS_ALLOWED_ORIGINS',
+        'http://127.0.0.1:4173,http://127.0.0.1:4174',
+    )
 
     # redis配置
     REDIS_HOST = os.getenv('REDIS_HOST') or "127.0.0.1"
@@ -62,9 +67,7 @@ class BaseConfig:
     KML_ROI_INPUT_ROOT = os.getenv("KML_ROI_INPUT_ROOT") or str(
         Path(__file__).resolve().parents[2] / "bianhua_2years"
     )
-    KML_ROI_KML_ROOT = os.getenv("KML_ROI_KML_ROOT") or str(
-        Path(__file__).resolve().parents[3] / "miner"
-    )
+    KML_ROI_KML_ROOT = os.getenv("KML_ROI_KML_ROOT") or "/app/runtime_data"
 
     # mysql 配置
     MYSQL_USERNAME = os.getenv('MYSQL_USERNAME') or "root"
