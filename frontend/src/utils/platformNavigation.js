@@ -1,14 +1,21 @@
-function normalizeRoot(configuredRoot, locationLike, port) {
-  const configured = String(configuredRoot || "").trim();
-  if (configured) {
-    return `${configured.split("#")[0].replace(/\/+$/, "")}/`;
-  }
+function configuredHttpRoot(value) {
+  const configured = String(value || "").trim();
+  if (!configured) return "";
 
-  const protocol = locationLike?.protocol || "http:";
-  const hostname = locationLike?.hostname || "localhost";
-  return `${protocol}//${hostname}:${port}/`;
+  try {
+    const url = new URL(configured);
+    const isHttp = url.protocol === "http:" || url.protocol === "https:";
+    const isRoot = url.pathname === "/" && !url.search && !url.hash;
+    if (!isHttp || !url.hostname || !isRoot || url.username || url.password) {
+      return "";
+    }
+    return `${url.origin}/`;
+  } catch (_) {
+    return "";
+  }
 }
 
-export function buildMinerMapUrl(locationLike, configuredRoot = "") {
-  return `${normalizeRoot(configuredRoot, locationLike, 4000)}#/map`;
+export function buildMinerMapUrl(_locationLike, configuredRoot = "") {
+  const root = configuredHttpRoot(configuredRoot);
+  return root ? `${root}#/map` : "";
 }

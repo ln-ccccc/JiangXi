@@ -1,226 +1,135 @@
 <!DOCTYPE html>
-<html lang="">
-
-<head>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <link rel="icon" type="image/x-icon" href="<%= BASE_URL %>logo.svg">
-  <title>江西省矿山生态修复智能监测平台</title>
-</head>
-
-<body>
-  <noscript>
-    <strong>We're sorry but <%= htmlWebpackPlugin.options.title %> doesn't work properly without JavaScript enabled.
-      Please enable it to continue.</strong>
-  </noscript>
-  <div id="app">
-    <!-- https://www.jianshu.com/p/407c2722dd0b加载动画 -->
-    <div id="loader-wrapper">
-      <div id="loader"></div>
-      <div class="loader-section section-left"></div>
-      <div class="loader-section section-right"></div>
-      <div class="load_title">正在加载江西省矿山生态修复智能监测平台，请耐心等待...
-        <br>
-        <p>v1.0</p>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#071923">
+    <link rel="icon" type="image/svg+xml" href="<%= BASE_URL %>logo.svg">
+    <title>江西生态图册｜解译与指数分析</title>
+  </head>
+  <body>
+    <noscript>
+      <strong>江西生态图册需要启用 JavaScript。请启用后刷新页面，继续进入地物分类或光谱指数工作流。</strong>
+    </noscript>
+    <div id="app">
+      <div class="atlas-loader" role="status" aria-live="polite">
+        <div class="loader-contours" aria-hidden="true"></div>
+        <div class="loader-record">
+          <div class="loader-scale" aria-hidden="true"></div>
+          <span class="loader-label">JIANGXI · FIELD ATLAS</span>
+          <strong>江西生态图册</strong>
+          <span>正在载入解译与指数分析工作台…</span>
+        </div>
       </div>
     </div>
-  </div>
-  <!-- built files will be auto injected -->
-</body>
-
+  </body>
 </html>
 
 <style>
+  :root {
+    --jx-loader-bg: #071923;
+    --jx-loader-surface: #0d2630;
+    --jx-loader-border: rgba(156, 231, 189, 0.22);
+    --jx-loader-border-strong: rgba(156, 231, 189, 0.5);
+    --jx-loader-text: #e5f1ed;
+    --jx-loader-muted: #9bb0ab;
+    --jx-loader-primary: #9ce7bd;
+    --jx-loader-sand: #e6c98c;
+  }
+
   html,
   body,
   #app {
-    height: 100%;
+    min-height: 100%;
     margin: 0;
-    padding: 0
+    background: var(--jx-loader-bg);
   }
 
-  .chromeframe {
-    margin: .2em 0;
-    background: #ccc;
-
-    color: #4ea3fb;
-    padding: .2em 0
-  }
-
-  #loader-wrapper {
+  .atlas-loader {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 999999
+    inset: 0;
+    display: grid;
+    overflow: hidden;
+    place-items: center;
+    background: var(--jx-loader-bg);
+    color: var(--jx-loader-text);
+    font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
   }
 
-  #loader {
-    display: block;
+  .loader-contours {
+    position: absolute;
+    inset: 0;
+    opacity: 0.16;
+    background: repeating-radial-gradient(
+      ellipse at 50% 50%,
+      transparent 0 28px,
+      var(--jx-loader-border) 29px 30px,
+      transparent 31px 50px
+    );
+    animation: atlas-breathe 2.4s ease-in-out infinite;
+  }
+
+  .loader-record {
     position: relative;
-    left: 50%;
-    top: 50%;
-    width: 150px;
-    height: 150px;
-    margin: -75px 0 0 -75px;
-    border-radius: 50%;
-    border: 3px solid transparent;
-    border-top-color: #4ea3fb;
-    -webkit-animation: spin 2s linear infinite;
-    -ms-animation: spin 2s linear infinite;
-    -moz-animation: spin 2s linear infinite;
-    -o-animation: spin 2s linear infinite;
-    animation: spin 2s linear infinite;
-    z-index: 1001
+    display: grid;
+    width: min(420px, calc(100vw - 40px));
+    padding: 30px;
+    gap: 7px;
+    border: 1px solid var(--jx-loader-border);
+    border-radius: 16px;
+    background: var(--jx-loader-surface);
   }
 
-  #loader:before {
-    content: "";
-    position: absolute;
-    top: 5px;
-    left: 5px;
-    right: 5px;
-    bottom: 5px;
-    border-radius: 50%;
-    border: 3px solid transparent;
-    border-top-color: #4ea3fb;
-    -webkit-animation: spin 3s linear infinite;
-    -moz-animation: spin 3s linear infinite;
-    -o-animation: spin 3s linear infinite;
-    -ms-animation: spin 3s linear infinite;
-    animation: spin 3s linear infinite
+  .loader-scale {
+    height: 8px;
+    margin-bottom: 14px;
+    border-top: 1px solid var(--jx-loader-border-strong);
+    background: repeating-linear-gradient(
+      90deg,
+      var(--jx-loader-border-strong) 0 1px,
+      transparent 1px 12px
+    );
   }
 
-  #loader:after {
-    content: "";
-    position: absolute;
-    top: 15px;
-    left: 15px;
-    right: 15px;
-    bottom: 15px;
-    border-radius: 50%;
-    border: 3px solid transparent;
-    border-top-color: #4ea3fb;
-    -moz-animation: spin 1.5s linear infinite;
-    -o-animation: spin 1.5s linear infinite;
-    -ms-animation: spin 1.5s linear infinite;
-    -webkit-animation: spin 1.5s linear infinite;
-    animation: spin 1.5s linear infinite
+  .loader-label {
+    color: var(--jx-loader-sand) !important;
+    font-family: Bahnschrift, "DIN Alternate", Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
   }
 
-  @-webkit-keyframes spin {
-    0% {
-      -webkit-transform: rotate(0deg);
-      -ms-transform: rotate(0deg);
-      transform: rotate(0deg)
-    }
+  .loader-record strong {
+    color: var(--jx-loader-text);
+    font-family: "Noto Serif SC", "Source Han Serif SC", STSong, serif;
+    font-size: 30px;
+    font-weight: 600;
+  }
 
-    100% {
-      -webkit-transform: rotate(360deg);
-      -ms-transform: rotate(360deg);
-      transform: rotate(360deg)
+  .loader-record span:last-child {
+    color: var(--jx-loader-muted);
+    font-size: 13px;
+  }
+
+  @keyframes atlas-breathe {
+    50% {
+      opacity: 0.08;
     }
   }
 
-  @keyframes spin {
-    0% {
-      -webkit-transform: rotate(0deg);
-      -ms-transform: rotate(0deg);
-      transform: rotate(0deg)
+  @media (max-width: 480px) {
+    .loader-record {
+      padding: 24px 20px;
     }
 
-    100% {
-      -webkit-transform: rotate(360deg);
-      -ms-transform: rotate(360deg);
-      transform: rotate(360deg)
+    .loader-record strong {
+      font-size: 26px;
     }
   }
 
-  #loader-wrapper .loader-section {
-    position: fixed;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    /* global 94%+ browsers support */
-    background: repeating-linear-gradient(50deg, #fff1eb 0%, #ace0f9 100%);
-
-    /* safari 5.1+,chrome 10+ */
-    background: -webkit-repeating-linear-gradient(50deg, #fff1eb 0%, #ace0f9 100%);
-    z-index: 1000;
-    -webkit-transform: translateX(0);
-    -ms-transform: translateX(0);
-    transform: translateX(0)
-  }
-
-  #loader-wrapper .loader-section.section-left {
-    left: 0
-  }
-
-  #loader-wrapper .loader-section.section-right {
-    right: 0
-  }
-
-  .loaded #loader-wrapper .loader-section.section-left {
-    -webkit-transform: translateX(-100%);
-    -ms-transform: translateX(-100%);
-    transform: translateX(-100%);
-    -webkit-transition: all .7s .3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
-    transition: all .7s .3s cubic-bezier(0.645, 0.045, 0.355, 1.000)
-  }
-
-  .loaded #loader-wrapper .loader-section.section-right {
-    -webkit-transform: translateX(100%);
-    -ms-transform: translateX(100%);
-    transform: translateX(100%);
-    -webkit-transition: all .7s .3s cubic-bezier(0.645, 0.045, 0.355, 1.000);
-    transition: all .7s .3s cubic-bezier(0.645, 0.045, 0.355, 1.000)
-  }
-
-  .loaded #loader {
-    opacity: 0;
-    -webkit-transition: all .3s ease-out;
-    transition: all .3s ease-out
-  }
-
-  .loaded #loader-wrapper {
-    visibility: hidden;
-    -webkit-transform: translateY(-100%);
-    -ms-transform: translateY(-100%);
-    transform: translateY(-100%);
-    -webkit-transition: all .3s 1s ease-out;
-    transition: all .3s 1s ease-out
-  }
-
-  .no-js #loader-wrapper {
-    display: none
-  }
-
-  .no-js h1 {
-    color: #222
-  }
-
-  #loader-wrapper .load_title {
-    font-family: 'Open Sans';
-    color: #4ea3fb;
-    font-size: 36px;
-    width: 100%;
-    text-align: center;
-    z-index: 9999999999999;
-    position: absolute;
-    top: 60%;
-    opacity: 1;
-    line-height: 30px
-  }
-
-  #loader-wrapper .load_title p {
-    height: 50px;
-    padding-top: 10px;
-    font-weight: normal;
-    font-style: italic;
-    font-size: 26px;
-    color: #4ea3fb;
-    opacity: .8
+  @media (prefers-reduced-motion: reduce) {
+    .loader-contours {
+      animation: none;
+    }
   }
 </style>

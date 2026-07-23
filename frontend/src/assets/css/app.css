@@ -4,7 +4,7 @@
 @import './icons-new.css';
 
 :root {
-  --theme--color: var(--primary-color);
+  --theme--color: var(--jx-primary);
 }
 .el-header {
   box-shadow: 0 0 2rem 0 rgba(41, 48, 66, 0.1);

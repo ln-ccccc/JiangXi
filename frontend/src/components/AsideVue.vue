@@ -1,316 +1,347 @@
 <template>
   <el-menu
-    class="el-menu-vertical-demo geoview-sidebar"
+    id="jiangxi-atlas-index"
+    class="geoview-sidebar"
     :collapse="isCollapse"
     :default-active="activeIndex"
+    @select="$emit('navigate')"
   >
-    <div class="platform">
-      <img
-        class="platform-logo"
-        :src="require('@/assets/image/logo/80.png')"
-        alt="logo"
+    <div class="atlas-contours" aria-hidden="true" />
+
+    <div class="atlas-brand">
+      <button
+        class="atlas-mark atlas-title"
+        type="button"
+        aria-label="进入地物分类"
+        title="进入地物分类"
         @click="goSegmentation"
       >
-      <div
-        v-if="!isCollapse"
-        id="platform-title"
-      >
-        <a
-          class="platform-title"
-          @click="goShow"
-        >江西省矿山生态修复智能监测平台</a>
-        <div class="platform-subtitle">解译与指数分析</div>
+        赣
+      </button>
+      <div v-show="!isCollapse" class="atlas-brand-copy">
+        <span class="atlas-province data-label">江西</span>
+        <button class="atlas-name atlas-title" type="button" @click="goShow">
+          生态图册
+        </button>
+        <p class="atlas-subtitle">解译与指数分析</p>
+        <p class="sync-state data-label">
+          <span class="sync-dot" aria-hidden="true" />同步 CPU
+        </p>
       </div>
     </div>
-    <el-divider content-position="center">
-      <span
-        v-show="!isCollapse"
-        class="divider-title"
-      >分析工具</span>
-    </el-divider>
+
+    <div v-show="!isCollapse" class="section-label data-label">工作流索引</div>
 
     <el-menu-item
       index="/segmentation"
+      title="进入地物分类"
       @click="goSegmentation"
     >
-      <i
-        v-show="isCollapse"
-        class="iconfont icon-erfenleibianhuajiance16px"
-      />
-      <h3 v-show="!isCollapse">
-        <i class="iconfont icon-erfenleibianhuajiance16px" />地表覆盖分类
-      </h3>
+      <i class="iconfont icon-erfenleibianhuajiance16px" aria-hidden="true" />
+      <template #title>
+        <div class="tool-copy">
+          <strong>地物分类</strong>
+          <span>识别地表覆盖类型</span>
+        </div>
+      </template>
     </el-menu-item>
 
     <el-menu-item
       index="/spectralindices"
+      title="进入光谱指数"
       @click="goSpectralIndices"
     >
-      <i
-        v-show="isCollapse"
-        class="iconfont icon-jishu"
-      />
-      <h3 v-show="!isCollapse">
-        <i class="iconfont icon-jishu" />光谱指数计算
-      </h3>
+      <i class="iconfont icon-jishu" aria-hidden="true" />
+      <template #title>
+        <div class="tool-copy">
+          <strong>光谱指数</strong>
+          <span>计算并对照指数结果</span>
+        </div>
+      </template>
     </el-menu-item>
 
-    <el-divider content-position="center">
-      <span
-        v-show="!isCollapse"
-        class="divider-title"
-      />
-    </el-divider>
-
-    <div v-if="!isCollapse" class="sidebar-panels">
-      <div class="glass-card">
-        <div class="card-title">快捷入口</div>
-        <div class="quick-row">
-          <div class="quick-item" @click="goSegmentation">地表覆盖分类</div>
-          <div class="quick-item" @click="goSpectralIndices">光谱指数计算</div>
-        </div>
-      </div>
-      <div class="glass-card">
-        <div class="card-title">操作提示</div>
-        <div class="tips">
-          <div class="tip-line">地物分类：上传 tif/tiff + 填写年份（YYYY），结果按矿区FID落盘展示</div>
-          <div class="tip-line">矿区边界：可在 Miner 侧上传/更新 KML，无需手工挂载</div>
-          <div class="tip-line">光谱指数：历史“原图”显示为彩色预览，便于对照</div>
-        </div>
-      </div>
-    </div>
+    <section v-show="!isCollapse" class="sidebar-guidance" aria-labelledby="atlas-guidance-title">
+      <div class="specimen-scale" aria-hidden="true" />
+      <p id="atlas-guidance-title" class="guidance-title data-label">操作提示</p>
+      <p class="guidance-lead">先选择工作流，再上传待解译影像。</p>
+      <ul>
+        <li>分类：准备 tif/tiff 与四位年份。</li>
+        <li>指数：上传影像后选择目标指数。</li>
+      </ul>
+    </section>
   </el-menu>
 </template>
 
 <script>
 import {
   goSegmentation,
-  goSpectralIndices
+  goSpectralIndices,
 } from "@/utils/gosomewhere.js";
 
 export default {
+  name: "JiangxiAtlasAside",
+  emits: ["navigate"],
   props: {
     isCollapse: {
       type: Boolean,
-      default: false
+      default: false,
     },
     activeIndex: {
       type: String,
-      default: "/segmentation"
-    }
+      default: "/segmentation",
+    },
   },
   methods: {
     goSegmentation,
     goSpectralIndices,
     goShow() {
-      this.$message.success("欢迎使用江西省矿山生态修复智能监测平台");
-    }
-  }
+      this.$message.success("江西生态图册已就绪，请选择地物分类或光谱指数");
+    },
+  },
 };
 </script>
 
-<style lang="less">
-.el-menu {
+<style scoped>
+.geoview-sidebar {
   position: relative;
-  height: 100vh;
-  top: 0;
-  bottom: 0;
-  text-align: center;
-  font-family: Microsoft JhengHei UI, sans-serif;
   display: flex;
   flex-direction: column;
-
-  .el-menu-item {
-    padding: 0 0;
-    border-radius: 10px;
-    position: relative;
-    color: var(--text-secondary);
-    z-index: 1;
-    h3 {
-      padding-right: 30px;
-      width: 100%;
-      margin: 0 auto;
-      .iconfont {
-        font-weight: normal;
-        margin-right: 5px;
-      }
-    }
-  }
-  .el-menu-item:hover {
-    background-color: rgba(78, 205, 196, 0.12) !important;
-    color: var(--text-primary) !important;
-  }
-
-  .el-menu-item :hover::after {
-    width: 100%;
-    background: rgba(78, 205, 196, 0.25);
-  }
-  .el-menu-item ::after {
-    position: absolute;
-    content: "";
-    width: 0;
-    height: 100%;
-    top: 0;
-    left: 0;
-    border-radius: 10px;
-    transition: 0.25s;
-    z-index: -1;
-  }
-}
-.el-menu-vertical-demo:not(.el-menu--collapse) {
-  width: 350px;
-  min-height: 400px;
-}
-
-.is-active {
-  background-color: rgba(78, 205, 196, 0.18);
-  border: 1px solid rgba(78, 205, 196, 0.35);
-  h3,
-  i {
-    color: var(--text-primary) !important;
-  }
-}
-
-.platform {
-  min-height: 96px;
-  padding: 14px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--primary-color);
-  overflow: visible;
-
-  .platform-logo {
-    color: var(--primary-color);
-    width: 48px;
-    height: 48px;
-    flex: 0 0 48px;
-    object-fit: contain;
-    filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.35));
-  }
-
-  .platform-title {
-    color: var(--text-primary);
-    font-family: Microsoft JhengHei UI, sans-serif;
-    font-size: 16px;
-    line-height: 20px;
-  }
-
-  .platform-subtitle {
-    margin-top: 6px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-}
-
-.divider-title {
-  display: block;
-  line-height: 24.4px;
+  width: 280px;
+  height: 100vh;
+  padding: 0 12px 18px;
   overflow: hidden;
-  width: 70px;
-  color: var(--text-muted);
+  background: var(--jx-bg-elevated) !important;
+  font-family: var(--jx-font-body);
+  transition: width var(--transition-normal);
 }
 
-#platform-title {
-  position: relative;
-  font-size: 18px;
-  font-weight: 1000;
-  cursor: pointer;
+.geoview-sidebar.el-menu--collapse {
+  width: 76px;
+  padding-right: 6px;
+  padding-left: 6px;
 }
 
-#platform-title::after {
-  content: "";
-  width: 0;
-  height: 3px;
-  background: rgba(78, 205, 196, 0.85);
+.atlas-contours {
   position: absolute;
-  top: 100%;
-  left: 50%;
-  right: 50%;
-  transition: all 0.5s;
+  inset: 0 0 auto;
+  height: 220px;
+  pointer-events: none;
+  opacity: 0.16;
+  background:
+    repeating-radial-gradient(
+      ellipse at 10% 0%,
+      transparent 0 16px,
+      var(--jx-border) 17px 18px,
+      transparent 19px 31px
+    );
+  mask-image: linear-gradient(to bottom, black, transparent);
 }
 
-#platform-title:hover:after {
-  left: 7%;
-  right: 7%;
-  width: 85%;
+.atlas-brand {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 148px;
+  padding: 24px 6px 18px;
+  align-items: flex-start;
+  gap: 13px;
+  border-bottom: 1px solid var(--jx-border);
 }
 
-.el-menu--collapse .platform {
-  padding-right: 0;
-  padding-left: 0;
-
-  .platform-logo {
-    width: 38px;
-    height: 38px;
-    flex-basis: 38px;
-  }
-}
-
-.el-menu .el-divider__text {
-  background-color: transparent;
-}
-
-.geoview-sidebar {
-  padding: 6px 10px 14px 10px;
-}
-
-.sidebar-panels {
-  margin-top: auto;
-  padding: 10px 8px 14px 8px;
+.atlas-mark {
   display: grid;
-  gap: 12px;
-}
-
-.glass-card {
-  text-align: left;
-  padding: 12px 12px;
-  border-radius: 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  backdrop-filter: blur(14px);
-  box-shadow: var(--shadow-md);
-}
-
-.card-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: 0.4px;
-  margin-bottom: 10px;
-}
-
-.quick-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.quick-item {
-  padding: 10px 10px;
-  border-radius: 10px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  font-size: 12px;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 52px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--jx-border-strong);
+  border-radius: 3px 3px var(--jx-radius) 3px;
+  background: var(--jx-surface);
+  color: var(--jx-sand);
+  font-size: 26px;
   cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
-.quick-item:hover {
-  transform: translateY(-1px);
-  border-color: var(--border-dark);
+.atlas-brand-copy {
+  min-width: 0;
+  text-align: left;
 }
 
-.tips {
-  display: grid;
-  gap: 8px;
+.atlas-province {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--jx-primary);
+  font-size: 10px;
 }
 
-.tip-line {
+.atlas-name {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--jx-text);
+  font-size: 24px;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.atlas-subtitle {
+  margin: 5px 0 9px;
+  color: var(--jx-text-muted);
   font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+}
+
+.sync-state {
+  display: flex;
+  margin: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--jx-text-muted);
+  font-size: 9px;
+}
+
+.sync-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--jx-success);
+}
+
+.section-label {
+  position: relative;
+  z-index: 1;
+  margin: 22px 12px 8px;
+  color: var(--jx-text-muted);
+  font-size: 9px;
+  text-align: left;
+}
+
+.geoview-sidebar :deep(.el-menu-item) {
+  position: relative;
+  z-index: 1;
+  height: 66px;
+  margin: 6px 0;
+  padding: 0 14px !important;
+  line-height: normal;
+}
+
+.geoview-sidebar :deep(.el-menu-item::before) {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: -1px;
+  width: 2px;
+  background: var(--jx-sand);
+  content: "";
+  opacity: 0;
+}
+
+.geoview-sidebar :deep(.el-menu-item.is-active::before) {
+  opacity: 1;
+}
+
+.geoview-sidebar :deep(.el-menu-item .iconfont) {
+  width: 28px;
+  margin-right: 8px;
+  color: var(--jx-text-muted);
+  font-size: 19px;
+  text-align: center;
+}
+
+.geoview-sidebar :deep(.el-menu-item.is-active .iconfont) {
+  color: var(--jx-primary);
+}
+
+.tool-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  text-align: left;
+}
+
+.tool-copy strong {
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tool-copy span {
+  color: var(--jx-text-muted);
+  font-size: 11px;
+}
+
+.sidebar-guidance {
+  position: relative;
+  z-index: 1;
+  margin: auto 6px 0;
+  padding: 18px 2px 0;
+  border-top: 1px solid var(--jx-border);
+  color: var(--jx-text-muted);
+  text-align: left;
+}
+
+.specimen-scale {
+  width: 100%;
+  height: 8px;
+  margin-bottom: 14px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--jx-border-strong) 0 1px,
+    transparent 1px 10px
+  );
+}
+
+.guidance-title {
+  margin: 0 0 8px;
+  color: var(--jx-sand);
+  font-size: 9px;
+}
+
+.guidance-lead {
+  margin: 0 0 8px;
+  color: var(--jx-text);
+  font-size: 12px;
+}
+
+.sidebar-guidance ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 5px;
+}
+
+.sidebar-guidance li {
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.el-menu--collapse .atlas-brand {
+  min-height: 94px;
+  padding: 20px 8px;
+  justify-content: center;
+}
+
+.el-menu--collapse .atlas-mark {
+  flex-basis: 42px;
+  width: 42px;
+  height: 48px;
+  font-size: 23px;
+}
+
+.el-menu--collapse :deep(.el-menu-item) {
+  justify-content: center;
+  padding: 0 !important;
+}
+
+.el-menu--collapse :deep(.el-menu-item .iconfont) {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .geoview-sidebar {
+    width: 280px;
+    height: 100dvh;
+  }
 }
 </style>

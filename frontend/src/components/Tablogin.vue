@@ -1,26 +1,37 @@
 <template>
   <div class="header-content">
-    <div class="header-left">
-      <span class="platform-info">江西省矿山生态修复智能监测平台</span>
+    <div class="sample-record" aria-label="江西样区档案">
+      <span class="sample-record__label data-label">江西样区档案</span>
+      <strong class="sample-record__title atlas-title">生态图册</strong>
+      <span class="sample-record__id data-label">JX · INTERPRET</span>
     </div>
+
     <div class="header-right">
-      <span v-if="authenticated" class="user-pill">{{ username || "admin" }}</span>
+      <span v-if="authenticated" class="user-pill">
+        <span class="user-caption data-label">用户</span>
+        <span>{{ username || "admin" }}</span>
+      </span>
       <el-button
         v-if="authenticated"
         plain
         class="logout-btn"
+        title="退出登录"
+        aria-label="退出登录"
         @click="logout"
       >
-        退出登录
+        退出
       </el-button>
       <el-button
         v-if="authenticated"
         type="primary"
         class="miner-btn"
+        :disabled="!minerUrl"
+        :title="minerButtonLabel"
+        :aria-label="minerButtonLabel"
         @click="goToMiner"
       >
-        <i class="icon-map" style="margin-right: 4px;" />
-        返回矿山地图
+        <i class="icon-map" aria-hidden="true" />
+        <span>{{ minerButtonLabel }}</span>
       </el-button>
     </div>
   </div>
@@ -31,16 +42,19 @@ import { legacyLogout, legacySession } from "@/api/auth";
 import { buildMinerMapUrl } from "@/utils/platformNavigation";
 
 export default {
-  name: 'HeaderComponent',
+  name: "HeaderComponent",
   data() {
     return {
       authenticated: false,
-      username: '',
+      username: "",
     };
   },
   computed: {
     minerUrl() {
       return buildMinerMapUrl(window.location, process.env.VUE_APP_MINER_URL);
+    },
+    minerButtonLabel() {
+      return this.minerUrl ? "返回矿山地图" : "矿山地图地址未配置";
     },
   },
   async mounted() {
@@ -52,108 +66,150 @@ export default {
         const response = await legacySession();
         const auth = response?.data?.data || {};
         this.authenticated = Boolean(auth.authenticated);
-        this.username = auth.username || '';
+        this.username = auth.username || "";
       } catch (_) {
         this.authenticated = false;
-        this.username = '';
+        this.username = "";
       }
     },
     async logout() {
       try {
         await legacyLogout();
       } finally {
-        window.location.assign('/#/login');
+        window.location.assign("/#/login");
       }
     },
     goToMiner() {
+      if (!this.minerUrl) return;
       window.location.assign(this.minerUrl);
     },
   },
 };
 </script>
+
 <style scoped>
 .header-content {
   display: flex;
-  justify-content: space-between;
+  min-width: 0;
+  flex: 1;
+  height: 68px;
   align-items: center;
-  width: 100%;
-  padding: 0;
-  gap: 12px;
-  font-family: Microsoft JhengHei UI, sans-serif;
-  height: 60px;
+  justify-content: space-between;
+  gap: 18px;
+  font-family: var(--jx-font-body);
   line-height: normal;
 }
 
-.header-left {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
+.sample-record {
+  position: relative;
+  display: grid;
+  min-width: 230px;
+  padding: 6px 18px 6px 16px;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 1px 10px;
+  border-left: 2px solid var(--jx-sand);
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 9px,
+    var(--jx-border) 9px 10px
+  );
+  background-position: left bottom;
+  background-repeat: repeat-x;
+  background-size: auto 4px;
 }
 
-.platform-info {
-  min-width: 0;
-  color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  line-height: 1.2;
+.sample-record__label {
+  color: var(--jx-primary);
+  font-size: 9px;
+  grid-column: 1 / -1;
+}
+
+.sample-record__title {
+  color: var(--jx-text);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.sample-record__id {
+  color: var(--jx-text-muted);
+  font-size: 9px;
   white-space: nowrap;
 }
 
 .header-right {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  min-width: 0;
   flex-shrink: 0;
+  align-items: center;
+  gap: 9px;
 }
 
 .user-pill {
   display: inline-flex;
-  align-items: center;
-  height: 32px;
+  min-width: 0;
+  height: 36px;
   padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(22, 53, 47, 0.08);
-  color: #24564c;
-  font-size: 13px;
-  font-weight: 600;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--jx-border);
+  border-radius: var(--jx-radius);
+  background: var(--jx-surface-muted);
+  color: var(--jx-text);
+  font-size: 12px;
 }
 
-.logout-btn {
-  border-radius: 10px;
+.user-caption {
+  color: var(--jx-text-muted);
+  font-size: 8px;
+}
+
+.logout-btn,
+.miner-btn {
+  height: 36px;
 }
 
 .miner-btn {
-  background: linear-gradient(135deg, rgba(78, 205, 196, 0.18), rgba(88, 166, 255, 0.18)) !important;
-  border: 1px solid rgba(78, 205, 196, 0.35) !important;
-  color: var(--text-primary) !important;
-  font-weight: 600;
-  border-radius: 10px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  backdrop-filter: blur(10px);
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-.miner-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  border-color: rgba(78, 205, 196, 0.6) !important;
+.miner-btn .icon-map {
+  margin-right: 5px;
+}
+
+@media (max-width: 1100px) {
+  .sample-record {
+    min-width: 190px;
+  }
+
+  .sample-record__id,
+  .user-caption {
+    display: none;
+  }
+
+  .sample-record__title {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 768px) {
   .header-content {
-    padding: 0 10px;
     gap: 8px;
   }
-  
-  .platform-info {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 14px;
+
+  .sample-record {
+    min-width: 108px;
+    padding-right: 8px;
+    padding-left: 10px;
+  }
+
+  .sample-record__label {
+    font-size: 8px;
+  }
+
+  .sample-record__title {
+    font-size: 15px;
   }
 
   .user-pill {
@@ -162,9 +218,42 @@ export default {
 
   .logout-btn,
   .miner-btn {
-    padding-right: 8px;
-    padding-left: 8px;
-    font-size: 12px;
+    padding-right: 9px;
+    padding-left: 9px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sample-record {
+    min-width: 56px;
+    padding-left: 7px;
+  }
+
+  .sample-record__label {
+    white-space: nowrap;
+  }
+
+  .sample-record__title {
+    display: none;
+  }
+
+  .logout-btn {
+    min-width: 44px;
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+
+  .miner-btn {
+    max-width: 146px;
+    padding-right: 7px;
+    padding-left: 7px;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  .miner-btn .icon-map {
+    display: none;
   }
 }
 </style>
