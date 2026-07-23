@@ -8,6 +8,7 @@ frontend/.uuid
 node_modules/
 dist/
 coverage/
+.superpowers/
 
 __pycache__/
 *.py[cod]
