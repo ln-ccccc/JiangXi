@@ -67,10 +67,10 @@ test("没有 tif 或 tiff 时两个执行按钮都明确禁用", () => {
 test("页面暴露等待、失败和部分成功的可感知状态", () => {
   for (const source of workflowPages) {
     assert.match(source, /aria-live="polite"/);
-    assert.match(source, /data-state="idle"/);
-    assert.match(source, /data-state="error"/);
-    assert.match(source, /data-state="partial"/);
   }
+  assert.match(spectral, /data-state="idle"/);
+  assert.match(spectral, /data-state="error"/);
+  assert.match(spectral, /data-state="partial"/);
   assert.match(spectral, /计算失败/);
   assert.match(spectral, /同步部分失败/);
   assert.match(uploadUtility, /Flash 部分成功/);
@@ -79,6 +79,49 @@ test("页面暴露等待、失败和部分成功的可感知状态", () => {
     spectral,
     /v-if="runState === 'idle' && !fileList\.length"/,
     "清空已完成队列后仍应保留成功或部分成功状态",
+  );
+});
+
+test("地物分类渲染真实运行状态而不是静态状态说明", () => {
+  assert.match(segmentation, /analysisRunState:\s*"idle"/);
+  assert.match(segmentation, /analysisRunMessage:\s*"请先选择 tif \/ tiff 影像。"/);
+  assert.match(segmentation, /<p\s+:data-state="analysisRunState">\s*\{\{ analysisRunMessage \}\}\s*<\/p>/s);
+  assert.doesNotMatch(segmentation, /<span data-state="(?:partial|error)">/);
+  assert.match(segmentation, /this\.analysisRunState\s*=\s*"ready"/);
+  assert.match(segmentation, /this\.analysisRunState\s*=\s*"error"/);
+  assert.match(segmentation, /this\.analysisRunState\s*=\s*"idle"/);
+});
+
+test("地物分类工具链按真实 Promise 分支更新 running、partial、success 与 error", () => {
+  const runningIndex = uploadUtility.indexOf("setAnalysisRunState(this, 'running'");
+  const createSrcIndex = uploadUtility.indexOf("return this.createSrc(formData).then");
+  assert.ok(runningIndex >= 0, "发起上传前必须进入 running");
+  assert.ok(createSrcIndex > runningIndex, "running 必须早于 createSrc 请求");
+  assert.match(uploadUtility, /return Promise\.all\(/);
+  assert.match(
+    uploadUtility,
+    /if \(failedCount > 0\) \{[\s\S]*setAnalysisRunState\(this, 'partial'/,
+  );
+  assert.match(
+    uploadUtility,
+    /\} else \{[\s\S]*setAnalysisRunState\(this, 'success'/,
+  );
+  assert.match(
+    uploadUtility,
+    /rawTiffPaths\.length === 0[\s\S]*setAnalysisRunState\(this, 'error'/,
+  );
+  assert.match(
+    uploadUtility,
+    /Flash 推理失败，未生成任何结果[\s\S]*setAnalysisRunState\(this, 'error'/,
+  );
+  assert.match(
+    uploadUtility,
+    /\.catch\(\(err\) => \{[\s\S]*setAnalysisRunState\(this, 'error'/,
+  );
+  assert.match(uploadUtility, /\.finally\(\(\) => \{/);
+  assert.match(
+    uploadUtility,
+    /if \(this\.analysisRunState === 'running'\)[\s\S]*setAnalysisRunState\(/,
   );
 });
 

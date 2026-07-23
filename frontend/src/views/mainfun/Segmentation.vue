@@ -249,16 +249,9 @@
             </el-button>
           </div>
           <div class="run-status" aria-live="polite">
-            <p v-if="!fileList.length" data-state="idle">
-              请先选择 tif / tiff 影像，执行按钮将在数据就绪后启用。
+            <p :data-state="analysisRunState">
+              {{ analysisRunMessage }}
             </p>
-            <p v-else data-state="ready">
-              已就绪 {{ fileList.length }} 个文件；请确认四位年份后开始同步分析。
-            </p>
-            <div class="run-status__guide">
-              <span data-state="partial">部分成功：保留已生成成果，并提示失败切片数量。</span>
-              <span data-state="error">失败：显示失败原因，请检查影像格式、年份和矿区边界。</span>
-            </div>
           </div>
           <el-divider v-if="!uploadSrc.prehandle" />
           <div v-if="uploadSrc.prehandle">
@@ -476,6 +469,8 @@ export default {
       isNotCut: true,
       cutVisible: false,
       fileList: [],
+      analysisRunState: "idle",
+      analysisRunMessage: "请先选择 tif / tiff 影像。",
       funtype: "地物分类",
       scrollTop: "",
       fit: "fill",
@@ -524,6 +519,8 @@ export default {
     },
     clearQueue() {
       this.fileList = [];
+      this.analysisRunState = "idle";
+      this.analysisRunMessage = "请先选择 tif / tiff 影像。";
       if (this.$refs.folderInput) this.$refs.folderInput.value = "";
       if (this.$refs.fileInput) this.$refs.fileInput.value = "";
       this.$message.success("清除成功");
@@ -531,6 +528,8 @@ export default {
     notvisible() {
       this.cutVisible = false;
       this.fileList = [];
+      this.analysisRunState = "idle";
+      this.analysisRunMessage = "请先选择 tif / tiff 影像。";
       if (this.$refs.folderInput) this.$refs.folderInput.value = "";
       if (this.$refs.fileInput) this.$refs.fileInput.value = "";
     },
@@ -630,6 +629,8 @@ export default {
         this.fileList = [];
         this.cutVisible = false;
         this.canUpload = false;
+        this.analysisRunState = "error";
+        this.analysisRunMessage = "没有可用的 tif / tiff 影像，请重新选择。";
         this.$message.error("只允许上传 tif / tiff 格式,请重新上传");
         return;
       }
@@ -637,6 +638,8 @@ export default {
         this.disableCutForBatchUpload();
       }
       this.fileList = this.createUploadItems(validFiles);
+      this.analysisRunState = "ready";
+      this.analysisRunMessage = `已就绪 ${validFiles.length} 个文件；请确认四位年份后开始同步分析。`;
       this.setPreviewFile(validFiles[validFiles.length - 1]);
     },
     handleUploadChange(file, uploadFiles) {
@@ -923,8 +926,13 @@ export default {
   margin: 0;
 }
 
-.run-status [data-state="ready"] {
+.run-status [data-state="ready"],
+.run-status [data-state="success"] {
   color: var(--jx-success);
+}
+
+.run-status [data-state="running"] {
+  color: var(--jx-info);
 }
 
 .run-status__guide {

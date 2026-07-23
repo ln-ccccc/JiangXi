@@ -37,10 +37,17 @@ function goCompress(type, num) {
   }).catch(() => { });
 }
 
+function setAnalysisRunState(context, state, message) {
+  if (!context || !("analysisRunState" in context)) return;
+  context.analysisRunState = state;
+  context.analysisRunMessage = message;
+}
+
 function upload(type, funUrl) {
   if (this.fileList.length === 0) {
+    setAnalysisRunState(this, 'error', '请先选择 tif / tiff 影像。');
     this.$message.error("请上传图片！");
-    return;
+    return Promise.resolve({ status: 'error', reason: 'missing_files' });
   }
 
   const formData = new FormData();
@@ -48,8 +55,9 @@ function upload(type, funUrl) {
   const roiYear = isSegmentation ? String(this.roiYear || '').trim() : '';
   if (isSegmentation) {
     if (!/^\d{4}$/.test(roiYear)) {
+      setAnalysisRunState(this, 'error', '请先填写四位年份（YYYY），用于 KML ROI 结果命名。');
       this.$message.error("请先填写4位年份（YYYY），用于KML ROI结果命名");
-      return;
+      return Promise.resolve({ status: 'error', reason: 'invalid_year' });
     }
   }
 
@@ -69,7 +77,9 @@ function upload(type, funUrl) {
 
   if (isSegmentation) formData.append("keepRawTiff", 'true');
 
-  this.createSrc(formData).then((res) => {
+  setAnalysisRunState(this, 'running', '正在上传影像并执行同步 CPU 地物分类，请保持页面开启。');
+
+  return this.createSrc(formData).then((res) => {
     const uploadItems = res.data.data || [];
     this.uploadSrc.list = uploadItems.map((item) => item.src);
 
@@ -81,19 +91,20 @@ function upload(type, funUrl) {
 
     if (isSegmentation) {
       if (rawTiffPaths.length === 0) {
+        setAnalysisRunState(this, 'error', '地物分类仅支持 tif / tiff 影像，请重新选择。');
         this.$message.error("地物分类仅支持 tif/tiff 影像，请重新上传");
-        return;
+        return { status: 'error', reason: 'missing_raw_tiff' };
       }
-      Promise.all(
-        rawTiffPaths.map((tifPath) =>
-          kmlRoiInfer({
-            old_tif_path: tifPath,
-            new_tif_path: tifPath,
-            year: roiYear,
-            device: 'cpu'
-          })
-        )
-      ).then((results) => {
+      const inferenceRequests = rawTiffPaths.map((tifPath) =>
+        kmlRoiInfer({
+          old_tif_path: tifPath,
+          new_tif_path: tifPath,
+          year: roiYear,
+          device: 'cpu'
+        })
+      );
+      this.$refs.upload?.clearFiles?.();
+      return Promise.all(inferenceRequests).then((results) => {
         const flashCards = [];
         let seq = 1;
         let failedCount = 0;
@@ -131,41 +142,66 @@ function upload(type, funUrl) {
         if (flashCards.length > 0) {
           this.imgArr = flashCards;
           if (failedCount > 0) {
-            this.$message.warning(`Flash 部分成功：${flashCards.length} 条结果，${failedCount} 个切片失败`);
+            const partialMessage = `Flash 部分成功：${flashCards.length} 条结果，${failedCount} 个切片失败`;
+            setAnalysisRunState(this, 'partial', partialMessage);
+            this.$message.warning(partialMessage);
           } else {
+            setAnalysisRunState(this, 'success', 'Flash 推理完成，结果已加入历史记录。');
             this.$message.success("Flash 推理完成");
           }
         } else {
           const detail = errorMessages[0] ? `：${errorMessages[0].slice(0, 120)}` : "";
-          this.$message.error(`Flash 推理失败，未生成任何结果${detail}`);
+          const failureMessage = `Flash 推理失败，未生成任何结果${detail}`;
+          this.$message.error(failureMessage);
+          setAnalysisRunState(this, 'error', failureMessage);
         }
         this.fileList = [];
         this.getMore();
+        return {
+          status: flashCards.length === 0 ? 'error' : (failedCount > 0 ? 'partial' : 'success'),
+          resultCount: flashCards.length,
+          failedCount
+        };
       }).catch((err) => {
         const msg = err?.response?.data?.msg || "Flash 推理失败";
+        setAnalysisRunState(this, 'error', msg);
         this.$message.error(msg);
+        return { status: 'error', error: err };
       });
     } else {
-      this.imgUpload(this.uploadSrc, funUrl).then(() => {
+      const inferencePromise = this.imgUpload(this.uploadSrc, funUrl).then(() => {
         this.fileList = [];
         this.$message.success("Pro 推理完成");
         this.getMore();
       }).catch(() => { });
-    }
 
-    if (!isSegmentation && this.uploadSrc.list.length >= 10 && type !== '场景分类') {
-      this.$confirm("上传图片过多，是否压缩?", "提示", {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      })
-        .then(() => {
-          showFullScreenLoading('#load', '压缩中')
-          this.goCompress(type, this.uploadSrc.list.length)
-        }).catch(() => { })
+      if (this.uploadSrc.list.length >= 10 && type !== '场景分类') {
+        this.$confirm("上传图片过多，是否压缩?", "提示", {
+          confirmButtonText: "确定",
+          cancelButtonText: "取消",
+          type: "warning",
+        })
+          .then(() => {
+            showFullScreenLoading('#load', '压缩中')
+            this.goCompress(type, this.uploadSrc.list.length)
+          }).catch(() => { })
+      }
+      this.$refs.upload?.clearFiles?.();
+      return inferencePromise;
     }
-    this.$refs.upload?.clearFiles?.();
-  }).catch(() => { })
+  }).catch((err) => {
+    const msg = err?.response?.data?.msg || "影像上传失败";
+    setAnalysisRunState(this, 'error', msg);
+    return { status: 'error', error: err };
+  }).finally(() => {
+    if (this.analysisRunState === 'running') {
+      const fallbackState = this.fileList.length > 0 ? 'ready' : 'idle';
+      const fallbackMessage = this.fileList.length > 0
+        ? `已就绪 ${this.fileList.length} 个文件；可重新执行同步分析。`
+        : '请先选择 tif / tiff 影像。';
+      setAnalysisRunState(this, fallbackState, fallbackMessage);
+    }
+  })
 }
 
 export { getUploadImg, goCompress, upload }
