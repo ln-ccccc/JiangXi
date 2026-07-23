@@ -9,6 +9,7 @@ test('Jiangxi Miner exposes a fixed CPU inference contract without GPU probing',
   const dashboard = read('../src/components/MapDashboard.vue');
   const mineData = read('../src/composables/useMineData.js');
   const geoviewRoute = read('../routes/geoview.js');
+  const server = read('../server.js');
 
   assert.match(modal, /固定设备：CPU/);
   assert.doesNotMatch(modal, /gpu_capability|CUDA:0|自动模式|gpuCapability/);
@@ -16,4 +17,5 @@ test('Jiangxi Miner exposes a fixed CPU inference contract without GPU probing',
   assert.doesNotMatch(dashboard, /formData\.device\s*\|\|\s*'auto'/);
   assert.match(mineData, /device\s*=\s*'cpu'/);
   assert.doesNotMatch(geoviewRoute, /gpu_capability|fetchGpuCapability/);
+  assert.doesNotMatch(server, /GPU|CUDA|cuda:0/);
 });

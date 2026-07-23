@@ -67,8 +67,8 @@ def main() -> int:
         new_year=args.new_year or None,
     )
     worker_runtime = summary.pop("inference_runtime", {})
-    if isinstance(worker_runtime, dict):
-        runtime.update({key: value for key, value in worker_runtime.items() if value is not None})
+    if isinstance(worker_runtime, dict) and worker_runtime.get("peak_memory_bytes") is not None:
+        runtime["peak_memory_bytes"] = worker_runtime["peak_memory_bytes"]
     runtime["duration_seconds"] = round(time.monotonic() - started_at, 3)
     summary["runtime"] = runtime
     print(json.dumps(summary, ensure_ascii=False))

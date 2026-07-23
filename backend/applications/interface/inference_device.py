@@ -20,11 +20,4 @@ def resolve_inference_device(requested_device: str = "cpu") -> Dict[str, object]
     return {
         "requested_device": requested,
         "effective_device": "cpu",
-        "fallback_reason": None,
-        "cuda_available": False,
-        "device_name": None,
-        "device_count": 0,
-        "total_memory_bytes": None,
-        "torch_version": None,
-        "cuda_version": None,
     }

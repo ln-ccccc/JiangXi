@@ -30,7 +30,7 @@ def test_inference():
             data_path=data_path,
             out_dir=out_dir,
             names=files,
-            device="cuda:0", # Assuming cuda is available as per previous context
+            device="cpu",
             timeout=300
         )
         print("Inference completed successfully!")

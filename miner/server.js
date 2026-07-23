@@ -803,7 +803,7 @@ app.get('/api/mines/ndvi', (req, res) => {
 app.use('/api/inference', authGuard);
 app.post('/api/inference/kml-roi', async (req, res) => {
   if (kmlInferenceActive) {
-    return res.status(409).json({ error: 'GPU 正忙，请等待当前任务完成' });
+    return res.status(409).json({ error: '同步分析任务正忙，请等待当前任务完成' });
   }
   kmlInferenceActive = true;
   try {

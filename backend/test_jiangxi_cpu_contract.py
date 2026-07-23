@@ -10,10 +10,20 @@ class TestJiangxiCpuContract(unittest.TestCase):
         source = (ROOT / "applications" / "api" / "analysis.py").read_text(
             encoding="utf-8"
         )
+        policy_source = (
+            ROOT / "applications" / "interface" / "inference_device.py"
+        ).read_text(encoding="utf-8")
 
         self.assertNotIn("gpu_capability", source)
         self.assertIn("device='cpu'", source)
         self.assertNotIn("req_json.get('device', 'auto')", source)
+        for capability_field in (
+            "cuda_available",
+            "device_name",
+            "device_count",
+            "cuda_version",
+        ):
+            self.assertNotIn(capability_field, policy_source)
 
     def test_all_jiangxi_inference_entry_points_default_to_cpu(self):
         paths = [
@@ -22,11 +32,13 @@ class TestJiangxiCpuContract(unittest.TestCase):
             ROOT / "applications" / "interface" / "mmseg_inference_caller.py",
             ROOT / "applications" / "kml_roi" / "service.py",
             ROOT / "kml_roi_infer.py",
+            ROOT / "verify_mmseg.py",
         ]
         source = "\n".join(path.read_text(encoding="utf-8") for path in paths)
 
         self.assertNotIn('device="auto"', source)
         self.assertNotIn('default="auto"', source)
+        self.assertNotIn('device="cuda:0"', source)
 
 
 if __name__ == "__main__":
