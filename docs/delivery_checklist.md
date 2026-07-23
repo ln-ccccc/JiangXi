@@ -4,7 +4,7 @@
 
 - [ ] 当前根目录为 `D:\项目\JiangXi\JiangXi-Platform`。
 - [ ] 从 `.env.example` 创建未跟踪的 `.env`，只在 `.env` 中填写真实密码和密钥。
-- [ ] `APP_IMAGE=jiangxi-runtime:current`，默认启动未叠加 GPU 覆盖文件。
+- [ ] `APP_IMAGE=jiangxi-runtime:current`，工程中不存在 GPU 覆盖部署入口。
 - [ ] `SESSION_COOKIE_NAME=jiangxi_session`。
 - [ ] `VITE_GEOVIEW_URL`、`VUE_APP_MINER_URL`、`VUE_APP_BACKEND_URL` 分别指向 `4174`、`4173`、`5178` 的江西地址。
 - [ ] 缺少入口配置时显示错误并禁用入口，没有其他项目或旧地址回退。
@@ -47,4 +47,4 @@
 - [ ] 未执行项明确标为“未验证”，并写明原因、风险和建议后续操作。
 - [ ] 提交只包含本次获准范围内的文件，不包含 `.env` 或运行产物。
 
-已知边界：默认解译为同步 CPU；`docker-compose.gpu.yml` 只是可选技术覆盖文件，不代表默认 GPU、自动设备选择或异常回退能力。
+已知边界：解译固定为同步 CPU；地物分类必须具备江西专用且 CPU 兼容的六类模型配置与权重，否则该流程不能验收通过。

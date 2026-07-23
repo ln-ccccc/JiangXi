@@ -19,10 +19,13 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from typing import List, Optional
 
-# 添加 backend 路径到 sys.path，确保可以导入 backend 下的模块
-sys.path.append(os.path.join(os.path.dirname(__file__), "../../../"))
+# 添加 backend 路径到 sys.path，确保子进程可以导入 applications 包
+backend_root = Path(__file__).resolve().parents[2]
+if str(backend_root) not in sys.path:
+    sys.path.insert(0, str(backend_root))
 # 导入自定义模型以注册到 metrics/registry
 # NOTE:
 # Do not import backend.model.custom_models here.

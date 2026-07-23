@@ -75,9 +75,9 @@ docker compose --env-file .env -f docker-compose.prod.yml ps
 
 不要把文件直接复制进运行容器作为正式交付；这种改动会在容器重建后丢失，也无法审计。
 
-## 6. 默认 CPU 与可选 GPU
+## 6. 固定 CPU
 
-默认只使用 `docker-compose.prod.yml`，解译为同步 CPU。`docker-compose.gpu.yml` 仅供显式技术验证，不能据此宣称江西具备自动设备选择或 GPU 异常回退能力。
+只使用 `docker-compose.prod.yml`，解译为同步 CPU。江西工程不包含 GPU 覆盖、自动设备选择或异常回退能力。
 
 ## 7. 安全边界
 

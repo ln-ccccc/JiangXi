@@ -134,6 +134,28 @@ class TestNewFeatures(unittest.TestCase):
                 self.assertEqual(accepted.status_code, 200)
                 self.assertEqual(run_inference.call_args.kwargs["old_tif_path"], str(input_root / "old.tif"))
                 self.assertEqual(run_inference.call_args.kwargs["kml_path"], str(kml_root / "roi.kml"))
+
+                accepted_upload_path = self.client.post(
+                    "/api/analysis/kml_roi_inference",
+                    json={
+                        "old_tif_path": "static/upload/old.tif",
+                        "kml_path": "roi.kml",
+                    },
+                )
+                self.assertEqual(accepted_upload_path.status_code, 200)
+                self.assertEqual(
+                    run_inference.call_args.kwargs["old_tif_path"],
+                    str(input_root / "old.tif"),
+                )
+
+                rejected_other_prefix = self.client.post(
+                    "/api/analysis/kml_roi_inference",
+                    json={
+                        "old_tif_path": "other/old.tif",
+                        "kml_path": "roi.kml",
+                    },
+                )
+                self.assertEqual(rejected_other_prefix.status_code, 400)
         finally:
             shutil.rmtree(input_root, ignore_errors=True)
             shutil.rmtree(kml_root, ignore_errors=True)

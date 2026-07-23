@@ -13,12 +13,9 @@ MMSEG_CONDA_ENV = "MMSeg310"
 _curr_dir = os.path.dirname(os.path.abspath(__file__))
 MMSEG_SCRIPT = os.path.join(_curr_dir, "mmseg_segmentation.py")
 
-CUGRS_CONFIG = {
-    "model_id": "cc-ln/CUGRS",
-    "config_path": os.path.join(_curr_dir, "..", "..", "model", "mmseg_config", "dinov3_swinV1.py"),
-    "checkpoint_path": os.path.join(_curr_dir, "..", "..", "model", "mmseg_config", "model.pth"),
-}
-MMSEG_SOURCE_ROOT = os.path.join(_curr_dir, "..", "..", "model", "mmseg_config", "dinov3_swinV1")
+JIANGXI_MODEL_CONFIG_ENV = "JIANGXI_MMSEG_CONFIG_PATH"
+JIANGXI_MODEL_CHECKPOINT_ENV = "JIANGXI_MMSEG_CHECKPOINT_PATH"
+JIANGXI_MODEL_SOURCE_ENV = "JIANGXI_MMSEG_SOURCE_ROOT"
 
 
 def _patch_mmdet_mmcv_guard() -> None:
@@ -42,8 +39,18 @@ def _patch_mmdet_mmcv_guard() -> None:
 
 def get_model_paths(model_id: str) -> Tuple[str, str]:
     if model_id == "cc-ln/CUGRS":
-        config = os.path.abspath(CUGRS_CONFIG["config_path"])
-        checkpoint = os.path.abspath(CUGRS_CONFIG["checkpoint_path"])
+        config = os.environ.get(JIANGXI_MODEL_CONFIG_ENV, "").strip()
+        checkpoint = os.environ.get(JIANGXI_MODEL_CHECKPOINT_ENV, "").strip()
+        if not config or not checkpoint:
+            raise RuntimeError(
+                "江西地物分类模型未配置：请同时设置 "
+                f"{JIANGXI_MODEL_CONFIG_ENV} 和 {JIANGXI_MODEL_CHECKPOINT_ENV}"
+            )
+        config = os.path.abspath(config)
+        checkpoint = os.path.abspath(checkpoint)
+        missing = [path for path in (config, checkpoint) if not os.path.isfile(path)]
+        if missing:
+            raise RuntimeError("江西地物分类模型文件不存在：" + ", ".join(missing))
         return config, checkpoint
     raise ValueError(f"Unknown MMSeg model: {model_id}")
 
@@ -61,11 +68,32 @@ def _resolve_mmseg_python() -> List[str]:
 
 def _build_mmseg_env() -> dict:
     env = os.environ.copy()
-    mmseg_pkg_dir = os.path.join(MMSEG_SOURCE_ROOT, "mmseg")
+    mmseg_source_root = env.get(JIANGXI_MODEL_SOURCE_ENV, "").strip()
+    mmseg_pkg_dir = os.path.join(mmseg_source_root, "mmseg")
     if os.path.isdir(mmseg_pkg_dir):
         old = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = f"{MMSEG_SOURCE_ROOT}:{old}" if old else MMSEG_SOURCE_ROOT
+        env["PYTHONPATH"] = f"{mmseg_source_root}:{old}" if old else mmseg_source_root
     return env
+
+
+def _format_subprocess_failure(result) -> str:
+    detail = "\n".join(
+        part.strip()
+        for part in (result.stderr, result.stdout)
+        if part and part.strip()
+    )
+    if result.returncode in {-9, 137}:
+        diagnosis = (
+            "推理进程被系统终止，可能是 CPU 内存不足。"
+            "请使用江西专用的轻量 CPU 模型。"
+        )
+    else:
+        diagnosis = "推理子进程异常退出。"
+    suffix = f"\n{detail}" if detail else ""
+    return (
+        f"MMSeg inference failed (exit code {result.returncode}): "
+        f"{diagnosis}{suffix}"
+    )
 
 
 def _run_mmseg_inference(
@@ -102,7 +130,11 @@ def _run_mmseg_inference(
         device,
     ]
     print(f"[MMSeg-Caller] cwd={_curr_dir}", file=sys.stderr)
-    print(f"[MMSeg-Caller] MMSEG_SOURCE_ROOT={MMSEG_SOURCE_ROOT}", file=sys.stderr)
+    print(
+        f"[MMSeg-Caller] JIANGXI_MMSEG_SOURCE_ROOT="
+        f"{os.environ.get(JIANGXI_MODEL_SOURCE_ENV, '')}",
+        file=sys.stderr,
+    )
     print(f"[MMSeg-Caller] python={' '.join(_resolve_mmseg_python())}", file=sys.stderr)
 
     result = subprocess.run(
@@ -115,7 +147,7 @@ def _run_mmseg_inference(
     )
 
     if result.returncode != 0:
-        raise RuntimeError(f"MMSeg inference failed: {result.stderr or result.stdout}")
+        raise RuntimeError(_format_subprocess_failure(result))
 
     output_data = None
     for line in reversed((result.stdout or "").splitlines()):

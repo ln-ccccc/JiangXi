@@ -62,7 +62,7 @@ docker compose --env-file .env -f docker-compose.prod.yml up -d
 docker compose --env-file .env -f docker-compose.prod.yml ps
 ```
 
-默认解译方式为同步 CPU。不要在默认启动命令中叠加 `docker-compose.gpu.yml`。
+解译方式固定为同步 CPU；江西工程不提供 GPU 覆盖文件。
 
 ## 4. 验证
 
@@ -83,16 +83,9 @@ curl.exe -I 'http://127.0.0.1:5178/'
 
 Miner API 与 MySQL 仅在江西 Docker 网络内部，不能通过宿主机端口访问。Compose 展开结果中的宿主机端口必须全部绑定 `127.0.0.1`。
 
-## 5. 可选 GPU 技术覆盖
+## 5. 江西地物分类模型
 
-仅在已准备 `jiangxi-runtime:gpu`、主机驱动与 Docker GPU 运行环境，并且有单独验证计划时使用：
-
-```powershell
-docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.gpu.yml config
-docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.gpu.yml up -d
-```
-
-该覆盖文件只声明 GPU 镜像和资源，不代表默认使用 GPU，也不提供自动设备选择或 GPU 异常时回退 CPU 的能力。
+在 `.env` 中配置 `JIANGXI_MMSEG_CONFIG_PATH`、`JIANGXI_MMSEG_CHECKPOINT_PATH`，模型包含自定义源码时再配置 `JIANGXI_MMSEG_SOURCE_ROOT`。路径必须指向容器内的江西专用 CPU 模型资产；未配置或文件不存在时，后端会快速返回明确错误，不会使用云南模型。
 
 ## 6. 数据初始化与迁移
 

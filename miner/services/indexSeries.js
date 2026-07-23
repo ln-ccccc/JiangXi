@@ -7,8 +7,15 @@ export const INDEX_SOURCE_FILES = {
   ndsi: 'NDSI_by_fid_2year_avg.xlsx',
 };
 
-export function resolveIndexSourcePath(filePath, minerRoot = process.cwd()) {
-  return path.resolve(minerRoot, 'data', path.basename(filePath));
+export function resolveIndexSourcePath(
+  filePath,
+  minerRoot = process.cwd(),
+  indexDataDir = process.env.MINER_INDEX_DATA_DIR
+) {
+  const controlledRoot = String(indexDataDir || '').trim()
+    ? path.resolve(String(indexDataDir).trim())
+    : path.resolve(minerRoot, 'data');
+  return path.resolve(controlledRoot, path.basename(filePath));
 }
 
 export function calculateStats(data) {

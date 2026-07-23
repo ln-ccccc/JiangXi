@@ -33,39 +33,25 @@ docker build -f docker/standalone/Dockerfile.jiangxi -t geoview-jiangxi:standalo
 
 ## 运行
 
-如 `4000` 或 `5008` 已被现有容器占用，请先停止占用端口的服务，再执行：
+如 `4173`、`4174` 或 `5178` 已被本机其他服务占用，请先确认冲突资源归属，再执行：
 
 ```bash
 cp .env.example .env
 # 编辑 .env，替换 ADMIN_PASSWORD 和 SECRET_KEY 占位符。
-docker run -d --name geoview-jiangxi --env-file .env -p 4000:4000 -p 5008:5008 geoview-jiangxi:standalone
+docker run -d --name geoview-jiangxi --env-file .env -p 127.0.0.1:4173:4000 -p 127.0.0.1:4174:3000 -p 127.0.0.1:5178:5008 geoview-jiangxi:standalone
 ```
 
 `ADMIN_PASSWORD` 和 `SECRET_KEY` 为必需环境变量。缺失时容器会在启动阶段失败并输出明确提示；不要在命令行或文档中写入真实凭据。
 
 ## 验收
 
-- 访问 `http://127.0.0.1:4000`
-- 访问 `http://127.0.0.1:5008`
+- 访问 Miner：`http://127.0.0.1:4173/#/map`
+- 访问解译平台：`http://127.0.0.1:4174/#/segmentation`
+- 访问后端：`http://127.0.0.1:5178`
 - 登录后确认项目列表为江西默认项目
 - 确认地图加载江西面图斑数据
 - 确认主流程不再出现云南口径
 
-## GPU 推理镜像（RTX 5060）
+## 地物分类模型
 
-CPU 镜像 `Dockerfile.jiangxi` 保持不变。GPU 版使用 `Dockerfile.jiangxi.gpu`，首次构建会下载 CUDA 12.8 运行时并源码编译与 PyTorch 2.7 匹配的 MMCV；完成后可通过 `docker save` 离线交付。
-
-```powershell
-docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu22.04 nvidia-smi
-docker build -f docker/standalone/Dockerfile.jiangxi.gpu -t geoview-jiangxi:gpu .
-.\docker\standalone\run-jiangxi-gpu.ps1
-```
-
-GPU 镜像以 `auto` 作为默认推理设备：容器获得 CUDA 时使用 `cuda:0`，否则明确显示降级原因并改用 CPU。显式选择 `cuda:0` 但未成功透传 GPU 时，接口会拒绝任务而不会伪装成 GPU 推理。KML ROI 在一个任务内只初始化一次模型，并拒绝并发任务以保护 8GB 显存。
-
-Compose 部署使用 GPU 镜像并追加覆盖配置：
-
-```powershell
-$env:APP_IMAGE = 'geoview-jiangxi:gpu'
-docker compose -f docker-compose.prod.yml -f docker-compose.gpu.yml up -d
-```
+独立镜像固定使用 CPU。运行地物分类前，必须提供江西专用且 CPU 兼容的六类模型配置与权重，并通过 `JIANGXI_MMSEG_CONFIG_PATH`、`JIANGXI_MMSEG_CHECKPOINT_PATH` 和可选的 `JIANGXI_MMSEG_SOURCE_ROOT` 指向容器内文件。工程不会自动选择 GPU，也不会回退到云南模型。

@@ -22,9 +22,8 @@ source /opt/conda/etc/profile.d/conda.sh
 
 conda activate MMSeg310
 
-MMSEG_SOURCE="/app/backend/model/mmseg_config/dinov3_swinV1"
-if [ -d "${MMSEG_SOURCE}/mmseg" ]; then
-  export PYTHONPATH="${MMSEG_SOURCE}:${PYTHONPATH:-}"
+if [ -n "${JIANGXI_MMSEG_SOURCE_ROOT:-}" ] && [ -d "${JIANGXI_MMSEG_SOURCE_ROOT}/mmseg" ]; then
+  export PYTHONPATH="${JIANGXI_MMSEG_SOURCE_ROOT}:${PYTHONPATH:-}"
   python - <<'PY'
 import importlib.util
 
@@ -40,7 +39,7 @@ PY
 then
   true
 else
-  echo "[entrypoint] MMSegmentation package is missing and ${MMSEG_SOURCE} was not found."
+  echo "[entrypoint] MMSegmentation package is missing and the Jiangxi model source was not found."
 fi
 
 CONFIG_EXPORTS=$(python - <<'PY'

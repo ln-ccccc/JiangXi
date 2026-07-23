@@ -1,5 +1,10 @@
+import os
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+from applications.interface.mmseg_inference_caller import get_model_paths
 
 
 ROOT = Path(__file__).resolve().parent
@@ -39,6 +44,38 @@ class TestJiangxiCpuContract(unittest.TestCase):
         self.assertNotIn('device="auto"', source)
         self.assertNotIn('default="auto"', source)
         self.assertNotIn('device="cuda:0"', source)
+
+    def test_mmseg_subprocess_bootstraps_backend_package_root(self):
+        source = (
+            ROOT / "applications" / "interface" / "mmseg_segmentation.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("Path(__file__).resolve().parents[2]", source)
+        self.assertIn("sys.path.insert(0, str(backend_root))", source)
+
+    def test_mmseg_requires_explicit_jiangxi_model_assets(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "江西地物分类模型未配置"):
+                get_model_paths("cc-ln/CUGRS")
+
+    def test_mmseg_accepts_existing_jiangxi_model_assets(self):
+        with TemporaryDirectory() as tmp_dir:
+            config = Path(tmp_dir) / "config.py"
+            checkpoint = Path(tmp_dir) / "model.pth"
+            config.write_text("# jiangxi model\n", encoding="utf-8")
+            checkpoint.write_bytes(b"checkpoint")
+            with patch.dict(
+                os.environ,
+                {
+                    "JIANGXI_MMSEG_CONFIG_PATH": str(config),
+                    "JIANGXI_MMSEG_CHECKPOINT_PATH": str(checkpoint),
+                },
+                clear=True,
+            ):
+                self.assertEqual(
+                    get_model_paths("cc-ln/CUGRS"),
+                    (str(config.resolve()), str(checkpoint.resolve())),
+                )
 
 
 if __name__ == "__main__":

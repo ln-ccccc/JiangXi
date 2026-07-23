@@ -23,7 +23,7 @@ COPY docker/standalone/runtime_data /app/runtime_data
 RUN chmod +x /app/docker/entrypoint.sh /app/docker/*.sh /app/docker/standalone/*.sh \
     && mkdir -p /var/lib/jiangxi-standalone /app/runtime_data
 
-EXPOSE 4000 5008
+EXPOSE 3000 4000 5008
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 CMD ["/app/docker/standalone/healthcheck.sh"]
 

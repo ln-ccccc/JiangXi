@@ -1,9 +1,11 @@
 from functools import wraps
 
-from flask import jsonify, session
+from flask import jsonify, request, session
 
 
 def ensure_logged_in():
+    if request.method == "OPTIONS":
+        return None
     if not session.get("admin_user_id"):
         return jsonify(success=False, code=401, msg="未登录"), 401
     return None

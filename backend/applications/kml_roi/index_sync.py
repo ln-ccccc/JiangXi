@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -13,7 +14,10 @@ INDEX_FILE_MAP = {
 
 
 def _default_miner_dir() -> Path:
-    return Path(__file__).resolve().parents[3] / "miner"
+    configured = str(os.getenv("MINER_INDEX_DATA_DIR") or "").strip()
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parents[3] / "miner" / "data"
 
 
 def _fid_cell_value(fid):

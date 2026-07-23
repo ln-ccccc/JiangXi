@@ -16,7 +16,7 @@
 
 江西根目录为 `D:\项目\JiangXi\JiangXi-Platform`。云南工程及其代码、容器、镜像、命名卷、数据库和运行数据保持不变；江西编排不连接、不挂载、不复用这些资源。
 
-江西应用运行镜像为 `jiangxi-runtime:current`，可选 GPU 镜像为 `jiangxi-runtime:gpu`。应用容器统一使用 `jiangxi-` 前缀，命名卷为：
+江西应用运行镜像为固定 CPU 的 `jiangxi-runtime:current`。应用容器统一使用 `jiangxi-` 前缀，命名卷为：
 
 ```text
 jiangxi_backend_static
@@ -41,9 +41,9 @@ Compose 显式设置 `DB_BACKEND=mysql`，避免继承运行镜像的单机 SQLi
 
 ## 4. 业务执行方式
 
-江西地物分类采用同步批量推理，默认使用 CPU。光谱指数计算同样由江西后端直接处理并返回结果。江西前端不使用异步任务查询接口，不提供自动设备选择，也不承诺 GPU 异常时回退 CPU。
+江西地物分类采用同步批量推理并固定使用 CPU。光谱指数计算同样由江西后端直接处理并返回结果。江西前端不使用异步任务查询接口，不提供自动设备选择或 GPU 异常回退。
 
-`docker-compose.gpu.yml` 只是可选技术覆盖文件：它为后端和 Miner API 指定 `jiangxi-runtime:gpu` 并声明 GPU 资源。该文件不改变默认 CPU 口径，也不构成自动调度或异常回退能力说明。
+地物分类模型通过 `JIANGXI_MMSEG_CONFIG_PATH`、`JIANGXI_MMSEG_CHECKPOINT_PATH` 和 `JIANGXI_MMSEG_SOURCE_ROOT` 与运行时解耦；只接受江西专用模型路径，缺失时明确失败。
 
 ## 5. 数据与持久化
 
@@ -62,8 +62,7 @@ miner/data/348图斑_TableMERNet无图像预测结果.xlsx
 
 ## 6. 编排入口
 
-- 默认 CPU：`docker-compose.prod.yml`
-- 可选 GPU 资源覆盖：`docker-compose.gpu.yml`
+- 固定 CPU：`docker-compose.prod.yml`
 - 环境变量模板：`.env.example`
 
 标准启动与验证见 [offline_deployment_guide.md](offline_deployment_guide.md)，重启排障见 [docker_restart_guide.md](docker_restart_guide.md)。

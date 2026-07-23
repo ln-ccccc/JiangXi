@@ -15,6 +15,13 @@ test('legacy index workbooks are resolved only inside the controlled Jiangxi dat
   );
 });
 
+test('runtime index workbooks use the explicit writable Jiangxi directory', () => {
+  assert.equal(
+    resolveIndexSourcePath('NDVI_2year.xlsx', '/app/miner', '/app/miner/index-data'),
+    path.resolve('/app/miner/index-data', 'NDVI_2year.xlsx')
+  );
+});
+
 test('calculateStats returns no_data when no series exists', () => {
   assert.deepEqual(calculateStats([]), {
     mean: 0,

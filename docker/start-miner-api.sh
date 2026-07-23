@@ -12,11 +12,6 @@ export GDAL_DATA="${GDAL_DATA:-/opt/conda/envs/MMSeg310/share/gdal}"
 export PROJ_LIB="${PROJ_LIB:-/opt/conda/envs/MMSeg310/share/proj}"
 export PROJ_DATA="${PROJ_DATA:-${PROJ_LIB}}"
 
-MMSEG_SOURCE="/app/backend/model/mmseg_config/dinov3_swinV1"
-if [ -d "${MMSEG_SOURCE}/mmseg" ]; then
-  export PYTHONPATH="${MMSEG_SOURCE}:${PYTHONPATH:-}"
-fi
-
 python /app/docker/generate_miner_tiles.py
 
 python /app/docker/write-runtime-env.py

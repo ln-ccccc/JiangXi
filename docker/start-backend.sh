@@ -9,9 +9,8 @@ source /opt/conda/etc/profile.d/conda.sh
 : "${LIBXML2_DIR:=}"
 conda activate MMSeg310
 
-MMSEG_SOURCE="/app/backend/model/mmseg_config/dinov3_swinV1"
-if [ -d "${MMSEG_SOURCE}/mmseg" ]; then
-  export PYTHONPATH="${MMSEG_SOURCE}:${PYTHONPATH:-}"
+if [ -n "${JIANGXI_MMSEG_SOURCE_ROOT:-}" ] && [ -d "${JIANGXI_MMSEG_SOURCE_ROOT}/mmseg" ]; then
+  export PYTHONPATH="${JIANGXI_MMSEG_SOURCE_ROOT}:${PYTHONPATH:-}"
 fi
 
 python /app/docker/wait-for-mysql.py

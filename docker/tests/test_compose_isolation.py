@@ -8,7 +8,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 PROD_PATH = ROOT / "docker-compose.prod.yml"
-GPU_PATH = ROOT / "docker-compose.gpu.yml"
 
 
 def normalize_mount(mount):
@@ -45,7 +44,6 @@ class ComposeIsolationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.prod_text = PROD_PATH.read_text(encoding="utf-8")
         cls.prod = yaml.safe_load(cls.prod_text)
-        cls.gpu = yaml.safe_load(GPU_PATH.read_text(encoding="utf-8"))
 
     def test_jiangxi_image_and_container_names_are_isolated(self):
         services = self.prod["services"]
@@ -82,6 +80,20 @@ class ComposeIsolationTests(unittest.TestCase):
         self.assertEqual(environment["VITE_GEOVIEW_URL"], "http://127.0.0.1:4174/")
         self.assertEqual(environment["VUE_APP_MINER_URL"], "http://127.0.0.1:4173/")
         self.assertEqual(environment["VUE_APP_BACKEND_URL"], "http://127.0.0.1:5178/")
+        self.assertEqual(environment["MINER_INDEX_DATA_DIR"], "/app/miner/index-data")
+        self.assertEqual(environment["KML_ROI_INPUT_ROOT"], "/app/backend/static/upload")
+        self.assertEqual(
+            environment["JIANGXI_MMSEG_CONFIG_PATH"],
+            "${JIANGXI_MMSEG_CONFIG_PATH:-/app/backend/model/jiangxi/config.py}",
+        )
+        self.assertEqual(
+            environment["JIANGXI_MMSEG_CHECKPOINT_PATH"],
+            "${JIANGXI_MMSEG_CHECKPOINT_PATH:-/app/backend/model/jiangxi/model.pth}",
+        )
+        self.assertEqual(
+            environment["JIANGXI_MMSEG_SOURCE_ROOT"],
+            "${JIANGXI_MMSEG_SOURCE_ROOT:-/app/backend/model/jiangxi/source}",
+        )
 
     def test_backend_and_miner_api_share_backend_auth_configuration(self):
         services = self.prod["services"]
@@ -112,6 +124,7 @@ class ComposeIsolationTests(unittest.TestCase):
                 "hf-cache": "jiangxi_hf_cache",
                 "miner-outputs": "jiangxi_miner_outputs",
                 "miner-tiles": "jiangxi_miner_tiles",
+                "index-data": "jiangxi_index_data",
             },
         )
 
@@ -175,6 +188,8 @@ class ComposeIsolationTests(unittest.TestCase):
         authoritative_workbook_mount = "./miner/data:/app/miner/data:ro"
         self.assertIn(authoritative_workbook_mount, backend_mounts)
         self.assertIn(authoritative_workbook_mount, miner_api_mounts)
+        self.assertIn("index-data:/app/miner/index-data", backend_mounts)
+        self.assertIn("index-data:/app/miner/index-data", miner_api_mounts)
         self.assertIn(
             "./frontend/public:/app/frontend/public:ro",
             services["frontend"]["volumes"],
@@ -230,10 +245,10 @@ class ComposeIsolationTests(unittest.TestCase):
             "${MINER_ECOLOGY_WORKBOOK_PATH:-/app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx}",
         )
 
-    def test_gpu_overlay_uses_jiangxi_gpu_image_for_compute_services(self):
-        services = self.gpu["services"]
-        self.assertEqual(services["backend"].get("image"), "jiangxi-runtime:gpu")
-        self.assertEqual(services["miner-api"].get("image"), "jiangxi-runtime:gpu")
+    def test_jiangxi_fixed_cpu_deployment_has_no_gpu_overlay(self):
+        self.assertFalse((ROOT / "docker-compose.gpu.yml").exists())
+        self.assertFalse((ROOT / "docker" / "standalone" / "Dockerfile.jiangxi.gpu").exists())
+        self.assertFalse((ROOT / "docker" / "standalone" / "run-jiangxi-gpu.ps1").exists())
 
 
 class EnvironmentExampleTests(unittest.TestCase):
@@ -257,6 +272,14 @@ class EnvironmentExampleTests(unittest.TestCase):
         self.assertEqual(values["VUE_APP_BACKEND_URL"], "http://127.0.0.1:5178/")
         self.assertEqual(values["MYSQL_USERNAME"], "jiangxi")
         self.assertEqual(values["MYSQL_DATABASE"], "jiangxi")
+        self.assertEqual(
+            values["JIANGXI_MMSEG_CONFIG_PATH"],
+            "/app/backend/model/jiangxi/config.py",
+        )
+        self.assertEqual(
+            values["JIANGXI_MMSEG_CHECKPOINT_PATH"],
+            "/app/backend/model/jiangxi/model.pth",
+        )
 
 
 if __name__ == "__main__":

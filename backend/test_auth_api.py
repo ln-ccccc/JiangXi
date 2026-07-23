@@ -101,6 +101,23 @@ class TestAuthAPI(unittest.TestCase):
         self.assertEqual(authorized.status_code, 200)
         self.assertEqual(self._json(authorized)["code"], 0)
 
+    def test_allowed_origin_preflight_is_not_blocked_by_session_guard(self):
+        response = self.client.options(
+            "/api/analysis/spectral_indices",
+            headers={
+                "Origin": "http://127.0.0.1:4174",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers.get("Access-Control-Allow-Origin"),
+            "http://127.0.0.1:4174",
+        )
+        self.assertEqual(response.headers.get("Access-Control-Allow-Credentials"), "true")
+
     def test_unknown_origin_does_not_receive_cors_headers(self):
         response = self.client.get(
             "/api/auth/session",

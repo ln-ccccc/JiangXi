@@ -34,6 +34,11 @@ x-app-env: &app-env
   MINER_DEFAULT_KMZ_PATH: "${MINER_DEFAULT_KMZ_PATH:-/app/runtime_data/Jiangxi_NaturalMine.kmz}"
   MINER_INFERENCE_DATA_ROOT: "${MINER_INFERENCE_DATA_ROOT:-/app/backend/bianhua_2years}"
   MINER_ECOLOGY_WORKBOOK_PATH: "${MINER_ECOLOGY_WORKBOOK_PATH:-/app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx}"
+  MINER_INDEX_DATA_DIR: /app/miner/index-data
+  KML_ROI_INPUT_ROOT: /app/backend/static/upload
+  JIANGXI_MMSEG_CONFIG_PATH: "${JIANGXI_MMSEG_CONFIG_PATH:-/app/backend/model/jiangxi/config.py}"
+  JIANGXI_MMSEG_CHECKPOINT_PATH: "${JIANGXI_MMSEG_CHECKPOINT_PATH:-/app/backend/model/jiangxi/model.pth}"
+  JIANGXI_MMSEG_SOURCE_ROOT: "${JIANGXI_MMSEG_SOURCE_ROOT:-/app/backend/model/jiangxi/source}"
 
 x-runtime-base: &runtime-base
   image: ${APP_IMAGE:-jiangxi-runtime:current}
@@ -60,6 +65,7 @@ services:
       - ./backend/app.py:/app/backend/app.py:ro
       - ./backend/kml_roi_infer.py:/app/backend/kml_roi_infer.py:ro
       - ./miner/data:/app/miner/data:ro
+      - index-data:/app/miner/index-data
       - ./docker/standalone/runtime_data:/app/runtime_data:ro
       - miner-outputs:/app/miner/change_matrix_outputs
       - backend-static:/app/backend/static
@@ -107,6 +113,7 @@ services:
       - ./miner/routes:/app/miner/routes:ro
       - ./miner/services:/app/miner/services:ro
       - ./miner/data:/app/miner/data:ro
+      - index-data:/app/miner/index-data
       - ./docker/standalone/runtime_data:/app/runtime_data:ro
       - miner-outputs:/app/miner/change_matrix_outputs
       - miner-tiles:/app/miner/public/tiles
@@ -170,3 +177,5 @@ volumes:
     name: jiangxi_miner_outputs
   miner-tiles:
     name: jiangxi_miner_tiles
+  index-data:
+    name: jiangxi_index_data

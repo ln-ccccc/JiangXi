@@ -19,6 +19,14 @@ from applications.schemas import AnalysisSchema
 analysis_api = Blueprint('analysis_api', __name__, url_prefix='/api/analysis')
 repo_root = Path(__file__).resolve().parents[3]
 miner_change_output_root = repo_root / 'miner' / 'change_matrix_outputs'
+upload_path_prefix = "static/upload/"
+
+
+def _normalize_uploaded_tiff_name(value):
+    text = str(value or "").strip().replace("\\", "/")
+    if text.startswith(upload_path_prefix):
+        return text[len(upload_path_prefix):]
+    return text
 
 
 @analysis_api.before_request
@@ -182,10 +190,14 @@ def kml_roi_inference_api():
         input_root = current_app.config["KML_ROI_INPUT_ROOT"]
         kml_root = current_app.config["KML_ROI_KML_ROOT"]
         default_kmz_name = Path(current_app.config["MINER_DEFAULT_KMZ_PATH"]).name
-        old_tif_path = resolve_managed_file(input_root, req_json.get("old_tif_path"), {".tif", ".tiff"})
+        old_tif_name = _normalize_uploaded_tiff_name(req_json.get("old_tif_path"))
+        new_tif_name = _normalize_uploaded_tiff_name(
+            req_json.get("new_tif_path") or old_tif_name
+        )
+        old_tif_path = resolve_managed_file(input_root, old_tif_name, {".tif", ".tiff"})
         new_tif_path = resolve_managed_file(
             input_root,
-            req_json.get("new_tif_path") or old_tif_path.name,
+            new_tif_name,
             {".tif", ".tiff"},
         )
         kml_path = resolve_managed_file(

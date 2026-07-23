@@ -35,7 +35,7 @@ Miner 只跳转到江西解译入口，解译平台只返回江西 Miner。入�
 - 不提供自动设备选择。
 - 不提供 GPU 异常时自动回退 CPU。
 
-`docker-compose.gpu.yml` 是可选技术覆盖文件，仅声明 GPU 镜像与资源；默认部署仍使用 `docker-compose.prod.yml` 和 `jiangxi-runtime:current`。
+江西部署只使用 `docker-compose.prod.yml` 和 CPU 镜像 `jiangxi-runtime:current`，不提供 GPU 覆盖文件。
 
 ## 5. 江西权威数据
 
@@ -47,7 +47,7 @@ Miner 只跳转到江西解译入口，解译平台只返回江西 Miner。入�
 
 ## 6. Docker 命名空间
 
-- 应用镜像：`jiangxi-runtime:current`；可选 `jiangxi-runtime:gpu`
+- 应用镜像：`jiangxi-runtime:current`（固定 CPU）
 - 容器：`jiangxi-backend`、`jiangxi-frontend`、`jiangxi-miner-api`、`jiangxi-miner-web`、`jiangxi-mysql`
 - 命名卷：`jiangxi_backend_static`、`jiangxi_mysql_data`、`jiangxi_hf_cache`、`jiangxi_miner_outputs`、`jiangxi_miner_tiles`
 
