@@ -11,6 +11,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
 from applications import create_app
 from applications.extensions import db
+from applications.region_source import load_kml_root
 
 
 class TestNewFeatures(unittest.TestCase):
@@ -139,13 +140,22 @@ class TestNewFeatures(unittest.TestCase):
 
     def test_kml_roi_inference_uses_configured_default_kmz_filename(self):
         input_root = Path(tempfile.mkdtemp(prefix="roi-config-input-"))
-        kml_root = Path(tempfile.mkdtemp(prefix="roi-config-kml-"))
         (input_root / "old.tif").write_bytes(b"tif")
-        configured_kmz = kml_root / "configured-default.kmz"
-        configured_kmz.write_bytes(b"kmz")
+        configured_kmz = (
+            Path(__file__).resolve().parents[1]
+            / "docker"
+            / "standalone"
+            / "runtime_data"
+            / "Jiangxi_NaturalMine.kmz"
+        )
+        parsed_root = load_kml_root(configured_kmz)
+        self.assertEqual(parsed_root.tag, "{http://www.opengis.net/kml/2.2}kml")
+        self.assertTrue(
+            parsed_root.findall(".//{http://www.opengis.net/kml/2.2}Placemark")
+        )
         self.app.config["KML_ROI_INPUT_ROOT"] = str(input_root)
-        self.app.config["KML_ROI_KML_ROOT"] = str(kml_root)
-        self.app.config["MINER_DEFAULT_KMZ_PATH"] = "/outside/configured-default.kmz"
+        self.app.config["KML_ROI_KML_ROOT"] = str(configured_kmz.parent)
+        self.app.config["MINER_DEFAULT_KMZ_PATH"] = "/app/runtime_data/Jiangxi_NaturalMine.kmz"
         self.login_as_admin()
         try:
             with patch("applications.api.analysis.run_kml_roi_inference") as run_inference:
@@ -159,7 +169,6 @@ class TestNewFeatures(unittest.TestCase):
             self.assertEqual(run_inference.call_args.kwargs["kml_path"], str(configured_kmz))
         finally:
             shutil.rmtree(input_root, ignore_errors=True)
-            shutil.rmtree(kml_root, ignore_errors=True)
 
 
 if __name__ == "__main__":

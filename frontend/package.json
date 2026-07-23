@@ -5,6 +5,7 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
+    "test:backend-url": "node --test test/backendUrl.test.mjs",
     "test:ui": "node scripts/verify-brand-theme.cjs"
   },
   "dependencies": {

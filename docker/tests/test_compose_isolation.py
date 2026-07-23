@@ -1,7 +1,7 @@
 """Docker Compose isolation regression tests for the Jiangxi deployment."""
 
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
@@ -9,6 +9,35 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 PROD_PATH = ROOT / "docker-compose.prod.yml"
 GPU_PATH = ROOT / "docker-compose.gpu.yml"
+
+
+def normalize_mount(mount):
+    if isinstance(mount, str):
+        parts = mount.split(":", 2)
+        source = parts[0]
+        target = parts[1]
+        mount_type = "bind" if source.startswith((".", "/")) else "volume"
+        return mount_type, source, target
+
+    source = mount.get("source") or mount.get("src")
+    target = mount.get("target") or mount.get("dst") or mount.get("destination")
+    mount_type = mount.get("type") or (
+        "bind" if source and source.startswith((".", "/")) else "volume"
+    )
+    return mount_type, source, target
+
+
+def mount_overlays_backend_model(target):
+    target_path = PurePosixPath(target)
+    backend_path = PurePosixPath("/app/backend")
+    model_path = backend_path / "model"
+    covers_backend = target_path == backend_path or target_path in backend_path.parents
+    overlaps_model = (
+        target_path == model_path
+        or target_path in model_path.parents
+        or model_path in target_path.parents
+    )
+    return covers_backend or overlaps_model
 
 
 class ComposeIsolationTests(unittest.TestCase):
@@ -97,6 +126,37 @@ class ComposeIsolationTests(unittest.TestCase):
         self.assertIn(runtime_mount, backend_mounts)
         self.assertIn(runtime_mount, miner_api_mounts)
         self.assertNotIn("node_modules", self.prod_text)
+
+    def test_relative_bind_sources_exist_and_no_mount_overlays_backend_model(self):
+        for service_name, service in self.prod["services"].items():
+            for raw_mount in service.get("volumes", []):
+                mount_type, source, target = normalize_mount(raw_mount)
+                if mount_type == "bind" and source and not Path(source).is_absolute():
+                    self.assertTrue(
+                        (ROOT / source).exists(),
+                        f"{service_name} bind source does not exist: {source}",
+                    )
+                self.assertFalse(
+                    mount_overlays_backend_model(target),
+                    f"{service_name} mount overlays image backend/model: {target}",
+                )
+
+    def test_mount_parser_supports_short_and_long_compose_syntax(self):
+        self.assertEqual(
+            normalize_mount("./backend/app.py:/app/backend/app.py:ro"),
+            ("bind", "./backend/app.py", "/app/backend/app.py"),
+        )
+        self.assertEqual(
+            normalize_mount(
+                {
+                    "type": "bind",
+                    "source": "./frontend/public",
+                    "target": "/app/frontend/public",
+                    "read_only": True,
+                }
+            ),
+            ("bind", "./frontend/public", "/app/frontend/public"),
+        )
 
     def test_runtime_mounts_use_only_existing_jiangxi_workbook_and_frontend_public(self):
         services = self.prod["services"]
