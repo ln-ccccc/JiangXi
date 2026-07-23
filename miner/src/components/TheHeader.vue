@@ -27,25 +27,38 @@
       <button v-if="username" class="secondary-btn" type="button" @click="$emit('logout')">
         <span>退出登录</span>
       </button>
-      <button class="system-btn" type="button" @click="goToGeoView">
-        <span>解译平台</span>
-        <svg
-          viewBox="0 0 24 24"
-          width="16"
-          height="16"
-          stroke="currentColor"
-          stroke-width="2"
-          fill="none"
+      <div class="platform-link-control">
+        <button
+          class="system-btn"
+          type="button"
+          :disabled="!geoViewUrl"
+          :title="geoViewButtonLabel"
+          :aria-label="geoViewButtonLabel"
+          @click="goToGeoView"
         >
-          <path d="M5 12h14M12 5l7 7-7 7" />
-        </svg>
-      </button>
+          <span>解译平台</span>
+          <svg
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            stroke="currentColor"
+            stroke-width="2"
+            fill="none"
+          >
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
+        <span v-if="!geoViewUrl" class="platform-link-hint" role="status">
+          解译平台地址未配置
+        </span>
+      </div>
     </div>
   </header>
 </template>
 
 <script setup>
 import { APP_TITLE } from '../config/minerDefaults.js';
+import { buildGeoViewUrl } from '../navigation/platformLinks.js';
 
 defineProps({
   weatherIcon: String,
@@ -62,15 +75,15 @@ defineProps({
 
 defineEmits(['logout']);
 
+const geoViewUrl = buildGeoViewUrl(import.meta.env.VITE_GEOVIEW_URL);
+const geoViewButtonLabel = geoViewUrl ? '打开解译平台' : '解译平台地址未配置';
+
 const goToGeoView = () => {
-  let base = import.meta.env.VITE_GEOVIEW_URL || 'http://localhost:3000/';
-  const hasHash = /#\//.test(base);
-  const target = hasHash
-    ? base
-    : base.endsWith('/')
-      ? base + '#/detectchanges'
-      : base + '/#/detectchanges';
-  window.location.href = target;
+  if (!geoViewUrl) {
+    return;
+  }
+
+  window.location.href = geoViewUrl;
 };
 </script>
 
@@ -290,6 +303,20 @@ const goToGeoView = () => {
   color: var(--jx-bg);
 }
 
+.platform-link-control {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.platform-link-hint {
+  color: var(--jx-sand);
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+}
+
 .secondary-btn:hover {
   color: var(--jx-text);
   background: var(--jx-surface-muted);
@@ -302,6 +329,15 @@ const goToGeoView = () => {
   background: var(--jx-primary-hover);
   box-shadow: 0 4px 12px rgba(156, 231, 189, 0.25);
   transform: translateY(-1px);
+}
+
+.system-btn:disabled,
+.system-btn:disabled:hover {
+  cursor: not-allowed;
+  opacity: 0.55;
+  background: var(--jx-primary);
+  box-shadow: none;
+  transform: none;
 }
 
 .secondary-btn:focus-visible,

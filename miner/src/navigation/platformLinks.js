@@ -1,18 +1,23 @@
-function normalizeRoot(configuredRoot, locationLike, port) {
+export function buildGeoViewUrl(configuredRoot = '') {
   const configured = String(configuredRoot || '').trim();
-  if (configured) {
-    return `${configured.split('#')[0].replace(/\/+$/, '')}/`;
+  if (!configured) {
+    return '';
   }
 
-  const protocol = locationLike?.protocol || 'http:';
-  const hostname = locationLike?.hostname || 'localhost';
-  return `${protocol}//${hostname}:${port}/`;
-}
+  let root;
+  try {
+    root = new URL(configured);
+  } catch {
+    return '';
+  }
 
-export function buildGeoViewUrl(locationLike, configuredRoot = '') {
-  return `${normalizeRoot(configuredRoot, locationLike, 3000)}#/segmentation`;
-}
+  const isHttpRoot =
+    (root.protocol === 'http:' || root.protocol === 'https:') &&
+    !root.username &&
+    !root.password &&
+    root.pathname === '/' &&
+    !root.search &&
+    !root.hash;
 
-export function buildMinerMapUrl(locationLike, configuredRoot = '') {
-  return `${normalizeRoot(configuredRoot, locationLike, 4000)}#/map`;
+  return isHttpRoot ? `${root.origin}/#/segmentation` : '';
 }
