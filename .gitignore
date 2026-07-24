@@ -9,6 +9,7 @@ node_modules/
 dist/
 coverage/
 .superpowers/
+.worktrees/
 
 __pycache__/
 *.py[cod]
