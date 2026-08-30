@@ -1,14 +1,19 @@
+import { normalizeInferenceDevice } from './inferenceDevicePolicy.js';
+
 export function buildKmlRoiArgs({
   scriptPath,
   oldTifPath,
   newTifPath,
   kmlPath,
   outputRoot,
+  manifestPath,
   limit = 0,
   year = '',
   oldYear = '',
   newYear = '',
+  device = process.env.JIANGXI_INFERENCE_DEVICE || 'cpu',
 }) {
+  const effectiveDevice = normalizeInferenceDevice(device);
   const args = [
     scriptPath,
     '--old_tif',
@@ -20,8 +25,9 @@ export function buildKmlRoiArgs({
     '--output_root',
     outputRoot,
     '--device',
-    'cpu',
+    effectiveDevice,
   ];
+  if (manifestPath) args.push('--manifest', manifestPath);
 
   const limitNum = Number(limit || 0);
   if (Number.isFinite(limitNum) && limitNum > 0) {

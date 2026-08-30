@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 
 import { DOMParser } from '@xmldom/xmldom';
 import tj from '@mapbox/togeojson';
+import { buildMineIdentityIndex, normalizeTbbh } from './jiangxiIdentity.js';
 
 const execFile = promisify(execFileCb);
 
@@ -13,7 +14,12 @@ function normalizeStatus(value) {
   const text = String(value || '').trim();
   if (!text) return 'unknown';
   if (text.includes('未')) return 'untreated';
-  if (text.includes('完全') || text.includes('治理') || text.includes('修复') || text.includes('恢复')) {
+  if (
+    text.includes('完全') ||
+    text.includes('治理') ||
+    text.includes('修复') ||
+    text.includes('恢复')
+  ) {
     return 'treated';
   }
   return 'unknown';
@@ -30,7 +36,9 @@ function pickFirstProperty(properties, keys) {
 }
 
 function toNumber(value) {
-  const text = String(value ?? '').trim().replace(/,/g, '');
+  const text = String(value ?? '')
+    .trim()
+    .replace(/,/g, '');
   if (!text) return null;
   const result = Number(text);
   return Number.isFinite(result) ? result : null;
@@ -70,11 +78,9 @@ function extractKmlTextFromKmz(kmzPath) {
       `-DestinationPath '${tempDir.replace(/'/g, "''")}'`,
       '-Force',
     ].join(' ');
-    const probe = spawnSync(
-      'powershell.exe',
-      ['-NoProfile', '-Command', archiveCommand],
-      { encoding: 'utf8' }
-    );
+    const probe = spawnSync('powershell.exe', ['-NoProfile', '-Command', archiveCommand], {
+      encoding: 'utf8',
+    });
     if (probe.status !== 0) {
       throw new Error(`Expand-Archive failed: ${probe.stderr || probe.stdout}`.trim());
     }
@@ -89,17 +95,45 @@ function extractKmlTextFromKmz(kmzPath) {
   }
 }
 
-function normalizeFeature(feature, index) {
+function normalizeFeature(feature) {
   const properties = { ...(feature.properties || {}) };
-  const fid = toNumber(pickFirstProperty(properties, ['FID_1', 'FID', 'No', 'OBJECTID', '序号'])) ?? (index + 1);
+  const mapFid = toNumber(
+    pickFirstProperty(properties, ['map_fid', 'FID_1', 'FID', 'No', 'OBJECTID', '序号'])
+  );
+  if (!Number.isSafeInteger(mapFid) || mapFid <= 0) {
+    throw new Error(`map_fid is missing or invalid: ${mapFid}`);
+  }
+  const tbbh = normalizeTbbh(pickFirstProperty(properties, ['tbbh', 'TBBH']));
   const mineName = String(
-    pickFirstProperty(properties, ['mine_name', 'name', '名称', '矿山名称', '矿山位置', '矿山位置_', '图斑编号', 'TBBH']) || `矿山 ${fid}`
+    pickFirstProperty(properties, [
+      'mine_name',
+      'name',
+      '名称',
+      '矿山名称',
+      '矿山位置',
+      '矿山位置_',
+      '图斑编号',
+      'TBBH',
+    ]) || `矿山 ${mapFid}`
   );
   const city = String(pickFirstProperty(properties, ['SHI', '地市', '市']) || '');
-  const area = toNumber(pickFirstProperty(properties, ['area', 'TBTYMJ', 'TBTYMJ_1', 'Area', 'SHAPE_Area', '面积', '图斑核定面', '实际修复面']));
+  const area = toNumber(
+    pickFirstProperty(properties, [
+      'area',
+      'TBTYMJ',
+      'TBTYMJ_1',
+      'Area',
+      'SHAPE_Area',
+      '面积',
+      '图斑核定面',
+      '实际修复面',
+    ])
+  );
   const rawStatus = normalizeText(pickFirstProperty(properties, ['HFZLQK', '修复状态', 'status']));
   const miningMethod = normalizeText(pickFirstProperty(properties, ['KCFS', '开采方式', '开采方']));
-  const completionYear = normalizeText(pickFirstProperty(properties, ['GBND', '关闭年', '完成时间']));
+  const completionYear = normalizeText(
+    pickFirstProperty(properties, ['GBND', '关闭年', '完成时间'])
+  );
   const restorationMethod = normalizeText(pickFirstProperty(properties, ['NXFFS', '修复模式']));
   const damageType = normalizeText(pickFirstProperty(properties, ['STWT', '图斑小类']));
   const landType = normalizeText(pickFirstProperty(properties, ['NXFFX', '工程项目类']));
@@ -108,7 +142,9 @@ function normalizeFeature(feature, index) {
     ...feature,
     properties: {
       ...properties,
-      FID_1: fid,
+      tbbh,
+      map_fid: mapFid,
+      FID_1: mapFid,
       name: normalizeText(properties.name) || mineName,
       mine_name: mineName,
       SHI: city,
@@ -204,22 +240,32 @@ export async function loadJiangxiGeoJsonFromKmz(kmzPath) {
   const xml = new DOMParser().parseFromString(kmlText, 'text/xml');
   const geojson = tj.kml(xml);
 
-  return {
+  const result = {
     type: 'FeatureCollection',
     features: (geojson.features || [])
-      .filter((feature) => feature?.geometry?.type === 'Polygon' || feature?.geometry?.type === 'MultiPolygon')
-      .map((feature, index) => normalizeFeature(feature, index)),
+      .filter(
+        (feature) =>
+          feature?.geometry?.type === 'Polygon' || feature?.geometry?.type === 'MultiPolygon'
+      )
+      .map((feature) => normalizeFeature(feature)),
   };
+  buildMineIdentityIndex(result.features);
+  return result;
 }
 
 export async function loadJiangxiGeoJsonFromShp(shpPath, options = {}) {
   const geojson = await loadGeoJsonFromShp(path.resolve(shpPath), options);
-  return {
+  const result = {
     type: 'FeatureCollection',
     features: (geojson.features || [])
-      .filter((feature) => feature?.geometry?.type === 'Polygon' || feature?.geometry?.type === 'MultiPolygon')
-      .map((feature, index) => normalizeFeature(feature, index)),
+      .filter(
+        (feature) =>
+          feature?.geometry?.type === 'Polygon' || feature?.geometry?.type === 'MultiPolygon'
+      )
+      .map((feature) => normalizeFeature(feature)),
   };
+  buildMineIdentityIndex(result.features);
+  return result;
 }
 
 export async function loadJiangxiGeoJsonFromSource(sourcePath, options = {}) {

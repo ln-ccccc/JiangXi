@@ -23,6 +23,10 @@ export default defineConfig({
         target: `http://127.0.0.1:${process.env.MINER_BACKEND_PORT || 8000}`,
         changeOrigin: true,
       },
+      '/tiles': {
+        target: `http://127.0.0.1:${process.env.MINER_BACKEND_PORT || 8000}`,
+        changeOrigin: true,
+      },
       '/change-matrix-outputs': {
         target: `http://127.0.0.1:${process.env.MINER_BACKEND_PORT || 8000}`,
         changeOrigin: true,

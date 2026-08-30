@@ -4,7 +4,7 @@
     v-if="showPanel"
     class="fixed bottom-5 right-5 w-[480px] bg-white shadow-lg rounded-lg p-3"
   >
-    <h3 class="text-lg font-bold mb-2">矿山 {{ currentFID }}</h3>
+    <h3 class="text-lg font-bold mb-2">图斑 {{ currentTBBH }}</h3>
     <div class="border-b mb-2 flex space-x-4 text-sm">
       <button
         class="pb-1 border-b-2"
@@ -104,7 +104,7 @@ const API_BASE_URL = rawBase ? String(rawBase).replace(/\/$/, "") : "";
 const apiUrl = (p) => `${API_BASE_URL}${p}`;
 
 const showPanel = ref(false);
-const currentFID = ref("");
+const currentTBBH = ref("");
 const ndviMean = ref(0);
 const ndviTrend = ref(0);
 const tab = ref("matrix");
@@ -200,21 +200,22 @@ onMounted(async () => {
         : makeOffline('离线底图');
   baseLayer.addTo(map);
 
-  const res = await axios.get(apiUrl("/api/mines"));
-  const mines = res.data;
+  const res = await axios.get(apiUrl("/api/geojson"));
+  const mines = res.data?.features || [];
   const mineGroup = L.featureGroup().addTo(map);
 
   mines.forEach((mine) => {
     const geom = mine.geometry;
     const polygon = L.geoJSON(geom, { color: "blue" }).addTo(mineGroup);
     polygon.on("click", async () => {
-      currentFID.value = mine.fid;
+      const tbbh = String(mine.properties?.tbbh || '').trim();
+      currentTBBH.value = tbbh;
       tab.value = "matrix";
       showPanel.value = true;
 
         // 简要 NDVI 信息
       try {
-        const ndviRes = await axios.get(apiUrl(`/api/mines/ndvi?fid=${mine.fid}`));
+        const ndviRes = await axios.get(apiUrl(`/api/mines/ndvi?tbbh=${encodeURIComponent(tbbh)}`));
         const data = ndviRes.data;
         if (!data || data.error) {
           ndviMean.value = 0;
@@ -230,7 +231,7 @@ onMounted(async () => {
 
         // 指标时间序列
       try {
-        const idxRes = await axios.get(apiUrl(`/api/mines/indices?fid=${mine.fid}`));
+        const idxRes = await axios.get(apiUrl(`/api/mines/indices?tbbh=${encodeURIComponent(tbbh)}`));
         const d = idxRes.data;
         const years = (d.ndvi?.data || []).map((p) => p.year);
         indexSeries.value = {

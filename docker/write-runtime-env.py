@@ -29,6 +29,7 @@ def main():
     miner_enabled = "true" if miner_cfg.get("enabled", False) else "false"
     backend_url = os.environ.get("VUE_APP_BACKEND_URL", "")
     miner_url = os.environ.get("VUE_APP_MINER_URL", "")
+    inference_device = os.environ.get("JIANGXI_INFERENCE_DEVICE", "cpu").strip().lower() or "cpu"
 
     write_text(
         "/app/frontend/.env",
@@ -39,6 +40,7 @@ def main():
                 f"VUE_APP_BACKEND_URL={backend_url}",
                 f"VUE_APP_MINER_ENABLED = {miner_enabled}",
                 f"VUE_APP_MINER_URL={miner_url}",
+                f"VUE_APP_JIANGXI_INFERENCE_DEVICE={inference_device}",
                 "",
             ]
         ),
@@ -55,11 +57,12 @@ def main():
     miner_env = [
         f'VITE_GEOVIEW_URL="{geoview_url}"',
         f"VITE_MINER_API_BASE_URL={miner_api_base_url}",
-        f"VITE_MINER_MAP_PROVIDER={os.environ.get('MINER_MAP_PROVIDER', 'local')}",
+        f"VITE_MINER_MAP_PROVIDER={os.environ.get('MINER_MAP_PROVIDER', 'gaode')}",
         f"VITE_TDT_KEY={os.environ.get('MINER_TDT_KEY', '')}",
         f"VITE_MINER_LOCAL_TILE_URL={os.environ.get('MINER_LOCAL_TILE_URL', '/tiles/{z}/{x}/{y}.png')}",
         f"VITE_MINER_LOCAL_TMS={os.environ.get('MINER_LOCAL_TMS', '0')}",
         f"VITE_MINER_LOCAL_MAX_NATIVE_ZOOM={local_max_native_zoom}",
+        f"VITE_JIANGXI_INFERENCE_DEVICE={inference_device}",
         "",
     ]
     write_text("/app/miner/.env", "\n".join(miner_env))

@@ -35,7 +35,13 @@
             :lazy="true"
             :preview-src-list="[item.before_img]"
             :preview-teleported="true"
-          />
+            @load="handleImageLoad(item, 'before')"
+            @error="handleImageError(item, 'before')"
+          >
+            <template #error>
+              <div class="image-slot" role="alert">结果图片加载失败</div>
+            </template>
+          </el-image>
           <figcaption>
             <span>原始影像</span>
             <small>选择图片可放大检查</small>
@@ -51,7 +57,13 @@
             :lazy="true"
             :preview-src-list="[item.after_img]"
             :preview-teleported="true"
-          />
+            @load="handleImageLoad(item, 'after')"
+            @error="handleImageError(item, 'after')"
+          >
+            <template #error>
+              <div class="image-slot" role="alert">结果图片加载失败</div>
+            </template>
+          </el-image>
           <figcaption>
             <span>分析结果</span>
             <button
@@ -107,6 +119,8 @@
 
 <script>
 import { downloadimgWithWords } from "@/utils/download.js";
+import { legacySession } from "@/api/auth";
+import { redirectToLegacyLogin } from "@/utils/authRedirect";
 
 export default {
   name: "Imgshow",
@@ -122,7 +136,8 @@ export default {
   data() {
     return {
       fit: "fill",
-      childImgArr:[]
+      childImgArr:[],
+      imageErrors: {}
     };
   },
   mounted() {
@@ -154,6 +169,30 @@ export default {
         raster_missing_crs: "影像缺少坐标系",
       };
       return statusMap[status] || status;
+    },
+    imageErrorKey(item, side) {
+      return `${item?.record_id || item?.id || ''}:${side}`;
+    },
+    handleImageLoad(item, side) {
+      const key = this.imageErrorKey(item, side);
+      if (!this.imageErrors[key]) return;
+      const next = { ...this.imageErrors };
+      delete next[key];
+      this.imageErrors = next;
+    },
+    async handleImageError(item, side) {
+      const key = this.imageErrorKey(item, side);
+      let message = "结果图片加载失败，请刷新结果或检查后端文件。";
+      try {
+        const response = await legacySession();
+        if (!response?.data?.data?.authenticated) {
+          redirectToLegacyLogin("expired");
+          return;
+        }
+      } catch (error) {
+        message = "结果图片加载失败，请确认后端服务仍在运行。";
+      }
+      this.imageErrors = { ...this.imageErrors, [key]: message };
     },
   },
 };
@@ -253,6 +292,15 @@ export default {
   border: 1px solid var(--jx-border);
   border-radius: var(--jx-radius);
   background: var(--jx-surface);
+}
+
+.image-slot {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  padding: 16px;
+  color: var(--jx-danger);
+  text-align: center;
 }
 
 .result-figure figcaption {

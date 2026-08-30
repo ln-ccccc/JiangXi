@@ -24,7 +24,9 @@ def create_app(config_name=None):
         config_name = os.getenv('FLASK_CONFIG', 'development')
 
     app.config.from_object(config[config_name])
-    if config_name == 'production' or os.getenv('DB_BACKEND') or os.getenv('SQLITE_PATH'):
+    if config_name == 'production' or (
+        config_name != 'testing' and (os.getenv('DB_BACKEND') or os.getenv('SQLITE_PATH'))
+    ):
         app.config['DB_BACKEND'] = (os.getenv('DB_BACKEND') or app.config.get('DB_BACKEND') or 'mysql').strip().lower()
         app.config['SQLITE_PATH'] = os.getenv('SQLITE_PATH') or app.config.get('SQLITE_PATH') or '/app/runtime_data/jiangxi.sqlite3'
         app.config['SQLALCHEMY_DATABASE_URI'] = _build_database_uri()
@@ -44,7 +46,10 @@ def create_app(config_name=None):
     app.config['JSON_AS_ASCII'] = False
     CORS(
         app,
-        resources={r"/api/*": {"origins": _build_allowed_origins(app)}},
+        resources={
+            r"/api/*": {"origins": _build_allowed_origins(app)},
+            r"/_uploads/*": {"origins": _build_allowed_origins(app)},
+        },
         supports_credentials=True,
     )
 

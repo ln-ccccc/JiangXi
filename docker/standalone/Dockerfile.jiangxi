@@ -1,4 +1,11 @@
-FROM geoview-runtime:split-clean
+ARG JIANGXI_BASE_IMAGE=jiangxi-runtime:current
+ARG JIANGXI_RUNTIME_COMPAT_IMAGE=jiangxi-runtime:current
+ARG JIANGXI_GPU_COMPAT_IMAGE=jiangxi-analysis-worker:gpu
+FROM ${JIANGXI_RUNTIME_COMPAT_IMAGE} AS jiangxi-runtime-compat
+FROM ${JIANGXI_GPU_COMPAT_IMAGE} AS jiangxi-gpu-compat
+FROM ${JIANGXI_BASE_IMAGE}
+
+ARG JIANGXI_INFERENCE_DEVICE=cpu
 
 WORKDIR /app
 
@@ -10,6 +17,11 @@ ENV STANDALONE_MODE=1 \
     MINER_DEFAULT_GEO_SOURCE_PATH=/app/runtime_data/348个图斑.shp \
     MINER_DEFAULT_KMZ_PATH=/app/runtime_data/Jiangxi_NaturalMine.kmz \
     MINER_ECOLOGY_WORKBOOK_PATH=/app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx \
+    JIANGXI_ASSET_MANIFEST_PATH=/app/runtime_data/Jiangxi_asset_manifest.json \
+    JIANGXI_REQUIRE_ASSET_MANIFEST=1 \
+    JIANGXI_EXPECTED_COUNT=348 \
+    JIANGXI_INFERENCE_DEVICE=${JIANGXI_INFERENCE_DEVICE} \
+    MINER_CHANGE_OUTPUT_ROOT=/app/runtime_data/change_matrix_outputs \
     KML_ROI_INPUT_ROOT=/app/backend/static/upload \
     JIANGXI_MMSEG_MODEL_ROOT=/app/backend/model/jiangxi \
     JIANGXI_MMSEG_CONFIG_PATH=/app/backend/model/jiangxi/config.py \
@@ -17,7 +29,14 @@ ENV STANDALONE_MODE=1 \
     JIANGXI_MMSEG_METADATA_PATH=/app/backend/model/jiangxi/metadata.json \
     JIANGXI_MMSEG_SOURCE_ROOT=/app/backend/model/jiangxi/dinov3_swinV1 \
     GEOVIEW_BACKEND_URL=http://127.0.0.1:5008 \
-    MINER_MAP_PROVIDER=gaode
+    MINER_MAP_PROVIDER=gaode \
+    MINER_LOCAL_TILE_URL=/tiles/{z}/{x}/{y}.png \
+    MINER_LOCAL_TMS=0 \
+    VUE_APP_MINER_URL=http://127.0.0.1:4173/ \
+    VUE_APP_BACKEND_URL=http://127.0.0.1:5178/ \
+    VITE_GEOVIEW_URL=http://127.0.0.1:4174/
+
+ENV PATH=/opt/node20/bin:${PATH}
 
 COPY backend /app/backend
 COPY frontend /app/frontend
@@ -25,17 +44,93 @@ COPY miner /app/miner
 COPY docker /app/docker
 COPY config.yaml /app/config.yaml
 COPY docker/standalone/runtime_data /app/runtime_data
+COPY --from=jiangxi-runtime-compat /opt/conda /opt/conda
+COPY --from=jiangxi-runtime-compat /opt/node20 /opt/node20
+COPY --from=jiangxi-runtime-compat /app/miner/node_modules/@rollup/rollup-linux-x64-gnu /tmp/jiangxi-rollup-native
+COPY --from=jiangxi-runtime-compat /app/miner/node_modules/@esbuild/linux-x64 /tmp/jiangxi-esbuild-native
+COPY --from=jiangxi-gpu-compat /opt/venv/lib/python3.10/site-packages/mmcv /tmp/jiangxi-gpu-mmcv
+COPY --from=jiangxi-gpu-compat /opt/venv/lib/python3.10/site-packages/mmcv-2.1.0.dist-info /tmp/mmcv-2.1.0.dist-info
 
-RUN rm -rf -- /app/backend/model/mmseg_config \
+RUN rm -rf -- /app/backend/model/mmseg_config /app/backend/model/custom_models \
     && test -f /app/backend/model/jiangxi/config.py \
     && test -f /app/backend/model/jiangxi/model.pth \
     && test -f /app/backend/model/jiangxi/metadata.json \
     && test -d /app/backend/model/jiangxi/dinov3_swinV1 \
+    && test -f /app/runtime_data/Jiangxi_asset_manifest.json \
+    && test -f /app/runtime_data/348个图斑.shp \
+    && test -f /app/runtime_data/348个图斑.shx \
+    && test -f /app/runtime_data/348个图斑.dbf \
+    && test -f /app/runtime_data/348个图斑.prj \
+    && test -f /app/runtime_data/Jiangxi_NaturalMine.kmz \
+    && test -f /app/miner/data/348图斑_TableMERNet无图像预测结果.xlsx \
     && chmod +x /app/docker/entrypoint.sh /app/docker/*.sh /app/docker/standalone/*.sh \
     && mkdir -p /var/lib/jiangxi-standalone /app/runtime_data
 
+RUN /bin/bash -lc 'set -euo pipefail; \
+    rollup_dir=/app/miner/node_modules/@rollup/rollup-linux-x64-gnu; \
+    rollup_backup=/tmp/jiangxi-rollup-linux-x64-gnu; \
+    esbuild_dir=/app/miner/node_modules/@esbuild/linux-x64; \
+    esbuild_backup=/tmp/jiangxi-esbuild-linux-x64; \
+    if [ -f "${rollup_dir}/rollup.linux-x64-gnu.node" ]; then \
+      mkdir -p "${rollup_backup}" && cp -a "${rollup_dir}/." "${rollup_backup}/"; \
+    fi; \
+    if [ -f "${esbuild_dir}/bin/esbuild" ]; then \
+      mkdir -p "${esbuild_backup}" && cp -a "${esbuild_dir}/." "${esbuild_backup}/"; \
+    fi; \
+    if [ -f /tmp/jiangxi-rollup-native/rollup.linux-x64-gnu.node ]; then \
+      mkdir -p "${rollup_backup}" && cp -a /tmp/jiangxi-rollup-native/. "${rollup_backup}/"; \
+    fi; \
+    if [ -f /tmp/jiangxi-esbuild-native/bin/esbuild ]; then \
+      mkdir -p "${esbuild_backup}" && cp -a /tmp/jiangxi-esbuild-native/. "${esbuild_backup}/"; \
+    fi; \
+    PATH=/opt/node20/bin:${PATH} /opt/node20/bin/npm ci --offline --include=dev --ignore-scripts --no-audit --no-fund \
+      --cache /app/miner/.npm-cache --prefix /app/miner; \
+    if [ -f "${rollup_backup}/rollup.linux-x64-gnu.node" ]; then \
+      mkdir -p "${rollup_dir}" && cp -a "${rollup_backup}/." "${rollup_dir}/"; \
+    fi; \
+    if [ -f "${esbuild_backup}/bin/esbuild" ]; then \
+      mkdir -p "${esbuild_dir}" && cp -a "${esbuild_backup}/." "${esbuild_dir}/"; \
+    fi; \
+    test -f "${rollup_dir}/rollup.linux-x64-gnu.node" || \
+      { echo "Missing Linux Rollup native dependency: ${rollup_dir}/rollup.linux-x64-gnu.node" >&2; exit 1; }; \
+    test -f "${esbuild_dir}/bin/esbuild" || \
+      { echo "Missing Linux esbuild native dependency: ${esbuild_dir}/bin/esbuild" >&2; exit 1; }'
+
+RUN /bin/bash -lc 'set -euo pipefail; \
+    PATH=/opt/node20/bin:${PATH} /opt/node20/bin/npm ci --offline --include=dev --ignore-scripts --no-audit --no-fund \
+      --cache /app/frontend/.npm-cache --prefix /app/frontend; \
+    test -x /app/frontend/node_modules/.bin/vue-cli-service || \
+      { echo "Missing Vue CLI service in frontend dependencies" >&2; exit 1; }'
+
+RUN /bin/bash -lc 'source /opt/conda/etc/profile.d/conda.sh && conda activate MMSeg310 && \
+    if [ "${JIANGXI_INFERENCE_DEVICE}" != "cpu" ]; then \
+      rm -rf /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv \
+        /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv-*.dist-info; \
+      cp -a /tmp/jiangxi-gpu-mmcv /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv; \
+      cp -a /tmp/mmcv-2.1.0.dist-info /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv-2.1.0.dist-info; \
+    fi; \
+    mmdet_init="$(python -c "import importlib.util; print(importlib.util.find_spec(\"mmdet\").origin)")" && \
+    test -f "${mmdet_init}" && \
+    if grep -Fq "mmcv_maximum_version = '\''2.2.0'\''" "${mmdet_init}"; then \
+      sed -i "s/mmcv_maximum_version = '\''2.2.0'\''/mmcv_maximum_version = '\''2.3.0'\''/" "${mmdet_init}"; \
+    fi; \
+    grep -F "mmcv_maximum_version = '\''2.3.0'\''" "${mmdet_init}" || \
+      { echo "Unsupported MMDetection mmcv maximum version in ${mmdet_init}" >&2; exit 1; }; \
+    export PYTHONPATH="/app/backend/model/jiangxi/dinov3_swinV1:${PYTHONPATH:-}" && \
+    python -c "import os, torch; device=os.environ[\"JIANGXI_INFERENCE_DEVICE\"]; assert device == \"cpu\" or torch.version.cuda, \"GPU image requires CUDA-enabled PyTorch\"; print(\"torch runtime: \" + torch.__version__ + \" / CUDA \" + str(torch.version.cuda))" && \
+    python -c "import flask, openpyxl, rasterio, torch, mmseg, mmcv, mmdet; print(\"python runtime dependencies passed\")" && \
+    (python -c "import geopandas" || python -c "from osgeo import ogr")'
+
+RUN test -x /opt/node20/bin/node \
+    && test -x /opt/node20/bin/npm \
+    && test -d /app/miner/node_modules \
+    && /opt/node20/bin/node --version \
+    && /opt/node20/bin/npm --version
+
 EXPOSE 3000 4000 5008
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=5 CMD ["/app/docker/standalone/healthcheck.sh"]
+VOLUME ["/app/runtime_data"]
+
+HEALTHCHECK --interval=30s --timeout=15s --retries=5 CMD ["/app/docker/standalone/healthcheck.sh"]
 
 ENTRYPOINT ["/app/docker/standalone/start-jiangxi-standalone.sh"]

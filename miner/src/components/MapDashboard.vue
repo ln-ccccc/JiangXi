@@ -9,6 +9,7 @@
       :getAqiClass="getAqiClass"
       :username="username"
       @logout="emit('logout')"
+      @open-workspace="emit('open-workspace')"
     />
 
     <main class="main-container">
@@ -77,7 +78,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 import 'leaflet/dist/leaflet.css';
 
 import TheHeader from './TheHeader.vue';
@@ -87,19 +88,23 @@ import MapContainer from './MapContainer.vue';
 import MineDetailModal from './MineDetailModal.vue';
 import InferenceModal from './InferenceModal.vue';
 import TrendReportModal from './TrendReportModal.vue';
-import { JIANGXI_FALLBACK_CENTER } from '../config/minerDefaults.js';
+import { INFERENCE_DEVICE, JIANGXI_FALLBACK_CENTER } from '../config/minerDefaults.js';
 
 import { useWeather } from '../composables/useWeather';
 import { useMineData } from '../composables/useMineData';
 
-defineProps({
+const props = defineProps({
   username: {
+    type: String,
+    default: '',
+  },
+  focusTbbh: {
     type: String,
     default: '',
   },
 });
 
-const emit = defineEmits(['logout']);
+const emit = defineEmits(['logout', 'open-workspace']);
 
 const showMineDetail = ref(false);
 const showInferenceModal = ref(false);
@@ -154,6 +159,18 @@ const {
   exportTrendReport,
 } = useMineData();
 
+let dataLoadPromise = null;
+
+const ensureDataLoaded = () => {
+  if (allMinesData.value.length > 0) return Promise.resolve();
+  if (!dataLoadPromise) {
+    dataLoadPromise = loadData().finally(() => {
+      dataLoadPromise = null;
+    });
+  }
+  return dataLoadPromise;
+};
+
 const setSearchFeedback = (message = '', kind = 'info') => {
   searchFeedbackMessage.value = message;
   searchFeedbackKind.value = kind;
@@ -176,14 +193,15 @@ const performSearch = () => {
     .trim()
     .toLowerCase();
   if (!keyword) {
-    setSearchFeedback('请输入图斑名称或图斑 ID 后再定位', 'warning');
+    setSearchFeedback('请输入 TBBH、地图编号或图斑名称后再定位', 'warning');
     return;
   }
 
   const target = allMinesData.value.find((feature) => {
     const properties = feature.properties || {};
     return (
-      String(properties.FID_1) === keyword ||
+      String(properties.tbbh || '').toLowerCase() === keyword ||
+      String(properties.map_fid ?? '') === keyword ||
       String(properties.mine_name || '')
         .toLowerCase()
         .includes(keyword) ||
@@ -199,7 +217,7 @@ const performSearch = () => {
   }
 
   let filterReset = false;
-  if (!filteredMinesData.value.find((item) => item.properties.FID_1 === target.properties.FID_1)) {
+  if (!filteredMinesData.value.find((item) => item.properties.tbbh === target.properties.tbbh)) {
     filterCity.value = '';
     filterStatus.value = '';
     filterMethod.value = '';
@@ -208,7 +226,7 @@ const performSearch = () => {
   }
 
   const targetName =
-    target.properties.mine_name || target.properties.name || `图斑 ${target.properties.FID_1}`;
+    target.properties.mine_name || target.properties.name || `图斑 ${target.properties.tbbh}`;
   setSearchFeedback(
     filterReset
       ? `目标图斑不在当前筛选结果中，已重置筛选并定位到 ${targetName}`
@@ -217,16 +235,17 @@ const performSearch = () => {
   );
 
   nextTick(() => {
-    mapContainerRef.value?.flyToMine?.(target.properties.FID_1);
+    mapContainerRef.value?.flyToMine?.(target.properties.tbbh);
   });
 };
 
 const handleSelectMine = async ({ feature, center }) => {
   const properties = feature.properties || {};
   selectedMine.value = {
-    mine_id: properties.FID_1,
-    tbbh: properties.TBBH || '',
-    name: properties.mine_name || properties.name || `图斑 ${properties.FID_1}`,
+    mine_id: properties.tbbh || '',
+    tbbh: properties.tbbh || properties.TBBH || '',
+    map_fid: properties.map_fid,
+    name: properties.mine_name || properties.name || `图斑 ${properties.tbbh}`,
     city: properties.SHI || properties.city || '未标注地市',
     area: properties.area || properties.TBTYMJ || properties.TBTYMJ_1 || 0,
     status_raw: properties.HFZLQK || '未知',
@@ -242,13 +261,20 @@ const handleSelectMine = async ({ feature, center }) => {
   showMineDetail.value = true;
   selectedTab.value = '修复诊断';
 
-  await fetchEcologyProfile(properties.TBBH);
+  await fetchEcologyProfile(properties.tbbh || properties.TBBH);
   fetchRealtimeEnvironmentAt(center.lat, center.lng);
 };
 
-const focusByFid = (fid) => {
-  searchMineId.value = String(fid);
+const focusByTbbh = (tbbh) => {
+  searchMineId.value = String(tbbh);
   performSearch();
+};
+
+const focusAfterDataLoad = async (tbbh) => {
+  const normalized = String(tbbh || '').trim();
+  if (!normalized) return;
+  await ensureDataLoaded();
+  focusByTbbh(normalized);
 };
 
 const handleInferenceSubmit = async (formData) => {
@@ -261,14 +287,14 @@ const handleInferenceSubmit = async (formData) => {
       year: formData.singleYear,
       oldYear: formData.oldYear,
       newYear: formData.newYear,
-      device: 'cpu',
+      device: INFERENCE_DEVICE,
       limit: 0,
       syncIndices: true,
       indexTypes: ['ndvi', 'ndbi', 'ndwi', 'ndsi'],
     });
 
-    const writtenCount = Array.isArray(result?.written_fid_list)
-      ? result.written_fid_list.length
+    const writtenCount = Array.isArray(result?.written_tbbh_list)
+      ? result.written_tbbh_list.length
       : 0;
     const kmlChangedCount =
       Number(result?.kml_update?.updated || 0) + Number(result?.kml_update?.inserted || 0);
@@ -277,7 +303,7 @@ const handleInferenceSubmit = async (formData) => {
     }
     if (writtenCount > 0) {
       showInferenceModal.value = false;
-      focusByFid(result.written_fid_list[0]);
+      focusByTbbh(result.written_tbbh_list[0]);
     } else if (kmlChangedCount > 0) {
       showInferenceModal.value = false;
     }
@@ -301,7 +327,9 @@ const handleExportTrendReport = async (filters = {}) => {
 };
 
 onMounted(() => {
-  loadData();
+  ensureDataLoaded().then(() => {
+    if (props.focusTbbh) focusByTbbh(props.focusTbbh);
+  });
   fetchRealtimeEnvironmentAt(JIANGXI_FALLBACK_CENTER[0], JIANGXI_FALLBACK_CENTER[1]);
 
   window.addEventListener('resize', () => {
@@ -309,8 +337,15 @@ onMounted(() => {
   });
 });
 
+watch(
+  () => props.focusTbbh,
+  (tbbh) => {
+    if (tbbh) focusAfterDataLoad(tbbh);
+  }
+);
+
 defineExpose({
-  focusByFid,
+  focusByTbbh,
 });
 </script>
 

@@ -30,24 +30,48 @@ def _fake_torch(available):
 
 
 class InferenceDeviceTestCase(unittest.TestCase):
-    def test_default_device_is_fixed_to_cpu_even_when_cuda_is_available(self):
+    def test_default_device_remains_cpu_when_no_gpu_profile_is_configured(self):
         from applications.interface.inference_device import resolve_inference_device
 
-        with patch.dict(sys.modules, {"torch": _fake_torch(True)}):
+        with patch.dict(sys.modules, {"torch": _fake_torch(True)}), patch.dict(
+            "os.environ", {}, clear=True
+        ):
             runtime = resolve_inference_device()
 
         self.assertEqual(runtime["requested_device"], "cpu")
         self.assertEqual(runtime["effective_device"], "cpu")
 
-    def test_rejects_auto_and_cuda_modes(self):
+    def test_explicit_cuda_device_is_accepted_when_cuda_is_available(self):
+        from applications.interface.inference_device import resolve_inference_device
+
+        with patch.dict(sys.modules, {"torch": _fake_torch(True)}):
+            runtime = resolve_inference_device("cuda:0")
+
+        self.assertEqual(runtime["requested_device"], "cuda:0")
+        self.assertEqual(runtime["effective_device"], "cuda:0")
+        self.assertEqual(runtime["device_name"], "RTX test")
+        self.assertEqual(runtime["cuda_version"], "12.8")
+
+    def test_environment_selects_cuda_for_default_resolution(self):
+        from applications.interface.inference_device import resolve_inference_device
+
+        with patch.dict(sys.modules, {"torch": _fake_torch(True)}), patch.dict(
+            "os.environ", {"JIANGXI_INFERENCE_DEVICE": "cuda:0"}, clear=True
+        ):
+            runtime = resolve_inference_device()
+
+        self.assertEqual(runtime["effective_device"], "cuda:0")
+
+    def test_rejects_cuda_when_runtime_has_no_cuda(self):
         from applications.interface.inference_device import InvalidInferenceDevice, resolve_inference_device
 
-        for value in ("auto", "cuda:0"):
-            with self.assertRaisesRegex(InvalidInferenceDevice, "江西项目仅支持 CPU"):
+        with patch.dict(sys.modules, {"torch": _fake_torch(False)}):
+            with self.assertRaisesRegex(InvalidInferenceDevice, "CUDA 不可用"):
+                resolve_inference_device("cuda:0")
+
+    def test_rejects_auto_and_unsupported_cuda_modes(self):
+        from applications.interface.inference_device import InvalidInferenceDevice, resolve_inference_device
+
+        for value in ("auto", "cuda:1"):
+            with self.assertRaisesRegex(InvalidInferenceDevice, "仅支持 cpu、cuda:0"):
                 resolve_inference_device(value)
-
-    def test_rejects_unknown_device(self):
-        from applications.interface.inference_device import InvalidInferenceDevice, resolve_inference_device
-
-        with self.assertRaises(InvalidInferenceDevice):
-            resolve_inference_device("cuda:1")

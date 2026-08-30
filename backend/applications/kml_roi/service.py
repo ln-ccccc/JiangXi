@@ -1,11 +1,14 @@
 import json
 import os
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 
 from applications.kml_roi.kml_merge import merge_kml_increment
 from applications.region_source import resolve_default_jiangxi_kmz
+from applications.interface.inference_device import resolve_inference_device
 
 
 def _parse_last_json(stdout_text: str) -> dict:
@@ -35,6 +38,7 @@ def run_kml_roi_inference(
     year: str = "",
     old_year: str = "",
     new_year: str = "",
+    manifest_path: Optional[str] = None,
 ) -> dict:
     if not old_tif_path:
         raise ValueError("缺少 old_tif_path")
@@ -62,12 +66,21 @@ def run_kml_roi_inference(
         kml_update = merge_kml_increment(default_kml_path, input_kml_path, output_kml=merge_target)
         effective_kml_path = Path(kml_update["kml_path"])
     kml_path = str(effective_kml_path)
-    output_root = output_root or str(repo_root / "miner" / "change_matrix_outputs")
+    output_root = output_root or os.getenv("MINER_CHANGE_OUTPUT_ROOT") or str(repo_root / "miner" / "change_matrix_outputs")
     if not os.path.exists(kml_path):
         raise FileNotFoundError(f"kml_path 不存在: {kml_path}")
 
+    manifest_path = Path(
+        manifest_path
+        or os.getenv("JIANGXI_ASSET_MANIFEST_PATH")
+        or repo_root / "docker" / "standalone" / "runtime_data" / "Jiangxi_asset_manifest.json"
+    ).expanduser().resolve()
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"江西资产 manifest 不存在: {manifest_path}")
+
+    runtime = resolve_inference_device(device)
     cmd = [
-        "python",
+        os.getenv("PYTHON_EXE") or sys.executable,
         str(script_path),
         "--old_tif",
         str(old_tif_path),
@@ -78,7 +91,9 @@ def run_kml_roi_inference(
         "--output_root",
         str(output_root),
         "--device",
-        "cpu",
+        runtime["effective_device"],
+        "--manifest",
+        str(manifest_path),
     ]
 
     if year:
@@ -91,21 +106,23 @@ def run_kml_roi_inference(
     if int(limit or 0) > 0:
         cmd.extend(["--limit", str(int(limit))])
 
-    try:
-        run_res = subprocess.run(
-            cmd,
-            cwd=str(backend_root),
-            capture_output=True,
-            text=True,
-            timeout=3600,
-        )
-    except Exception as e:
-        raise RuntimeError(f"执行失败: {str(e)}") from e
+    with tempfile.TemporaryDirectory(prefix="kml-roi-infer-") as work_dir:
+        cmd.extend(["--work_dir", work_dir])
+        try:
+            run_res = subprocess.run(
+                cmd,
+                cwd=str(backend_root),
+                capture_output=True,
+                text=True,
+                timeout=3600,
+            )
+        except Exception as e:
+            raise RuntimeError(f"执行失败: {str(e)}") from e
 
-    if run_res.returncode != 0:
-        err = (run_res.stderr or run_res.stdout or "").strip()
-        raise RuntimeError(f"执行失败: {err[:500]}")
+        if run_res.returncode != 0:
+            err = (run_res.stderr or run_res.stdout or "").strip()
+            raise RuntimeError(f"执行失败: {err[:500]}")
 
-    result = _parse_last_json(run_res.stdout or "")
+        result = _parse_last_json(run_res.stdout or "")
     result["kml_update"] = kml_update
     return result

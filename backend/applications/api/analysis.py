@@ -1,3 +1,5 @@
+import json
+import os
 from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
@@ -12,14 +14,78 @@ from applications.common.utils.type_utils import items_handle
 from applications.common.utils.upload import img_url_handle
 from applications.common.utils.safe_paths import PathValidationError, resolve_managed_file, resolve_output_file
 from applications.interface.analysis import handle, spectral_index_calculation, terrain_classification
+from applications.interface.inference_device import resolve_inference_device
 from applications.kml_roi.service import run_kml_roi_inference
 from applications.models.analysis import Analysis
 from applications.schemas import AnalysisSchema
+from applications.project_hub.tbbh_identity import normalize_tbbh
 
 analysis_api = Blueprint('analysis_api', __name__, url_prefix='/api/analysis')
 repo_root = Path(__file__).resolve().parents[3]
-miner_change_output_root = repo_root / 'miner' / 'change_matrix_outputs'
+miner_change_output_root = Path(
+    os.getenv("MINER_CHANGE_OUTPUT_ROOT") or repo_root / "miner" / "change_matrix_outputs"
+).expanduser().resolve()
 upload_path_prefix = "static/upload/"
+
+
+def _asset_manifest_path():
+    return Path(
+        os.getenv("JIANGXI_ASSET_MANIFEST_PATH")
+        or repo_root / "docker" / "standalone" / "runtime_data" / "Jiangxi_asset_manifest.json"
+    ).expanduser().resolve()
+
+
+def _map_fid_to_tbbh(map_fid):
+    try:
+        map_fid = int(map_fid)
+    except (TypeError, ValueError):
+        return None
+    manifest_path = _asset_manifest_path()
+    if not manifest_path.is_file():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for raw_tbbh, raw_map_fid in (manifest.get("mapping", {}).get("tbbh_to_map_fid") or {}).items():
+            if int(raw_map_fid) == map_fid:
+                return normalize_tbbh(raw_tbbh)
+    except (OSError, TypeError, ValueError):
+        return None
+    return None
+
+
+def _tbbh_to_map_fid(tbbh):
+    try:
+        normalized_tbbh = normalize_tbbh(tbbh)
+    except ValueError:
+        return None
+    manifest_path = _asset_manifest_path()
+    if not manifest_path.is_file():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for raw_tbbh, raw_map_fid in (manifest.get("mapping", {}).get("tbbh_to_map_fid") or {}).items():
+            if normalize_tbbh(raw_tbbh) == normalized_tbbh:
+                return int(raw_map_fid)
+    except (OSError, TypeError, ValueError):
+        return None
+    return None
+
+
+def _history_identity(map_fid_dir):
+    manifest_path = map_fid_dir / "result_manifest.json"
+    if not manifest_path.is_file():
+        return None
+    try:
+        result = json.loads(manifest_path.read_text(encoding="utf-8"))
+        map_fid = int(result.get("map_fid"))
+        if str(map_fid) != map_fid_dir.name:
+            return None
+        tbbh = normalize_tbbh(result.get("tbbh"))
+    except (OSError, TypeError, ValueError):
+        return None
+    if _map_fid_to_tbbh(map_fid) != tbbh:
+        return None
+    return {"tbbh": tbbh, "map_fid": map_fid}
 
 
 def _normalize_uploaded_tiff_name(value):
@@ -42,7 +108,11 @@ def _iter_flash_records():
     for fid_dir in miner_change_output_root.iterdir():
         if not fid_dir.is_dir() or fid_dir.is_symlink():
             continue
-        fid = fid_dir.name
+        identity = _history_identity(fid_dir)
+        if identity is None:
+            continue
+        map_fid = identity["map_fid"]
+        tbbh = identity["tbbh"]
         for p in fid_dir.glob("*.png"):
             if p.is_symlink():
                 continue
@@ -57,14 +127,15 @@ def _iter_flash_records():
             if len(parts) != 2 or not parts[1].isdigit():
                 continue
             try:
-                target = resolve_output_file(miner_change_output_root, fid, name, {".png"})
+                target = resolve_output_file(miner_change_output_root, str(map_fid), name, {".png"})
             except PathValidationError:
                 continue
             if not target.is_file():
                 continue
             records.append({
-                "record_id": f"{fid}|{name}",
-                "fid": fid,
+                "record_id": f"{tbbh}|{name}",
+                "tbbh": tbbh,
+                "map_fid": map_fid,
                 "filename": name,
                 "mtime": target.stat().st_mtime,
             })
@@ -113,7 +184,7 @@ def semantic_segmentation_api():
             step1_,
             step2_,
             type_=3,
-            device='cpu',
+            device=resolve_inference_device()["effective_device"],
         )
         return success_api()
     except Exception as e:
@@ -151,7 +222,13 @@ def spectral_indices_api():
     year = req_json.get("year", "")
     band_map = req_json.get("band_map", {})
     kml_path = req_json.get("kml_path")
-    fid = req_json.get("fid")
+    try:
+        tbbh = normalize_tbbh(req_json.get("tbbh"))
+    except ValueError as exc:
+        return fail_api(str(exc)), 400
+    map_fid = _tbbh_to_map_fid(tbbh)
+    if map_fid is None:
+        return fail_api(f"TBBH 不存在: {tbbh}"), 404
     # 计算核心使用小写键（nir/red/green/swir），这里统一标准化避免前端大小写差异导致映射失效
     normalized_band_map = {str(k).lower(): v for k, v in (band_map or {}).items()}
 
@@ -165,8 +242,19 @@ def spectral_indices_api():
             normalized_band_map,
             type_=8,
             kml_path=kml_path,
-            fid=fid,
+            fid=map_fid,
+            tbbh=tbbh,
         )
+        for record in result.get("records", []) if isinstance(result, dict) else []:
+            record["tbbh"] = tbbh
+            record["map_fid"] = map_fid
+            record.pop("matched_fid_list", None)
+            record.pop("fid_stats", None)
+        if isinstance(result, dict):
+            result["tbbh"] = tbbh
+            result["map_fid"] = map_fid
+            result["matched_tbbh_list"] = [tbbh]
+            result.pop("matched_fid_list", None)
         warnings = result.get("sync_warnings", []) if isinstance(result, dict) else []
         blocking_warnings = [
             item for item in warnings
@@ -212,11 +300,12 @@ def kml_roi_inference_api():
             new_tif_path=str(new_tif_path),
             kml_path=str(kml_path),
             output_root=str(miner_change_output_root),
-            device='cpu',
+            device=resolve_inference_device()["effective_device"],
             limit=int(req_json.get('limit', 0) or 0),
             year=req_json.get('year') or '',
             old_year=req_json.get('old_year') or '',
             new_year=req_json.get('new_year') or '',
+            manifest_path=str(_asset_manifest_path()),
         )
         if data.get("status") == "failed":
             errors = data.get("tile_errors") or {}
@@ -236,10 +325,17 @@ def kml_roi_inference_api():
         return fail_api(str(e))
 
 
-@analysis_api.get('/kml_roi_output/<fid>/<filename>')
-def kml_roi_output_file(fid, filename):
+@analysis_api.get('/kml_roi_output/<tbbh>/<filename>')
+def kml_roi_output_file(tbbh, filename):
     try:
-        target = resolve_output_file(miner_change_output_root, fid, filename, {".png"})
+        normalized_tbbh = normalize_tbbh(tbbh)
+    except ValueError as exc:
+        return fail_api(str(exc)), 400
+    map_fid = _tbbh_to_map_fid(normalized_tbbh)
+    if map_fid is None:
+        return fail_api(f"TBBH 不存在: {normalized_tbbh}"), 404
+    try:
+        target = resolve_output_file(miner_change_output_root, str(map_fid), filename, {".png"})
     except PathValidationError as exc:
         return fail_api(str(exc)), 400
     if not target.is_file():
@@ -262,20 +358,21 @@ def kml_roi_history_list():
 
     data = []
     for idx, rec in enumerate(page_items):
-        fid = rec["fid"]
+        tbbh = rec["tbbh"]
+        map_fid = rec["map_fid"]
         filename = rec["filename"]
-        img_url = f"/api/analysis/kml_roi_output/{fid}/{filename}"
+        img_url = f"/api/analysis/kml_roi_output/{tbbh}/{filename}"
         stem = Path(filename).stem
         src_name = f"{stem}_src.png"
-        src_path = miner_change_output_root / fid / src_name
-        before_url = f"/api/analysis/kml_roi_output/{fid}/{src_name}" if src_path.exists() else img_url
+        src_path = miner_change_output_root / str(map_fid) / src_name
+        before_url = f"/api/analysis/kml_roi_output/{tbbh}/{src_name}" if src_path.exists() else img_url
         data.append({
             "id": total - start - idx,
             "record_id": rec["record_id"],
             "type": "地物分类",
             "before_img": before_url,
             "after_img": img_url,
-            "data": {"mode": "flash", "fid": fid, "file": filename},
+            "data": {"mode": "flash", "tbbh": tbbh, "map_fid": map_fid, "file": filename},
         })
     return table_api(data=data, count=total, limit=limit)
 
@@ -286,9 +383,18 @@ def kml_roi_history_remove_one():
     record_id = str(req_json.get("record_id", "")).strip()
     if "|" not in record_id:
         return fail_api("参数异常")
-    fid, filename = record_id.split("|", 1)
+    tbbh, filename = record_id.split("|", 1)
+    if tbbh in {".", ".."} or "/" in tbbh or "\\" in tbbh:
+        return fail_api("TBBH 参数不合法"), 400
     try:
-        target = resolve_output_file(miner_change_output_root, fid, filename, {".png"})
+        normalized_tbbh = normalize_tbbh(tbbh)
+    except ValueError as exc:
+        return fail_api(str(exc)), 400
+    map_fid = _tbbh_to_map_fid(normalized_tbbh)
+    if map_fid is None:
+        return fail_api(f"TBBH 不存在: {normalized_tbbh}"), 404
+    try:
+        target = resolve_output_file(miner_change_output_root, str(map_fid), filename, {".png"})
     except PathValidationError as exc:
         return fail_api(str(exc)), 400
     if not target.is_file():
@@ -304,12 +410,12 @@ def kml_roi_history_remove_one():
 def kml_roi_history_clear():
     removed = 0
     for rec in _iter_flash_records():
-        fid = rec["fid"]
+        map_fid = rec["map_fid"]
         filename = rec["filename"]
         try:
-            target = resolve_output_file(miner_change_output_root, fid, filename, {".png"})
+            target = resolve_output_file(miner_change_output_root, str(map_fid), filename, {".png"})
             src_target = resolve_output_file(
-                miner_change_output_root, fid, f"{Path(filename).stem}_src.png", {".png"}
+                miner_change_output_root, str(map_fid), f"{Path(filename).stem}_src.png", {".png"}
             )
         except PathValidationError:
             continue

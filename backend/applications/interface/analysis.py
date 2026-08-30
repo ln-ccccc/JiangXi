@@ -158,7 +158,18 @@ def _mine_boundary_stats(src, input_path, index_data, valid_mask, kml_path=None,
     return boundary_values, "ok", len(features), fid_stats
 
 
-def spectral_index_calculation(data_path, out_dir, names, index_type, year, band_map, type_, kml_path=None, fid=None):
+def spectral_index_calculation(
+    data_path,
+    out_dir,
+    names,
+    index_type,
+    year,
+    band_map,
+    type_,
+    kml_path=None,
+    fid=None,
+    tbbh=None,
+):
     print("光谱指数计算 -> start")
     index_type = index_type.upper()
     index_map = {
@@ -292,6 +303,15 @@ def spectral_index_calculation(data_path, out_dir, names, index_type, year, band
             sync_results.append(sync_result)
         else:
             sync_warnings.append(sync_result)
+        map_fid_stats = [
+            {
+                "map_fid": row["fid"],
+                "mean": row["mean"],
+                "pixel_count": row["pixel_count"],
+            }
+            for row in fid_stats
+        ]
+        matched_tbbhs = [str(tbbh).strip()] if tbbh and fid_stats else []
         data = json.dumps(
             {
                 "index_type": index_type,
@@ -305,8 +325,10 @@ def spectral_index_calculation(data_path, out_dir, names, index_type, year, band
                 "boundary_status": boundary_status,
                 "boundary_count": boundary_count,
                 "valid_pixel_count": int(boundary_values.size),
-                "matched_fid_list": [row["fid"] for row in fid_stats],
-                "fid_stats": fid_stats,
+                "tbbh": str(tbbh).strip() if tbbh else None,
+                "map_fid": fid,
+                "matched_tbbh_list": matched_tbbhs,
+                "map_fid_stats": map_fid_stats,
                 "synced_to_miner": bool(sync_result.get("synced")),
                 "sync_warning": None if sync_result.get("synced") else sync_result.get("reason"),
             }
@@ -319,8 +341,10 @@ def spectral_index_calculation(data_path, out_dir, names, index_type, year, band
                 "input": preview_input_url,
                 "index_type": index_type,
                 "year": str(year or ""),
-                "matched_fid_list": [row["fid"] for row in fid_stats],
-                "fid_stats": fid_stats,
+                "tbbh": str(tbbh).strip() if tbbh else None,
+                "map_fid": fid,
+                "matched_tbbh_list": matched_tbbhs,
+                "map_fid_stats": map_fid_stats,
                 "sync": sync_result,
             }
         )

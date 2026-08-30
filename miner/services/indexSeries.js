@@ -50,19 +50,19 @@ export function calculateStats(data) {
   };
 }
 
-function buildUnavailableMessage(indexKey, reason, sourceFile, fid) {
+function buildUnavailableMessage(indexKey, reason, sourceFile, tbbh) {
   const upperKey = String(indexKey || '').toUpperCase();
   if (reason === 'load_failed') {
     return `${upperKey} 指数文件加载失败：${sourceFile}`;
   }
   if (reason === 'missing_mine_data') {
-    return `${upperKey} 当前矿山无历史数据（FID ${fid}）`;
+    return `${upperKey} 当前图斑无历史数据（TBBH ${tbbh}）`;
   }
   return `${upperKey} 指数源文件缺失：${sourceFile}`;
 }
 
-export function buildIndicesPayload({ fid, sourceData = {}, availability = {} }) {
-  const payload = { fid: Number(fid) };
+export function buildIndicesPayload({ tbbh, map_fid, sourceData = {}, availability = {} }) {
+  const payload = { tbbh: String(tbbh || '').trim(), map_fid: Number(map_fid) };
   for (const key of Object.keys(INDEX_SOURCE_FILES)) {
     const rawData = Array.isArray(sourceData[key]) ? sourceData[key] : [];
     const status = availability[key] || {};
@@ -82,7 +82,7 @@ export function buildIndicesPayload({ fid, sourceData = {}, availability = {} })
       available,
       source_file: sourceFile,
       reason,
-      message: available ? '' : buildUnavailableMessage(key, reason, sourceFile, Number(fid)),
+      message: available ? '' : buildUnavailableMessage(key, reason, sourceFile, payload.tbbh),
     };
   }
   return payload;

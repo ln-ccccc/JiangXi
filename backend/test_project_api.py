@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from openpyxl import Workbook
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "."))
 
 from applications import create_app
@@ -102,6 +104,29 @@ class TestProjectAPI(unittest.TestCase):
             writer.writerows(rows)
         return csv_path
 
+    def _build_minimal_jiangxi_workbook(self):
+        workbook_path = Path(self.temp_dir) / "jiangxi.xlsx"
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.append(["FID", "TBBH", "SHI", "XIAN", "面积", "矿山位置_"])
+        worksheet.append([0, "SUBJECT-1", "宜春市", "高安市", 10000, "江西省宜春市高安市村A"])
+        workbook.save(workbook_path)
+        return workbook_path
+
+    def _build_minimal_jiangxi_manifest(self):
+        manifest_path = Path(self.temp_dir) / "Jiangxi_asset_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "mapping": {"tbbh_to_map_fid": {"SUBJECT-1": 1}},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return manifest_path
+
     def sync_admin(self, password="Secret123!"):
         os.environ["ADMIN_USERNAME"] = "admin"
         os.environ["ADMIN_PASSWORD"] = password
@@ -149,7 +174,7 @@ class TestProjectAPI(unittest.TestCase):
             json={
                 "mines": [
                     {
-                        "mine_fid": 101,
+                        "tbbh": "TBBH-101",
                         "mine_name_snapshot": "赣州矿山A",
                         "city_snapshot": "赣州市",
                         "area_snapshot": 12.5,
@@ -157,7 +182,7 @@ class TestProjectAPI(unittest.TestCase):
                         "sort_order": 1,
                     },
                     {
-                        "mine_fid": 102,
+                        "tbbh": "TBBH-102",
                         "mine_name_snapshot": "宜春矿山B",
                         "city_snapshot": "宜春市",
                         "area_snapshot": 9.8,
@@ -178,7 +203,7 @@ class TestProjectAPI(unittest.TestCase):
                 "display_name": "2024年春季影像",
                 "file_path": os.path.join(self.temp_dir, "imagery_2024.tif"),
                 "source_format": "tif",
-                "mine_fid": 101,
+                "tbbh": "TBBH-101",
                 "year_start": 2024,
                 "year_end": 2024,
                 "slice_config_json": {"slice_size": 1024, "padding": 64},
@@ -239,7 +264,7 @@ class TestProjectAPI(unittest.TestCase):
             json={
                 "mines": [
                     {
-                        "mine_fid": 201,
+                        "tbbh": "TBBH-201",
                         "mine_name_snapshot": "上饶矿山A",
                         "city_snapshot": "上饶市",
                         "area_snapshot": 4.2,
@@ -257,7 +282,7 @@ class TestProjectAPI(unittest.TestCase):
                 "display_name": "2025趋势报告",
                 "file_path": os.path.join(self.temp_dir, "trend_report.csv"),
                 "source_format": "csv",
-                "mine_fid": 201,
+                "tbbh": "TBBH-201",
                 "year_start": 2024,
                 "year_end": 2025,
                 "slice_config_json": {},
@@ -273,7 +298,7 @@ class TestProjectAPI(unittest.TestCase):
                 "coordinates": [[[100.0, 25.0], [100.1, 25.0], [100.1, 25.1], [100.0, 25.1], [100.0, 25.0]]],
             },
             "properties": {
-                "mine_fid": 201,
+                "tbbh": "TBBH-201",
                 "dataset_id": dataset_id,
                 "result_type": "report",
                 "year_start": 2024,
@@ -397,7 +422,12 @@ class TestProjectAPI(unittest.TestCase):
 
         self.login_as_admin()
         csv_path = self._build_minimal_jiangxi_csv()
-        seed_jiangxi_project_from_csv(csv_path, actor="test")
+        seed_jiangxi_project_from_csv(
+            csv_path,
+            actor="test",
+            workbook_path=self._build_minimal_jiangxi_workbook(),
+            manifest_path=self._build_minimal_jiangxi_manifest(),
+        )
 
         response = self.client.get("/api/projects")
         self.assertEqual(response.status_code, 200)
@@ -410,7 +440,7 @@ class TestProjectAPI(unittest.TestCase):
         self.assertEqual(detail["summary"]["region"], "江西省")
         self.assertGreaterEqual(len(detail["mines"]), 1)
         self.assertGreaterEqual(len(detail["plots"]), 1)
-        self.assertEqual(detail["plots"][0]["subject_code"], "SUBJECT-1")
+        self.assertEqual(detail["plots"][0]["tbbh"], "SUBJECT-1")
 
 
 if __name__ == "__main__":

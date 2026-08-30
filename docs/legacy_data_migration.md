@@ -30,6 +30,17 @@ miner/data/348图斑_TableMERNet无图像预测结果.xlsx
 
 ## 3. 可迁移成果的准入条件
 
+历史编号只能通过江西权威 `Jiangxi_asset_manifest.json` 的 `map_fid -> TBBH` 映射转换。
+执行脚本时可显式指定 manifest，并输出迁移报告：
+
+```powershell
+python backend/migrate_legacy_project_data.py `
+  --asset-manifest docker/standalone/runtime_data/Jiangxi_asset_manifest.json `
+  --migration-report docker/standalone/runtime_data/legacy_migration_report.json
+```
+
+没有 manifest、FID 命名空间未声明、或编号无法唯一映射时，脚本会中止并保留失败报告。
+
 只有同时满足以下条件的成果才能迁移：
 
 1. 业务人员人工确认成果属于江西。

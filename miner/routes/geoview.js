@@ -4,9 +4,9 @@ import { fetchSpectralLive } from '../services/geoviewBackend.js';
 
 const router = Router();
 
-router.get('/spectral_live/:fid', async (req, res) => {
+router.get('/spectral_live/:tbbh', async (req, res) => {
   try {
-    const upstream = await fetchSpectralLive(req.params.fid);
+    const upstream = await fetchSpectralLive(req.params.tbbh);
     res.status(upstream.status);
     res.type(upstream.contentType);
     res.send(upstream.body);

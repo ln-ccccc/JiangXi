@@ -9,15 +9,16 @@
         <div class="modal-body">
           <div class="info-grid">
             <div class="info-item">
-              <span class="label">图斑ID:</span> <span class="val">{{ mineData.mine_id }}</span>
-            </div>
-            <div class="info-item">
               <span class="label">所属地市:</span>
               <span class="val">{{ mineData.city || '暂无' }}</span>
             </div>
             <div class="info-item">
               <span class="label">TBBH:</span>
               <span class="val">{{ mineData.tbbh || '暂无' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">地图编号:</span>
+              <span class="val">{{ mineData.map_fid ?? '暂无' }}</span>
             </div>
             <div class="info-item">
               <span class="label">面积:</span>

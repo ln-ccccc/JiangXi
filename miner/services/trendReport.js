@@ -23,10 +23,12 @@ const round = (v, digits = 6) => {
 };
 
 const getMineAreaM2 = (properties = {}) => {
-  return toFinite(properties.area)
-    ?? toFinite(properties.TBTYMJ)
-    ?? toFinite(properties.TBTYMJ_1)
-    ?? toFinite(properties.SHAPE_Area);
+  return (
+    toFinite(properties.area) ??
+    toFinite(properties.TBTYMJ) ??
+    toFinite(properties.TBTYMJ_1) ??
+    toFinite(properties.SHAPE_Area)
+  );
 };
 
 const readClassRatio = (outputRoot, fid) => {
@@ -53,15 +55,16 @@ const buildRow = ({ feature, ratio, className }) => {
   if (startPercent === null || endPercent === null) return null;
 
   const p = feature?.properties || {};
-  const fid = toFinite(p.FID_1 ?? ratio?.fid);
+  const mapFid = toFinite(p.map_fid ?? p.FID_1 ?? ratio?.fid);
   const mineAreaM2 = getMineAreaM2(p);
   const mineAreaKm2 = mineAreaM2 === null ? null : mineAreaM2 / 1e6;
-  const startAreaKm2 = mineAreaKm2 === null ? null : mineAreaKm2 * startPercent / 100;
-  const endAreaKm2 = mineAreaKm2 === null ? null : mineAreaKm2 * endPercent / 100;
+  const startAreaKm2 = mineAreaKm2 === null ? null : (mineAreaKm2 * startPercent) / 100;
+  const endAreaKm2 = mineAreaKm2 === null ? null : (mineAreaKm2 * endPercent) / 100;
 
   return {
-    fid: fid === null ? p.FID_1 : fid,
-    mine_name: p.mine_name || p.name || `Mine_${p.FID_1 ?? ratio?.fid ?? ''}`,
+    tbbh: p.tbbh,
+    map_fid: mapFid === null ? p.map_fid : mapFid,
+    mine_name: p.mine_name || p.name || `Mine_${p.map_fid ?? ratio?.fid ?? ''}`,
     start_year: startYear,
     end_year: endYear,
     start_percent: round(startPercent),
@@ -71,7 +74,9 @@ const buildRow = ({ feature, ratio, className }) => {
     mine_area_km2: round(mineAreaKm2),
     start_area_km2: round(startAreaKm2),
     end_area_km2: round(endAreaKm2),
-    delta_area_km2: round(endAreaKm2 === null || startAreaKm2 === null ? null : endAreaKm2 - startAreaKm2),
+    delta_area_km2: round(
+      endAreaKm2 === null || startAreaKm2 === null ? null : endAreaKm2 - startAreaKm2
+    ),
   };
 };
 
@@ -82,15 +87,22 @@ const matchesDirection = (row, direction) => {
   return row.delta_percent === 0;
 };
 
-export function buildTrendReport({ outputRoot, minesData, className = 'bareground', direction = 'all' }) {
-  const selectedClass = CLASS_OPTIONS.some((item) => item.key === className) ? className : 'bareground';
+export function buildTrendReport({
+  outputRoot,
+  minesData,
+  className = 'bareground',
+  direction = 'all',
+}) {
+  const selectedClass = CLASS_OPTIONS.some((item) => item.key === className)
+    ? className
+    : 'bareground';
   const selectedDirection = VALID_DIRECTIONS.has(direction) ? direction : 'all';
   const rows = [];
   let missingCount = 0;
 
   (minesData || []).forEach((feature) => {
-    const fid = feature?.properties?.FID_1;
-    const ratio = readClassRatio(outputRoot, fid);
+    const mapFid = feature?.properties?.map_fid ?? feature?.properties?.FID_1;
+    const ratio = readClassRatio(outputRoot, mapFid);
     if (!ratio) {
       missingCount += 1;
       return;

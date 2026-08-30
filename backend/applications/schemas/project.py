@@ -18,7 +18,7 @@ def _json_text_to_obj(value):
 
 class ProjectMineBindingSchema(ma.Schema):
     id = fields.Integer()
-    mine_fid = fields.Integer()
+    tbbh = fields.Str()
     mine_name_snapshot = fields.Str()
     city_snapshot = fields.Str()
     area_snapshot = fields.Float(allow_none=True)
@@ -31,8 +31,7 @@ class ProjectMineBindingSchema(ma.Schema):
 class JiangxiMinePlotSchema(ma.Schema):
     id = fields.Integer()
     project_id = fields.Integer()
-    mine_fid = fields.Integer()
-    subject_code = fields.Str()
+    tbbh = fields.Str()
     city = fields.Str(allow_none=True)
     county = fields.Str(allow_none=True)
     location_text = fields.Str(allow_none=True)
@@ -58,7 +57,7 @@ class ProjectDatasetSchema(ma.Schema):
     display_name = fields.Str()
     file_path = fields.Str()
     source_format = fields.Str(allow_none=True)
-    mine_fid = fields.Integer(allow_none=True)
+    tbbh = fields.Str(allow_none=True)
     year_start = fields.Integer(allow_none=True)
     year_end = fields.Integer(allow_none=True)
     slice_config_json = fields.Method("get_slice_config")

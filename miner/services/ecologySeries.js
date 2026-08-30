@@ -10,6 +10,8 @@ export const ECOLOGY_METRICS = {
   total_precip_mm: { label: '年降水量', unit: 'mm', prefixes: ['total_precip_mm'] },
 };
 
+import { normalizeTbbh } from './jiangxiIdentity.js';
+
 const BUSINESS_FIELDS = {
   province: '省市',
   city: '地市',
@@ -130,8 +132,12 @@ export function parseEcologyWorkbookRows(rows = []) {
   for (const row of rows) {
     const fid = Number(row?.FID ?? row?.fid ?? row?.FID_1);
     if (!Number.isInteger(fid) || fid < 0) continue;
-    const tbbh = String(row?.TBBH || '').trim();
-    if (!tbbh) continue;
+    let tbbh;
+    try {
+      tbbh = normalizeTbbh(row?.TBBH);
+    } catch (_) {
+      continue;
+    }
 
     if (!result[tbbh]) {
       result[tbbh] = {
@@ -165,10 +171,15 @@ export function parseEcologyWorkbookRows(rows = []) {
   return result;
 }
 
-export function buildEcologySeriesPayload({ fid, dataMap = {} }) {
-  const numericFid = Number(fid);
-  const current = Object.values(dataMap).find((profile) => profile?.excel_fid === numericFid) || {};
-  const payload = { fid: numericFid };
+export function buildEcologySeriesPayload({ tbbh, dataMap = {} }) {
+  let normalizedTbbh = null;
+  try {
+    normalizedTbbh = normalizeTbbh(tbbh);
+  } catch (_) {
+    // Keep the payload shape stable for a missing/invalid query.
+  }
+  const current = dataMap[normalizedTbbh] || {};
+  const payload = { tbbh: normalizedTbbh || null };
 
   for (const [metricKey, config] of Object.entries(ECOLOGY_METRICS)) {
     const data = current[metricKey]?.data || [];
@@ -265,8 +276,11 @@ export function parseEcologyProfileFid(value) {
 
 export function parseEcologyProfileTbbh(value) {
   if (typeof value !== 'string') return null;
-  const tbbh = value.trim();
-  return tbbh || null;
+  try {
+    return normalizeTbbh(value);
+  } catch (_) {
+    return null;
+  }
 }
 
 export function resolveEcologyWorkbookPath({

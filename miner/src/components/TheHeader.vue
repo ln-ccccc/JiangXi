@@ -27,6 +27,9 @@
       <button v-if="username" class="secondary-btn" type="button" @click="$emit('logout')">
         <span>退出登录</span>
       </button>
+      <button class="secondary-btn" type="button" @click="$emit('open-workspace')">
+        <span>项目工作台</span>
+      </button>
       <div class="platform-link-control">
         <button
           class="system-btn"
@@ -73,7 +76,7 @@ defineProps({
   },
 });
 
-defineEmits(['logout']);
+defineEmits(['logout', 'open-workspace']);
 
 const geoViewUrl = buildGeoViewUrl(import.meta.env.VITE_GEOVIEW_URL);
 const geoViewButtonLabel = geoViewUrl ? '打开解译平台' : '解译平台地址未配置';

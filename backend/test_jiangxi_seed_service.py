@@ -1,4 +1,5 @@
 import csv
+import json
 import os
 import tempfile
 import unittest
@@ -14,6 +15,8 @@ from applications.models.project import Project
 from applications.models.project import ProjectActivityLog, ProjectMineBinding
 from applications.project_hub.jiangxi_seed_service import (
     aggregate_subject_rows,
+    build_map_aligned_records,
+    get_jiangxi_seed_database_state,
     reset_project_domain_tables,
     seed_jiangxi_project_from_csv,
     sync_jiangxi_project_from_workbook,
@@ -221,6 +224,21 @@ class JiangxiSeedServiceTestCase(unittest.TestCase):
         workbook.save(workbook_path)
         return workbook_path
 
+    def _write_manifest(self):
+        temp_dir = Path(tempfile.mkdtemp(prefix="jiangxi_manifest_"))
+        manifest_path = temp_dir / "Jiangxi_asset_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "mapping": {"tbbh_to_map_fid": {"TBBH-000": 1, "TBBH-001": 2}},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return manifest_path
+
     def test_aggregate_subject_rows_groups_by_subject_code(self):
         csv_path = self._write_csv()
         subjects, skipped, warnings, total_rows = aggregate_subject_rows(csv_path)
@@ -246,41 +264,47 @@ class JiangxiSeedServiceTestCase(unittest.TestCase):
         self.assertEqual(Project.query.count(), 0)
         self.assertEqual(Analysis.query.count(), 0)
 
+    def test_jiangxi_seed_database_state_distinguishes_empty_ready_and_invalid(self):
+        self.assertEqual(get_jiangxi_seed_database_state(), "empty")
+
+        db.session.add(
+            Project(
+                name="江西矿山生态修复监测项目",
+                region="江西省",
+                remark="system_seed:jiangxi_tbbh",
+                status="active",
+            )
+        )
+        db.session.commit()
+        self.assertEqual(get_jiangxi_seed_database_state(), "ready")
+
+        db.session.query(Project).delete()
+        db.session.add(Project(name="其他项目", region="江西省", status="active"))
+        db.session.commit()
+        self.assertEqual(get_jiangxi_seed_database_state(), "invalid")
+
     def test_seed_jiangxi_project_from_csv_creates_default_project_bindings_and_plots(self):
         csv_path = self._write_csv()
 
-        result = seed_jiangxi_project_from_csv(csv_path, actor="system")
+        with self.assertRaisesRegex(ValueError, "必须提供权威 Excel"):
+            seed_jiangxi_project_from_csv(csv_path, actor="system")
 
-        self.assertEqual(result["project_name"], "江西矿山生态修复监测项目")
-        self.assertEqual(result["project_count"], 1)
-        self.assertEqual(result["subject_count"], 2)
-        self.assertEqual(result["plot_count"], 3)
-        self.assertEqual(result["skipped_count"], 0)
-        self.assertEqual(result["monitor_start_year"], 2017)
-        self.assertEqual(result["monitor_end_year"], 2025)
-        self.assertEqual(Project.query.count(), 1)
-        self.assertEqual(ProjectMineBinding.query.count(), 2)
-        self.assertEqual(JiangxiMinePlot.query.count(), 3)
-        self.assertEqual(ProjectActivityLog.query.count(), 1)
-
-        project = Project.query.first()
-        self.assertEqual(project.region, "江西省")
-        self.assertEqual(project.remark, "system_seed:jiangxi_mine_csv")
-
-        first_binding = ProjectMineBinding.query.order_by(ProjectMineBinding.mine_fid.asc()).first()
-        self.assertEqual(first_binding.city_snapshot, "南昌市")
-        self.assertEqual(round(first_binding.area_snapshot, 2), 80.0)
-        self.assertIn("完全修复", first_binding.status_snapshot)
-
-        second_binding = ProjectMineBinding.query.order_by(ProjectMineBinding.mine_fid.asc()).all()[1]
-        self.assertEqual(second_binding.city_snapshot, "宜春市")
-        self.assertEqual(round(second_binding.area_snapshot, 2), 150.0)
-        self.assertIn("部分修复", second_binding.status_snapshot)
+        self.assertEqual(Project.query.count(), 0)
+        self.assertEqual(ProjectMineBinding.query.count(), 0)
+        self.assertEqual(JiangxiMinePlot.query.count(), 0)
 
     def test_sync_jiangxi_project_from_workbook_replaces_subject_bindings_with_map_plots(self):
-        seed_jiangxi_project_from_csv(self._write_csv(), actor="system")
+        manifest_path = self._write_manifest()
+        seed_jiangxi_project_from_csv(
+            self._write_csv(),
+            actor="system",
+            workbook_path=self._write_workbook(),
+            manifest_path=manifest_path,
+        )
 
-        result = sync_jiangxi_project_from_workbook(self._write_workbook(), actor="system")
+        result = sync_jiangxi_project_from_workbook(
+            self._write_workbook(), actor="system", manifest_path=manifest_path
+        )
 
         self.assertEqual(result["mine_count"], 2)
         self.assertEqual(result["plot_count"], 2)
@@ -290,13 +314,23 @@ class JiangxiSeedServiceTestCase(unittest.TestCase):
         project = Project.query.first()
         self.assertEqual(project.monitor_start_year, 2013)
         self.assertEqual(project.monitor_end_year, 2025)
-        first_binding = ProjectMineBinding.query.order_by(ProjectMineBinding.mine_fid.asc()).first()
-        self.assertEqual(first_binding.mine_fid, 0)
+        first_binding = ProjectMineBinding.query.order_by(ProjectMineBinding.tbbh.asc()).first()
+        self.assertEqual(first_binding.tbbh, "TBBH-000")
         self.assertEqual(first_binding.mine_name_snapshot, "江西省南昌市进贤县示例图斑 A")
         self.assertEqual(round(first_binding.area_snapshot, 2), 1.0)
-        first_plot = JiangxiMinePlot.query.order_by(JiangxiMinePlot.mine_fid.asc()).first()
-        self.assertEqual(first_plot.subject_code, "TBBH-000")
+        first_plot = JiangxiMinePlot.query.order_by(JiangxiMinePlot.tbbh.asc()).first()
+        self.assertEqual(first_plot.tbbh, "TBBH-000")
         self.assertEqual(first_plot.plot_code, "TBBH-000")
+
+    def test_build_map_aligned_records_accepts_excel_fid_zero(self):
+        records = build_map_aligned_records(
+            self._write_workbook(),
+            {"TBBH-000": 23, "TBBH-001": 24},
+        )
+
+        first = next(record for record in records if record["tbbh"] == "TBBH-000")
+        self.assertEqual(first["excel_fid"], 0)
+        self.assertEqual(first["map_fid"], 23)
 
 
 class SQLiteProductionConfigTestCase(unittest.TestCase):

@@ -22,7 +22,7 @@ test('buildKmlRoiArgs includes single year and omits old/new years', () => {
   assert.equal(args.includes('--new_year'), false);
 });
 
-test('buildKmlRoiArgs always sends the Jiangxi CPU device', () => {
+test('buildKmlRoiArgs forwards the selected Jiangxi device', () => {
   const args = buildKmlRoiArgs({
     scriptPath: '/app/backend/kml_roi_infer.py',
     oldTifPath: '/data/old.tif',
@@ -43,7 +43,7 @@ test('buildKmlRoiArgs always sends the Jiangxi CPU device', () => {
     '--output_root',
     '/data/out',
     '--device',
-    'cpu',
+    'cuda:0',
   ]);
 });
 

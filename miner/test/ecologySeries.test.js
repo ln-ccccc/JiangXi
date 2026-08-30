@@ -28,10 +28,10 @@ test('parseEcologyWorkbookRows extracts yearly series by metric prefix', () => {
 
 test('buildEcologySeriesPayload returns missing message when mine has no yearly ecology data', () => {
   const payload = buildEcologySeriesPayload({
-    fid: 999,
+    tbbh: 'missing-tbbh',
     dataMap: {},
   });
-  assert.equal(payload.fid, 999);
+  assert.equal(payload.tbbh, 'missing-tbbh');
   assert.equal(payload.ndvi.available, false);
   assert.match(payload.ndvi.message, /暂无该图斑年度数据/);
 });

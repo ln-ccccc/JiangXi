@@ -132,6 +132,8 @@ class TestSpectralIndicesAPI(unittest.TestCase):
         return fname
 
     def _post_spectral(self, payload):
+        payload = dict(payload)
+        payload.setdefault("tbbh", "ZJ3607232021018001")
         resp = self.client.post("/api/analysis/spectral_indices", json=payload)
         data = json.loads(resp.data)
         return resp.status_code, data
@@ -321,11 +323,12 @@ class TestSpectralIndicesAPI(unittest.TestCase):
         tif = self._make_constant_geo_tif("ndvi_poly")
         tmp = tempfile.mkdtemp()
         self.temp_dirs.append(tmp)
+        tbbh = "ZJ3607232021018001"
         kml_path = os.path.join(tmp, "mine.kml")
         with open(kml_path, "w", encoding="utf-8") as f:
             f.write(
                 """<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>
-                <Placemark><name>9002</name><Polygon><outerBoundaryIs><LinearRing><coordinates>
+                <Placemark><name>23</name><Polygon><outerBoundaryIs><LinearRing><coordinates>
                 100,17,0 104,17,0 104,21,0 100,21,0 100,17,0
                 </coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>
                 </Document></kml>"""
@@ -337,6 +340,7 @@ class TestSpectralIndicesAPI(unittest.TestCase):
                 "index_type": "NDVI",
                 "band_map": {"nir": 4, "red": 3},
                 "kml_path": kml_path,
+                "tbbh": tbbh,
             }
         )
 
@@ -345,9 +349,10 @@ class TestSpectralIndicesAPI(unittest.TestCase):
         self._record_result_files(body["data"])
         latest = Analysis.query.filter_by(type=8).order_by(Analysis.id.desc()).first()
         meta = json.loads(latest.data)
-        self.assertEqual(meta["matched_fid_list"], [9002])
+        self.assertEqual(meta["matched_tbbh_list"], [tbbh])
         self.assertAlmostEqual(meta["mean"], 0.5)
-        self.assertEqual(meta["fid_stats"][0]["pixel_count"], 16)
+        self.assertEqual(meta["map_fid_stats"][0]["map_fid"], 23)
+        self.assertEqual(meta["map_fid_stats"][0]["pixel_count"], 16)
 
 
 if __name__ == "__main__":

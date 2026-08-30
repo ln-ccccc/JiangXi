@@ -56,6 +56,12 @@ class RuntimePublicUrlTests(unittest.TestCase):
         self.assertIn("VUE_APP_MINER_URL=http://127.0.0.1:4173/", frontend_env)
         self.assertIn('VITE_GEOVIEW_URL="http://127.0.0.1:4174/"', miner_env)
 
+    def test_inference_device_is_written_to_both_frontend_build_environments(self):
+        outputs = run_main_with_environment({"JIANGXI_INFERENCE_DEVICE": "cuda:0"})
+
+        self.assertIn("VUE_APP_JIANGXI_INFERENCE_DEVICE=cuda:0", outputs["/app/frontend/.env"])
+        self.assertIn("VITE_JIANGXI_INFERENCE_DEVICE=cuda:0", outputs["/app/miner/.env"])
+
     def test_missing_public_urls_remain_empty_without_generic_port_fallbacks(self):
         outputs = run_main_with_environment({})
 
@@ -64,6 +70,7 @@ class RuntimePublicUrlTests(unittest.TestCase):
         self.assertIn("VUE_APP_BACKEND_URL=", frontend_env)
         self.assertIn("VUE_APP_MINER_URL=", frontend_env)
         self.assertIn('VITE_GEOVIEW_URL=""', miner_env)
+        self.assertIn("VITE_MINER_MAP_PROVIDER=gaode", miner_env)
         self.assertIn("VITE_MINER_LOCAL_TILE_URL=/tiles/{z}/{x}/{y}.png", miner_env)
         combined = frontend_env + miner_env
         self.assertNotIn("http://localhost:3000", combined)

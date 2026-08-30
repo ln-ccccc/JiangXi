@@ -31,9 +31,25 @@ class TestLegacyProjectMigration(unittest.TestCase):
         self.output_root = self.miner_root / "change_matrix_outputs"
         self.static_root = Path(self.temp_dir) / "backend" / "static"
         self.kml_path = self.miner_root / "Jiangxi_NaturalMine.kmz"
+        self.manifest_path = Path(self.temp_dir) / "Jiangxi_asset_manifest.json"
 
         self.output_root.mkdir(parents=True, exist_ok=True)
         (self.static_root / "upload" / "res").mkdir(parents=True, exist_ok=True)
+        self.manifest_path.write_text(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "mapping": {
+                        "tbbh_to_map_fid": {
+                            "TBBH-101": 101,
+                            "TBBH-102": 102,
+                            "TBBH-103": 103,
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
 
     def tearDown(self):
         db.session.remove()
@@ -174,6 +190,7 @@ class TestLegacyProjectMigration(unittest.TestCase):
             output_root=self.output_root,
             kml_path=self.kml_path,
             static_root=self.static_root,
+            asset_manifest_path=self.manifest_path,
         )
 
         self.assertTrue(result["project_created"])
@@ -224,6 +241,7 @@ class TestLegacyProjectMigration(unittest.TestCase):
             output_root=self.output_root,
             kml_path=self.kml_path,
             static_root=self.static_root,
+            asset_manifest_path=self.manifest_path,
         )
         second = migrate_legacy_project_data(
             project_name="江西历史成果迁移项目",
@@ -232,6 +250,7 @@ class TestLegacyProjectMigration(unittest.TestCase):
             output_root=self.output_root,
             kml_path=self.kml_path,
             static_root=self.static_root,
+            asset_manifest_path=self.manifest_path,
         )
 
         project = Project.query.filter_by(name="江西历史成果迁移项目").first()

@@ -59,12 +59,82 @@ class JiangxiSourceIsolationTests(unittest.TestCase):
         self.assertNotIn("model/mmseg_config", source)
         self.assertIn("JIANGXI_MMSEG_SOURCE_ROOT", source)
 
+    def test_seed_runtime_recovers_only_an_empty_database_when_marker_remains(self):
+        source = (
+            ROOT / "docker" / "standalone" / "seed-jiangxi-runtime.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("get_jiangxi_seed_database_state", source)
+        self.assertIn("contextlib.redirect_stdout", source)
+        self.assertIn("empty)", source)
+        self.assertIn("residual domain data; manual recovery required", source)
+        self.assertIn("--sync-existing", source)
+
     def test_standalone_image_uses_controlled_upload_root(self):
         source = (
             ROOT / "docker" / "standalone" / "Dockerfile.jiangxi"
         ).read_text(encoding="utf-8")
 
         self.assertIn("KML_ROI_INPUT_ROOT=/app/backend/static/upload", source)
+
+    def test_standalone_image_has_offline_selectable_base_and_vendored_mmseg_check(self):
+        source = (
+            ROOT / "docker" / "standalone" / "Dockerfile.jiangxi"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("ARG JIANGXI_BASE_IMAGE=jiangxi-runtime:current", source)
+        self.assertIn("FROM ${JIANGXI_BASE_IMAGE}", source)
+        self.assertIn(
+            'PYTHONPATH="/app/backend/model/jiangxi/dinov3_swinV1:${PYTHONPATH:-}"',
+            source,
+        )
+        self.assertIn("mmdet_init", source)
+        self.assertIn("mmcv_maximum_version", source)
+        self.assertIn("2.3.0", source)
+        self.assertIn("rollup-linux-x64-gnu", source)
+        self.assertIn("@esbuild/linux-x64", source)
+        self.assertIn("npm ci --offline", source)
+
+    def test_online_satellite_is_the_default_map_provider(self):
+        dockerfile = (ROOT / "docker" / "standalone" / "Dockerfile.jiangxi").read_text(
+            encoding="utf-8"
+        )
+        entrypoint = (ROOT / "docker" / "entrypoint.sh").read_text(encoding="utf-8")
+        standalone = (
+            ROOT / "docker" / "standalone" / "start-jiangxi-standalone.sh"
+        ).read_text(encoding="utf-8")
+        compose = (ROOT / "docker-compose.prod.yml").read_text(encoding="utf-8")
+
+        self.assertIn("MINER_MAP_PROVIDER=gaode", dockerfile)
+        self.assertIn("${MINER_MAP_PROVIDER:-gaode}", entrypoint)
+        self.assertIn("${MINER_MAP_PROVIDER:-gaode}", standalone)
+        self.assertIn("${MINER_MAP_PROVIDER:-gaode}", compose)
+
+    def test_standalone_entrypoint_forces_sqlite_over_external_database_env(self):
+        standalone = (
+            ROOT / "docker" / "standalone" / "start-jiangxi-standalone.sh"
+        ).read_text(encoding="utf-8")
+        entrypoint = (ROOT / "docker" / "entrypoint.sh").read_text(encoding="utf-8")
+
+        self.assertIn('export DB_BACKEND="sqlite"', standalone)
+        self.assertIn('export DB_BACKEND="sqlite"', entrypoint)
+        self.assertIn('VUE_APP_MINER_URL="${VUE_APP_MINER_URL:-http://127.0.0.1:4173/}"', entrypoint)
+        self.assertIn('VUE_APP_BACKEND_URL="${VUE_APP_BACKEND_URL:-http://127.0.0.1:5178/}"', entrypoint)
+        self.assertIn('VITE_GEOVIEW_URL="${VITE_GEOVIEW_URL:-http://127.0.0.1:4174/}"', entrypoint)
+
+    def test_gpu_worker_is_local_and_cpu_keeps_the_existing_validation_path(self):
+        standalone = (
+            ROOT / "docker" / "standalone" / "start-jiangxi-standalone.sh"
+        ).read_text(encoding="utf-8")
+        healthcheck = (
+            ROOT / "docker" / "standalone" / "healthcheck.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("/tmp/jiangxi-mmseg-worker.sock", standalone)
+        self.assertIn('JIANGXI_MMSEG_WORKER_ENABLED="1"', standalone)
+        self.assertIn('JIANGXI_MMSEG_WORKER_ENABLED="0"', standalone)
+        self.assertIn("--ping", healthcheck)
+        self.assertIn("get_model_paths", healthcheck)
 
     def test_default_jiangxi_kmz_contains_all_polygon_boundaries(self):
         kmz_path = (

@@ -3,9 +3,17 @@ import global from '@/global'
 import { showFullScreenLoading } from "@/utils/loading";
 import { kmlRoiInfer } from "@/api/upload";
 
+const JIANGXI_INFERENCE_DEVICE = String(
+  process.env.VUE_APP_JIANGXI_INFERENCE_DEVICE || 'cpu'
+).trim().toLowerCase();
+
 function getUploadImg(type) {
+  const requestId = (this._flashHistoryRequestId || 0) + 1;
+  if (type === '地物分类') this._flashHistoryRequestId = requestId;
+
   if (type === '地物分类') {
-    flashHistoryGetPage(1, 20).then((res) => {
+    return flashHistoryGetPage(1, 20).then((res) => {
+      if (requestId !== this._flashHistoryRequestId) return { status: 'stale' };
       this.imgArr = (res.data.data || []).map((item, idx) => ({
         ...item,
         display_index: idx + 1,
@@ -13,10 +21,16 @@ function getUploadImg(type) {
         after_img: global.BASEURL + String(item.after_img || '').replace(/^\//, '')
       }));
       this.isUpload = this.imgArr.length !== 0;
-    }).catch(() => { });
-    return;
+      return { status: 'success', resultCount: this.imgArr.length };
+    }).catch((err) => {
+      if (requestId !== this._flashHistoryRequestId) return { status: 'stale' };
+      const msg = err?.message || err?.response?.data?.msg || '地物分类历史加载失败';
+      setAnalysisRunState(this, 'error', msg);
+      this.$message?.error?.(msg);
+      return { status: 'error', error: err };
+    });
   }
-  historyGetPage(1, 20, type).then((res) => {
+  return historyGetPage(1, 20, type).then((res) => {
     this.imgArr = (res.data.data || []).map((item, idx) => ({
       ...item,
       display_index: idx + 1,
@@ -24,7 +38,12 @@ function getUploadImg(type) {
       after_img: global.BASEURL + item.after_img
     }));
     this.isUpload = this.imgArr.length !== 0;
-  }).catch(() => { })
+    return { status: 'success', resultCount: this.imgArr.length };
+  }).catch((err) => {
+    const msg = err?.message || err?.response?.data?.msg || '分析历史加载失败';
+    this.$message?.error?.(msg);
+    return { status: 'error', error: err };
+  });
 }
 
 function goCompress(type, num) {
@@ -77,7 +96,11 @@ function upload(type, funUrl) {
 
   if (isSegmentation) formData.append("keepRawTiff", 'true');
 
-  setAnalysisRunState(this, 'running', '正在上传影像并执行同步 CPU 地物分类，请保持页面开启。');
+  setAnalysisRunState(
+    this,
+    'running',
+    `正在上传影像并执行同步 ${JIANGXI_INFERENCE_DEVICE.toUpperCase()} 地物分类，请保持页面开启。`
+  );
 
   return this.createSrc(formData).then((res) => {
     const uploadItems = res.data.data || [];
@@ -95,21 +118,37 @@ function upload(type, funUrl) {
         this.$message.error("地物分类仅支持 tif/tiff 影像，请重新上传");
         return { status: 'error', reason: 'missing_raw_tiff' };
       }
-      const inferenceRequests = rawTiffPaths.map((tifPath) =>
-        kmlRoiInfer({
-          old_tif_path: tifPath,
-          new_tif_path: tifPath,
-          year: roiYear,
-          device: 'cpu'
-        })
-      );
       this.$refs.upload?.clearFiles?.();
-      return Promise.all(inferenceRequests).then((results) => {
+      return (async () => {
+        const settledResults = [];
+        for (const tifPath of rawTiffPaths) {
+          try {
+            const value = await kmlRoiInfer({
+              old_tif_path: tifPath,
+              new_tif_path: tifPath,
+              year: roiYear,
+              device: JIANGXI_INFERENCE_DEVICE
+            });
+            settledResults.push({ status: 'fulfilled', value });
+          } catch (reason) {
+            settledResults.push({ status: 'rejected', reason });
+          }
+        }
+
         const flashCards = [];
         let seq = 1;
         let failedCount = 0;
+        let failedRequestCount = 0;
         const errorMessages = [];
-        results.forEach((resp) => {
+        settledResults.forEach((settled) => {
+          if (settled.status === 'rejected') {
+            failedRequestCount += 1;
+            errorMessages.push(
+              settled.reason?.message || settled.reason?.response?.data?.msg || '影像推理失败'
+            );
+            return;
+          }
+          const resp = settled.value;
           const payload = resp?.data?.data || {};
           const failedTiles = payload.failed_tiles || [];
           if (Array.isArray(failedTiles) && failedTiles.length > 0) {
@@ -120,29 +159,34 @@ function upload(type, funUrl) {
               errorMessages.push(String(errors[firstKey]));
             }
           }
-          const fids = payload.written_fid_list || payload.matched_fid_list || [];
-          fids.forEach((fid) => {
-            const name = `${fid}+${roiYear}.png`;
-            const afterUrl = `${global.BASEURL}api/analysis/kml_roi_output/${fid}/${name}`;
-            const beforeUrl = `${global.BASEURL}api/analysis/kml_roi_output/${fid}/${fid}+${roiYear}_src.png`;
+          const writtenResults = payload.written_results || [];
+          writtenResults.forEach((result) => {
+            const tbbh = String(result.tbbh || '').trim();
+            const mapFid = Number(result.map_fid);
+            if (!tbbh || !Number.isInteger(mapFid) || mapFid <= 0) return;
+            const name = `${mapFid}+${roiYear}.png`;
+            const identityPath = encodeURIComponent(tbbh);
+            const afterUrl = `${global.BASEURL}api/analysis/kml_roi_output/${identityPath}/${name}`;
+            const beforeUrl = `${global.BASEURL}api/analysis/kml_roi_output/${identityPath}/${mapFid}+${roiYear}_src.png`;
             flashCards.push({
               id: seq++,
-              record_id: `${fid}|${name}`,
+              record_id: `${tbbh}|${mapFid}|${name}`,
               type: '地物分类',
               before_img: beforeUrl,
               after_img: afterUrl,
-              data: {}
+              data: { tbbh, map_fid: mapFid }
             });
           });
         });
         const total = flashCards.length;
+        const totalFailureCount = failedCount + failedRequestCount;
         flashCards.forEach((item, idx) => {
           item.id = total - idx;
         });
         if (flashCards.length > 0) {
           this.imgArr = flashCards;
-          if (failedCount > 0) {
-            const partialMessage = `Flash 部分成功：${flashCards.length} 条结果，${failedCount} 个切片失败`;
+          if (totalFailureCount > 0) {
+            const partialMessage = `Flash 部分成功：${flashCards.length} 条结果，${failedCount} 个切片失败，${failedRequestCount} 个影像失败`;
             setAnalysisRunState(this, 'partial', partialMessage);
             this.$message.warning(partialMessage);
           } else {
@@ -156,18 +200,13 @@ function upload(type, funUrl) {
           setAnalysisRunState(this, 'error', failureMessage);
         }
         this.fileList = [];
-        this.getMore();
+        await this.getMore();
         return {
-          status: flashCards.length === 0 ? 'error' : (failedCount > 0 ? 'partial' : 'success'),
+          status: flashCards.length === 0 ? 'error' : (totalFailureCount > 0 ? 'partial' : 'success'),
           resultCount: flashCards.length,
-          failedCount
+          failedCount: totalFailureCount
         };
-      }).catch((err) => {
-        const msg = err?.response?.data?.msg || "Flash 推理失败";
-        setAnalysisRunState(this, 'error', msg);
-        this.$message.error(msg);
-        return { status: 'error', error: err };
-      });
+      })();
     } else {
       const inferencePromise = this.imgUpload(this.uploadSrc, funUrl).then(() => {
         this.fileList = [];
@@ -190,7 +229,7 @@ function upload(type, funUrl) {
       return inferencePromise;
     }
   }).catch((err) => {
-    const msg = err?.response?.data?.msg || "影像上传失败";
+    const msg = err?.message || err?.response?.data?.msg || "影像上传失败";
     setAnalysisRunState(this, 'error', msg);
     return { status: 'error', error: err };
   }).finally(() => {

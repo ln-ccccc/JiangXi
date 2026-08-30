@@ -26,8 +26,8 @@ def source_tree_sha256(source_root: Path):
     return digest.hexdigest(), len(files)
 
 
-class TestJiangxiCpuContract(unittest.TestCase):
-    def test_public_analysis_api_forces_cpu_and_exposes_no_gpu_capability(self):
+class TestJiangxiInferenceDeviceContract(unittest.TestCase):
+    def test_public_analysis_api_uses_the_configured_device_without_auto_selection(self):
         source = (ROOT / "applications" / "api" / "analysis.py").read_text(
             encoding="utf-8"
         )
@@ -35,16 +35,9 @@ class TestJiangxiCpuContract(unittest.TestCase):
             ROOT / "applications" / "interface" / "inference_device.py"
         ).read_text(encoding="utf-8")
 
-        self.assertNotIn("gpu_capability", source)
-        self.assertIn("device='cpu'", source)
+        self.assertIn("resolve_inference_device", source)
+        self.assertIn("JIANGXI_INFERENCE_DEVICE", policy_source)
         self.assertNotIn("req_json.get('device', 'auto')", source)
-        for capability_field in (
-            "cuda_available",
-            "device_name",
-            "device_count",
-            "cuda_version",
-        ):
-            self.assertNotIn(capability_field, policy_source)
 
     def test_all_jiangxi_inference_entry_points_default_to_cpu(self):
         paths = [
@@ -78,16 +71,22 @@ class TestJiangxiCpuContract(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             model_root = Path(tmp_dir) / "jiangxi"
             model_root.mkdir()
+            source_root = model_root / "source"
+            source_root.mkdir()
+            source_file = source_root / "custom_backbone.py"
+            source_file.write_text("VALUE = 1\n", encoding="utf-8")
             config = model_root / "config.py"
             checkpoint = model_root / "model.pth"
             metadata = model_root / "metadata.json"
             config.write_text("# jiangxi model\n", encoding="utf-8")
             checkpoint.write_bytes(b"checkpoint")
+            source_hash, source_count = source_tree_sha256(source_root)
             metadata.write_text(
                 '{"region":"jiangxi","classes":["grassland","forest",'
                 '"building","road","bareground","water"],'
                 f'"config_sha256":"{hashlib.sha256(config.read_bytes()).hexdigest()}",'
-                f'"checkpoint_sha256":"{hashlib.sha256(checkpoint.read_bytes()).hexdigest()}"}}',
+                f'"checkpoint_sha256":"{hashlib.sha256(checkpoint.read_bytes()).hexdigest()}",'
+                f'"source_sha256":"{source_hash}","source_file_count":{source_count}}}',
                 encoding="utf-8",
             )
             with patch.dict(
@@ -97,6 +96,7 @@ class TestJiangxiCpuContract(unittest.TestCase):
                     "JIANGXI_MMSEG_CONFIG_PATH": str(config),
                     "JIANGXI_MMSEG_CHECKPOINT_PATH": str(checkpoint),
                     "JIANGXI_MMSEG_METADATA_PATH": str(metadata),
+                    "JIANGXI_MMSEG_SOURCE_ROOT": str(source_root),
                 },
                 clear=True,
             ):

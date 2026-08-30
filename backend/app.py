@@ -1,5 +1,4 @@
 import traceback
-from datetime import timedelta
 
 from flask import session
 from flask_migrate import Migrate
@@ -7,6 +6,7 @@ from flask_migrate import Migrate
 from applications import create_app
 from applications.common.utils.http import fail_api
 from applications.extensions import db
+from runtime_frontend_env import load_runtime_config, write_legacy_frontend_env
 
 debug_mode = False
 app = create_app()
@@ -15,7 +15,10 @@ app = create_app()
 @app.before_request
 def before():
     session.permanent = True
-    app.permanent_session_lifetime = timedelta(minutes=20)
+    app.permanent_session_lifetime = app.config['PERMANENT_SESSION_LIFETIME']
+    if session.get("admin_user_id"):
+        # 确保活动请求刷新永久会话的过期时间，覆盖直接加载图片的请求。
+        session.modified = True
 
 
 @app.errorhandler(Exception)
@@ -28,16 +31,9 @@ def error_handler(e):
 migrate = Migrate(app, db)
 
 if __name__ == '__main__':
-    import yaml
-    with open('../config.yaml') as file:
-        config = yaml.load(file.read(), Loader=yaml.FullLoader)
+    config = load_runtime_config()
     debug_mode = bool(config.get("debug", False))
-    with open("../frontend/.env", 'w') as file:
-        file.write(
-            "VUE_APP_BACKEND_PORT = {}\nVUE_APP_BACKEND_IP = {}\nVUE_APP_BAIDU_MAP_ACCESS_KEY = {}".
-            format(config["port"]["backend"], config["host"]["backend"]
-                   if config["host"]["backend"] != "0.0.0.0" else "localhost",
-                   config["baidu_map"]["access_key"]))
+    write_legacy_frontend_env(config)
     app.run(
         host=config["host"]["backend"],
         port=config["port"]["backend"],

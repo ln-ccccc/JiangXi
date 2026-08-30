@@ -61,7 +61,7 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>FID</th>
+                <th>TBBH</th>
                 <th>矿山名称</th>
                 <th>起始年份</th>
                 <th>结束年份</th>
@@ -75,18 +75,22 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in selectedRows" :key="row.fid">
-                <td>{{ row.fid }}</td>
+              <tr v-for="row in selectedRows" :key="row.tbbh">
+                <td>{{ row.tbbh }}</td>
                 <td>{{ row.mine_name || '-' }}</td>
                 <td>{{ row.start_year }}</td>
                 <td>{{ row.end_year }}</td>
                 <td>{{ formatNum(row.start_percent, 4) }}</td>
                 <td>{{ formatNum(row.end_percent, 4) }}</td>
-                <td :class="deltaClass(row.delta_percent)">{{ formatNum(row.delta_percent, 4) }}</td>
+                <td :class="deltaClass(row.delta_percent)">
+                  {{ formatNum(row.delta_percent, 4) }}
+                </td>
                 <td>{{ formatAreaKm2(deriveMineAreaKm2(row)) }}</td>
                 <td>{{ formatAreaKm2(getStartAreaKm2(row)) }}</td>
                 <td>{{ formatAreaKm2(getEndAreaKm2(row)) }}</td>
-                <td :class="deltaClass(getDeltaAreaKm2(row))">{{ formatAreaKm2(getDeltaAreaKm2(row)) }}</td>
+                <td :class="deltaClass(getDeltaAreaKm2(row))">
+                  {{ formatAreaKm2(getDeltaAreaKm2(row)) }}
+                </td>
               </tr>
               <tr v-if="!selectedRows.length">
                 <td colspan="11" class="empty">{{ emptyText }}</td>
@@ -106,7 +110,7 @@ const props = defineProps({
   visible: Boolean,
   loading: Boolean,
   error: String,
-  report: Object
+  report: Object,
 });
 
 const emit = defineEmits(['close', 'refresh', 'export']);
@@ -123,7 +127,7 @@ const classOptions = computed(() => {
     { key: 'building', label: '建筑' },
     { key: 'road', label: '道路' },
     { key: 'bareground', label: '裸土' },
-    { key: 'water', label: '水体' }
+    { key: 'water', label: '水体' },
   ];
 });
 
@@ -139,7 +143,7 @@ watch(
 
 const currentClassLabel = computed(() => {
   const key = selectedClassName.value;
-  const hit = classOptions.value.find(i => i.key === key);
+  const hit = classOptions.value.find((i) => i.key === key);
   return hit?.label || key;
 });
 
@@ -164,14 +168,14 @@ const emptyText = computed(() => {
 const emitRefresh = () => {
   emit('refresh', {
     class_name: selectedClassName.value,
-    direction: selectedDirection.value
+    direction: selectedDirection.value,
   });
 };
 
 const emitExport = () => {
   emit('export', {
     class_name: selectedClassName.value,
-    direction: selectedDirection.value
+    direction: selectedDirection.value,
   });
 };
 
@@ -183,7 +187,7 @@ const formatNum = (v, digits = 2) => {
 const deltaClass = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return '';
-  return n > 0 ? 'upward' : (n < 0 ? 'downward' : '');
+  return n > 0 ? 'upward' : n < 0 ? 'downward' : '';
 };
 
 const toFinite = (v) => {

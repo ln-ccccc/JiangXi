@@ -23,14 +23,14 @@ test('uses Jiangxi branding copy by default', () => {
   assert.equal(WORKSPACE_SUBTITLE, '江西版默认入口，承接项目建档、矿山绑定、数据登记和只读溯源。');
 });
 
-test('uses Jiangxi fallback map view and online imagery defaults', () => {
+test('uses Jiangxi fallback map view and online satellite defaults', () => {
   assert.deepEqual(JIANGXI_FALLBACK_CENTER, [27.61, 115.95]);
   assert.equal(JIANGXI_FALLBACK_ZOOM, 7);
   assert.equal(DEFAULT_MAP_PROVIDER, 'gaode');
   assert.equal(DEFAULT_MAP_LAYER, 'satellite');
 });
 
-test('normalizeMapProvider falls back to gaode when env is empty or unsupported', () => {
+test('normalizeMapProvider falls back to online satellite when env is empty or unsupported', () => {
   assert.equal(normalizeMapProvider(''), 'gaode');
   assert.equal(normalizeMapProvider(undefined), 'gaode');
   assert.equal(normalizeMapProvider('unknown-provider'), 'gaode');

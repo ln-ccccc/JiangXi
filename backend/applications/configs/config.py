@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -50,6 +51,8 @@ class BaseConfig:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
     SESSION_COOKIE_SECURE = _bool_env('SESSION_COOKIE_SECURE', False)
+    # CPU 推理可能持续数分钟；短会话会让延迟加载的结果图片突然收到 401。
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=12)
     CORS_ALLOWED_ORIGINS = os.getenv(
         'CORS_ALLOWED_ORIGINS',
         'http://127.0.0.1:4173,http://127.0.0.1:4174',

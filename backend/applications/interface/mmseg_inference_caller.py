@@ -3,14 +3,16 @@
 import json
 import hashlib
 import os
-import re
+import shutil
 import subprocess
 import sys
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 from applications.common.path_global import generate_url
+from applications.interface.inference_device import resolve_inference_device
 
 MMSEG_CONDA_ENV = "MMSeg310"
 _curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -21,6 +23,8 @@ JIANGXI_MODEL_CONFIG_ENV = "JIANGXI_MMSEG_CONFIG_PATH"
 JIANGXI_MODEL_CHECKPOINT_ENV = "JIANGXI_MMSEG_CHECKPOINT_PATH"
 JIANGXI_MODEL_METADATA_ENV = "JIANGXI_MMSEG_METADATA_PATH"
 JIANGXI_MODEL_SOURCE_ENV = "JIANGXI_MMSEG_SOURCE_ROOT"
+JIANGXI_MMSEG_WORKER_ENABLED_ENV = "JIANGXI_MMSEG_WORKER_ENABLED"
+JIANGXI_MMSEG_WORKER_SOCKET_ENV = "JIANGXI_MMSEG_WORKER_SOCKET"
 JIANGXI_CLASS_NAMES = [
     "grassland",
     "forest",
@@ -64,23 +68,16 @@ def _source_tree_sha256(source_root: Path) -> Tuple[str, int]:
     return digest.hexdigest(), len(files)
 
 
-def _patch_mmdet_mmcv_guard() -> None:
-    mmdet_init = "/opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmdet/__init__.py"
-    if not os.path.exists(mmdet_init):
-        return
-    try:
-        with open(mmdet_init, "r", encoding="utf-8") as f:
-            content = f.read()
-        updated = re.sub(
-            r"mmcv_maximum_version\s*=\s*(['\"])2\.(1|2)\.0\1",
-            "mmcv_maximum_version = '2.3.0'",
-            content,
-        )
-        if updated != content:
-            with open(mmdet_init, "w", encoding="utf-8") as f:
-                f.write(updated)
-    except Exception as e:
-        print(f"[MMSeg-Caller] patch mmdet guard failed: {e}", file=sys.stderr)
+def _verify_dependency_hashes(model_metadata: dict, source_root: Path) -> None:
+    for dependency_name, expected_hash in (model_metadata.get("dependencies") or {}).items():
+        candidates = [source_root / dependency_name]
+        candidates.extend(source_root.rglob(dependency_name))
+        dependency_path = next((path for path in candidates if path.is_file()), None)
+        if dependency_path is None:
+            raise RuntimeError(f"江西模型依赖权重不存在：{dependency_name}")
+        expected = str(expected_hash or "").strip().lower()
+        if len(expected) != 64 or _verified_sha256(dependency_path) != expected:
+            raise RuntimeError(f"江西模型依赖权重 SHA-256 不匹配：{dependency_name}")
 
 
 def get_model_paths(model_id: str) -> Tuple[str, str]:
@@ -101,8 +98,6 @@ def get_model_paths(model_id: str) -> Tuple[str, str]:
             Path(metadata).expanduser().resolve(),
         ]
         source_root_text = os.environ.get(JIANGXI_MODEL_SOURCE_ENV, "").strip()
-        if source_root_text:
-            asset_paths.append(Path(source_root_text).expanduser().resolve())
 
         for path in asset_paths:
             try:
@@ -142,36 +137,51 @@ def get_model_paths(model_id: str) -> Tuple[str, str]:
         if _verified_sha256(checkpoint_path) != expected_checkpoint_hash:
             raise RuntimeError("江西地物分类模型权重 SHA-256 不匹配")
 
-        if source_root_text:
-            source_root = asset_paths[3]
-            if not source_root.is_dir():
-                raise RuntimeError(f"江西地物分类模型源码目录不存在：{source_root}")
-            expected_source_hash = str(
-                model_metadata.get("source_sha256", "")
-            ).lower()
-            try:
-                expected_source_count = int(model_metadata.get("source_file_count", 0))
-            except (TypeError, ValueError) as exc:
-                raise RuntimeError("江西地物分类模型元数据的源码文件数无效") from exc
-            if len(expected_source_hash) != 64 or expected_source_count <= 0:
-                raise RuntimeError("江西地物分类模型元数据缺少有效的源码 SHA-256 绑定")
-            actual_source_hash, actual_source_count = _source_tree_sha256(source_root)
-            if actual_source_count != expected_source_count:
-                raise RuntimeError("江西地物分类模型源码文件数不匹配")
-            if actual_source_hash != expected_source_hash:
-                raise RuntimeError("江西地物分类模型源码 SHA-256 不匹配")
+        if not source_root_text:
+            raise RuntimeError("江西地物分类模型必须配置受控源码目录")
+        source_root = Path(source_root_text).expanduser().resolve()
+        try:
+            source_root.relative_to(model_root)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"江西模型资产必须位于受控目录 {model_root}：{source_root}"
+            ) from exc
+        if not source_root.is_dir():
+            raise RuntimeError(f"江西地物分类模型源码目录不存在：{source_root}")
+        expected_source_hash = str(model_metadata.get("source_sha256", "")).lower()
+        try:
+            expected_source_count = int(model_metadata.get("source_file_count", 0))
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("江西地物分类模型元数据的源码文件数无效") from exc
+        if len(expected_source_hash) != 64 or expected_source_count <= 0:
+            raise RuntimeError("江西地物分类模型元数据缺少有效的源码 SHA-256 绑定")
+        actual_source_hash, actual_source_count = _source_tree_sha256(source_root)
+        if actual_source_count != expected_source_count:
+            raise RuntimeError("江西地物分类模型源码文件数不匹配")
+        if actual_source_hash != expected_source_hash:
+            raise RuntimeError("江西地物分类模型源码 SHA-256 不匹配")
+        _verify_dependency_hashes(model_metadata, source_root)
         return str(config_path), str(checkpoint_path)
     raise ValueError(f"Unknown MMSeg model: {model_id}")
 
 
 def _resolve_mmseg_python() -> List[str]:
-    candidate_paths = [
-        "/opt/conda/envs/MMSeg310/bin/python",
-        "/home/livablecity/miniconda3/envs/MMSeg310/bin/python",
-    ]
-    for path in candidate_paths:
-        if os.path.exists(path):
-            return [path]
+    configured = os.environ.get("JIANGXI_MMSEG_PYTHON", "").strip()
+    candidates = [configured, sys.executable, shutil.which("python") or ""]
+    for candidate in candidates:
+        if not candidate or not os.path.exists(candidate) and os.path.sep in candidate:
+            continue
+        try:
+            probe = subprocess.run(
+                [candidate, "-c", "import torch, mmseg; print(torch.__version__)"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if probe.returncode == 0:
+            return [candidate]
     return ["conda", "run", "-n", MMSEG_CONDA_ENV, "python"]
 
 
@@ -205,6 +215,57 @@ def _format_subprocess_failure(result) -> str:
     )
 
 
+def _worker_enabled() -> bool:
+    return os.environ.get(JIANGXI_MMSEG_WORKER_ENABLED_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _request_worker_inference(
+    *,
+    model_id: str,
+    data_path: str,
+    out_dir: str,
+    names: List[str],
+    device: str,
+    timeout: int,
+) -> Dict:
+    socket_path = os.environ.get(JIANGXI_MMSEG_WORKER_SOCKET_ENV, "").strip()
+    if not socket_path:
+        raise RuntimeError("GPU 推理 Worker 不可用：启用后必须配置 Socket 路径")
+    if model_id != "cc-ln/CUGRS":
+        raise ValueError(f"Unknown MMSeg model: {model_id}")
+
+    from applications.interface.mmseg_worker import WorkerUnavailableError, request_worker
+
+    try:
+        response = request_worker(
+            socket_path,
+            {
+                "action": "infer",
+                "model_id": model_id,
+                "input_dir": os.path.abspath(data_path),
+                "output_dir": os.path.abspath(out_dir),
+                "file_names": names,
+                "device": device,
+                "submitted_at": time.time(),
+            },
+            timeout=float(timeout),
+        )
+    except WorkerUnavailableError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    if response.get("status") == "error":
+        raise RuntimeError(
+            "GPU 推理 Worker 失败：" + str(response.get("error") or "未知错误")
+        )
+    if response.get("status") != "completed":
+        raise RuntimeError(f"GPU 推理 Worker 返回未完成状态：{response}")
+    return response
+
+
 def _run_mmseg_inference(
     model_id: str,
     data_path: str,
@@ -216,7 +277,18 @@ def _run_mmseg_inference(
     if not names:
         return []
 
-    _patch_mmdet_mmcv_guard()
+    if _worker_enabled():
+        return _request_worker_inference(
+            model_id=model_id,
+            data_path=data_path,
+            out_dir=out_dir,
+            names=names,
+            device=device,
+            timeout=timeout,
+        )
+
+    runtime = resolve_inference_device(device)
+    effective_device = runtime["effective_device"]
 
     abs_data_path = os.path.abspath(data_path)
     abs_out_dir = os.path.abspath(out_dir)
@@ -236,7 +308,7 @@ def _run_mmseg_inference(
         "--file_names",
         file_names_str,
         "--device",
-        device,
+        effective_device,
     ]
     print(f"[MMSeg-Caller] cwd={_curr_dir}", file=sys.stderr)
     print(

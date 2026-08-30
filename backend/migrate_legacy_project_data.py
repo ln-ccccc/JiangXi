@@ -15,6 +15,12 @@ def main():
     parser.add_argument("--output-root")
     parser.add_argument("--kml-path")
     parser.add_argument("--static-root")
+    parser.add_argument(
+        "--asset-manifest",
+        default=os.getenv("JIANGXI_ASSET_MANIFEST_PATH"),
+        help="江西权威 TBBH/map_fid manifest；未提供时使用运行时默认 manifest",
+    )
+    parser.add_argument("--migration-report")
     args = parser.parse_args()
 
     config_name = os.getenv("FLASK_CONFIG", "development")
@@ -27,6 +33,8 @@ def main():
             output_root=Path(args.output_root) if args.output_root else None,
             kml_path=Path(args.kml_path) if args.kml_path else None,
             static_root=Path(args.static_root) if args.static_root else None,
+            asset_manifest_path=Path(args.asset_manifest) if args.asset_manifest else None,
+            migration_report_path=Path(args.migration_report) if args.migration_report else None,
         )
         print(json.dumps(result, ensure_ascii=False))
 

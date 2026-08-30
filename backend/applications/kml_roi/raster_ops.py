@@ -12,6 +12,8 @@ from rasterio.windows import Window, from_bounds
 
 WGS84 = "EPSG:4326"
 UI_SEGMENT_SIZE = (512, 512)
+# Keep the ROI outline visually distinct from the yellow road class.
+ROI_BOUNDARY_COLOR = (255, 255, 255)
 
 
 def raster_bounds_4326(raster_path: Path) -> Tuple[float, float, float, float]:
@@ -126,7 +128,16 @@ def crop_bbox_from_raster(raster_path: Path, geom_4326: Dict, out_path: Path) ->
     return True
 
 
-def tif_to_png(tif_path: Path, png_path: Path, resize_to: Optional[Tuple[int, int]] = UI_SEGMENT_SIZE) -> bool:
+def tif_to_png(
+    tif_path: Path,
+    png_path: Path,
+    resize_to: Optional[Tuple[int, int]] = UI_SEGMENT_SIZE,
+) -> bool:
+    """Convert a cropped ROI to the legacy square MMSeg input by default.
+
+    Callers that explicitly need the native raster geometry can pass
+    ``resize_to=None``.
+    """
     try:
         # Reuse the UI TIFF conversion path so ROI inference sees the same RGB mapping.
         rgb = read_tiff_as_rgb(str(tif_path))
@@ -265,7 +276,7 @@ def draw_polygon_boundary_on_prediction(
     geom_4326: Optional[Dict] = None,
     out_image_path: Path,
     out_mask_path: Path,
-    boundary_color: Tuple[int, int, int] = (0, 255, 255),
+    boundary_color: Tuple[int, int, int] = ROI_BOUNDARY_COLOR,
     boundary_width: int = 3,
 ) -> bool:
     pred_img = cv2.imread(str(pred_image_path), cv2.IMREAD_COLOR)

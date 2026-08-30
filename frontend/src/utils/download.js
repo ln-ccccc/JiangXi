@@ -5,8 +5,11 @@ import FileSaver from 'file-saver'
 import global from '@/global'
 import {hideFullScreenLoading} from "@/utils/loading";
 function downloadimgWithWords(index, src, funtype) {
-  fetch(src)
-    .then((response) => response.blob())//链式编程
+  fetch(src, { credentials: "include" })
+    .then((response) => {
+      if (!response.ok) throw new Error(`下载失败: ${response.status}`);
+      return response.blob();
+    })//链式编程
     .then((res) => {
       let blob = new Blob([res]);
       // 通过URL.createObjectURL生成文件路径
@@ -32,6 +35,7 @@ function getImgArrayBuffer(url) {
     //通过请求获取文件blob格式
     let xmlhttp = new XMLHttpRequest();
     xmlhttp.open("GET",global.BASEURL+url, true);
+    xmlhttp.withCredentials = true;
     xmlhttp.responseType = "blob";
     xmlhttp.onload = function () {
       if (this.status === 200) {

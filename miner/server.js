@@ -2,6 +2,7 @@
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { promisify } from 'util';
 import { execFile as execFileCb, spawnSync } from 'child_process';
@@ -33,8 +34,9 @@ import {
   resolveIndexSourcePath,
 } from './services/indexSeries.js';
 import { loadJiangxiGeoJsonFromSource } from './services/jiangxiGeoJsonSource.js';
+import { buildMineIdentityIndex, normalizeTbbh } from './services/jiangxiIdentity.js';
 import { saveKmlUpload } from './services/kmlUpload.js';
-import { buildEmptyTilePng, resolveLocalTilePath } from './services/localTileService.js';
+import { resolveLocalTilePath } from './services/localTileService.js';
 import { ManagedPathError, resolvePathInRoots } from './services/inferencePathPolicy.js';
 import { parsePositiveIdentifier } from './services/pathValidation.js';
 import { buildTrendReport } from './services/trendReport.js';
@@ -77,24 +79,43 @@ app.get('/tiles/:z/:x/:y.png', (req, res) => {
   if (tilePath) {
     return res.sendFile(tilePath);
   }
-  res.setHeader('Content-Type', 'image/png');
-  res.setHeader('Cache-Control', 'public, max-age=120');
-  return res.send(buildEmptyTilePng());
+  return res.status(404).json({ error: 'local tile not found', code: 'tile_not_found' });
 });
 app.use('/tiles', express.static(tileStaticDir));
 
-const changeMatrixStaticDir = path.resolve(process.cwd(), 'change_matrix_outputs');
+const changeMatrixStaticDir = path.resolve(
+  process.env.MINER_CHANGE_OUTPUT_ROOT || path.join(process.cwd(), 'change_matrix_outputs')
+);
 app.use('/change-matrix-outputs', authGuard, express.static(changeMatrixStaticDir));
 
 const repoRoot = path.resolve(process.cwd(), '..');
 const backendRoot = path.resolve(repoRoot, 'backend');
+const runtimeDataRoot = path.resolve(
+  process.env.RUNTIME_DATA_DIR || path.join(repoRoot, 'docker', 'standalone', 'runtime_data')
+);
+const configuredMineSourcePath = normalizePathInput(
+  process.env.MINER_DEFAULT_GEO_SOURCE_PATH || ''
+);
+const configuredKmlPath = normalizePathInput(process.env.MINER_DEFAULT_KMZ_PATH || '');
 const defaultMineSourcePath = path.resolve(
-  resolveDefaultJiangxiGeoSourcePath(process.env.MINER_DEFAULT_GEO_SOURCE_PATH)
+  configuredMineSourcePath ||
+    (fs.existsSync(path.join(runtimeDataRoot, '348个图斑.shp'))
+      ? path.join(runtimeDataRoot, '348个图斑.shp')
+      : resolveDefaultJiangxiGeoSourcePath(''))
 );
 const defaultKmlPath = path.resolve(
-  resolveDefaultJiangxiKmzPath(process.env.MINER_DEFAULT_KMZ_PATH)
+  configuredKmlPath ||
+    (fs.existsSync(path.join(runtimeDataRoot, 'Jiangxi_NaturalMine.kmz'))
+      ? path.join(runtimeDataRoot, 'Jiangxi_NaturalMine.kmz')
+      : resolveDefaultJiangxiKmzPath(''))
 );
-const defaultOutputRoot = path.resolve(process.cwd(), 'change_matrix_outputs');
+const assetManifestPath = path.resolve(
+  normalizePathInput(
+    process.env.JIANGXI_ASSET_MANIFEST_PATH ||
+      path.join(runtimeDataRoot, 'Jiangxi_asset_manifest.json')
+  )
+);
+const defaultOutputRoot = changeMatrixStaticDir;
 const defaultKmlUploadRoot = path.resolve(process.cwd(), 'uploads', 'kml');
 const kmlRoiScriptPath = path.resolve(backendRoot, 'kml_roi_infer.py');
 const configuredPythonExe = normalizePathInput(process.env.PYTHON_EXE || '');
@@ -175,6 +196,71 @@ function normalizePathInput(v) {
   return String(v)
     .trim()
     .replace(/^["']|["']$/g, '');
+}
+
+function sha256File(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function resolveManifestFilePath(entry) {
+  const declaredPath = normalizePathInput(entry?.path || '');
+  const candidates = [
+    declaredPath,
+    path.join(runtimeDataRoot, path.basename(declaredPath)),
+    path.join(repoRoot, 'miner', 'data', path.basename(declaredPath)),
+  ].filter(Boolean);
+  return candidates
+    .map((candidate) => path.resolve(candidate))
+    .find((candidate) => fs.existsSync(candidate));
+}
+
+function loadJiangxiAssetManifest() {
+  const required =
+    process.env.STANDALONE_MODE === '1' || process.env.JIANGXI_REQUIRE_ASSET_MANIFEST === '1';
+  if (!fs.existsSync(assetManifestPath)) {
+    if (required) throw new Error(`江西资产 manifest 不存在: ${assetManifestPath}`);
+    console.warn(`[Startup] Jiangxi asset manifest not found: ${assetManifestPath}`);
+    return { path: null, sha256: null, mapping: null };
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(assetManifestPath, 'utf8'));
+  } catch (error) {
+    throw new Error(`江西资产 manifest 损坏: ${assetManifestPath}: ${error.message}`);
+  }
+  if (manifest.status !== 'ok') throw new Error('江西资产 manifest 状态不是 ok，禁止启动');
+
+  const mapping = {};
+  const reverse = new Map();
+  for (const [rawTbbh, rawMapFid] of Object.entries(manifest.mapping?.tbbh_to_map_fid || {})) {
+    const tbbh = normalizeTbbh(rawTbbh);
+    const mapFid = Number(rawMapFid);
+    if (!Number.isSafeInteger(mapFid) || mapFid <= 0 || mapping[tbbh] || reverse.has(mapFid)) {
+      throw new Error(`江西资产 manifest TBBH/map_fid 映射无效: ${rawTbbh}/${rawMapFid}`);
+    }
+    mapping[tbbh] = mapFid;
+    reverse.set(mapFid, tbbh);
+  }
+  const expectedCount = Number(process.env.JIANGXI_EXPECTED_COUNT || 348);
+  if (Object.keys(mapping).length !== expectedCount) {
+    throw new Error(
+      `江西资产 manifest 映射数量错误: ${Object.keys(mapping).length}，期望 ${expectedCount}`
+    );
+  }
+
+  for (const [name, entry] of Object.entries(manifest.files || {})) {
+    const filePath = resolveManifestFilePath(entry);
+    if (!filePath) throw new Error(`江西资产文件缺失: ${name}`);
+    if (entry.sha256 && sha256File(filePath) !== entry.sha256) {
+      throw new Error(`江西资产文件哈希不匹配: ${name} (${filePath})`);
+    }
+  }
+  return {
+    path: assetManifestPath,
+    sha256: sha256File(assetManifestPath),
+    mapping: { tbbhToMapFid: mapping, mapFidToTbbh: Object.fromEntries(reverse) },
+  };
 }
 
 function parseJsonFromStdout(stdoutText) {
@@ -282,7 +368,7 @@ function readResolutionFromOutputDir(outputDir) {
 
 function computeMineChangedArea(fidRaw) {
   const fid = String(fidRaw);
-  const outputDir = path.resolve(process.cwd(), 'change_matrix_outputs', fid);
+  const outputDir = path.resolve(defaultOutputRoot, fid);
   const km2CsvPath = path.join(outputDir, 'change_matrix_km2.csv');
   const pxCsvPath = path.join(outputDir, 'change_matrix_pixels.csv');
 
@@ -332,6 +418,8 @@ function computeMineChangedArea(fidRaw) {
 
 // In-memory data storage
 let minesData = []; // Array of GeoJSON features
+let mineIdentityIndex = { byTbbh: new Map(), byMapFid: new Map() };
+let assetManifestInfo = { path: null, sha256: null, mapping: null };
 let ndviData = {}; // Object mapping FID -> Array of {year, value}
 let ndbiData = {};
 let ndwiData = {};
@@ -455,8 +543,17 @@ function loadEcologySeriesWorkbook(filePath, source) {
     }
     const rows = xlsx.utils.sheet_to_json(sheet, { defval: null });
     const parsed = parseEcologyWorkbookRows(rows);
+    const expectedCount = Number(process.env.JIANGXI_EXPECTED_COUNT || 348);
+    if (Object.keys(parsed).length !== expectedCount) {
+      throw new Error(`工作簿 TBBH 数量为 ${Object.keys(parsed).length}，期望 ${expectedCount}`);
+    }
     if (!hasEcologyAnnualData(parsed)) {
-      throw new Error('工作簿未包含有效 FID 与年度生态指标列');
+      throw new Error('工作簿未包含有效 TBBH 与年度生态指标列');
+    }
+    for (const tbbh of Object.keys(parsed)) {
+      if (!mineIdentityIndex.byTbbh.has(tbbh)) {
+        throw new Error(`生态工作簿 TBBH 不在权威图斑中: ${tbbh}`);
+      }
     }
     console.log(
       `Loaded ecology workbook for ${Object.keys(parsed).length} mines from ${path.basename(fullPath)} (${source}).`
@@ -471,13 +568,24 @@ function loadEcologySeriesWorkbook(filePath, source) {
 
 async function loadMinesData() {
   if (!fs.existsSync(defaultMineSourcePath)) {
-    minesData = [];
-    console.warn(`Default mine source not found: ${defaultMineSourcePath}`);
-    return;
+    throw new Error(`江西权威 SHP 不存在: ${defaultMineSourcePath}`);
   }
 
   const geojson = await loadJiangxiGeoJsonFromSource(defaultMineSourcePath, pythonRunner);
   minesData = Array.isArray(geojson?.features) ? geojson.features : [];
+  const expectedCount = Number(process.env.JIANGXI_EXPECTED_COUNT || 348);
+  if (minesData.length !== expectedCount) {
+    throw new Error(`江西权威 SHP 图斑数量错误: ${minesData.length}，期望 ${expectedCount}`);
+  }
+  mineIdentityIndex = buildMineIdentityIndex(minesData);
+  if (assetManifestInfo.mapping) {
+    for (const feature of minesData) {
+      const { tbbh, map_fid: mapFid } = feature.properties;
+      if (assetManifestInfo.mapping.tbbhToMapFid[tbbh] !== mapFid) {
+        throw new Error(`SHP 与资产 manifest 的映射不一致: ${tbbh}/${mapFid}`);
+      }
+    }
+  }
   console.log(
     `[Startup] loaded jiangxi geojson features=${minesData.length} source=${defaultMineSourcePath}`
   );
@@ -488,13 +596,9 @@ async function loadMinesData() {
 
 // --- Initialization function ---
 async function initData() {
-  // 1. Load 江西 KMZ polygons via the shared source adapter.
-  try {
-    await loadMinesData();
-  } catch (e) {
-    minesData = [];
-    console.error(`Failed to parse mine source ${defaultMineSourcePath}:`, e);
-  }
+  // 1. Validate immutable Jiangxi assets before loading dependent data.
+  assetManifestInfo = loadJiangxiAssetManifest();
+  await loadMinesData();
 
   // 2. Load Indices Data
   const ndviResult = await loadIndexData(INDEX_SOURCE_FILES.ndvi, /^(ndvi|ndvi_value)$/i);
@@ -552,6 +656,31 @@ async function initData() {
 
 await initData();
 
+function getFeatureByTbbh(rawTbbh) {
+  let tbbh;
+  try {
+    tbbh = normalizeTbbh(rawTbbh);
+  } catch (_) {
+    return { error: 'TBBH 不能为空或无效', code: 'invalid_tbbh' };
+  }
+  const feature = mineIdentityIndex.byTbbh.get(tbbh);
+  if (!feature) return { error: `TBBH 不存在: ${tbbh}`, code: 'tbbh_not_found' };
+  return { tbbh, feature, mapFid: Number(feature.properties.map_fid) };
+}
+
+app.get('/api/health/jiangxi', (req, res) => {
+  res.json({
+    status: 'ok',
+    mine_count: minesData.length,
+    geojson_count: minesData.length,
+    unique_tbbh_count: mineIdentityIndex.byTbbh.size,
+    tbbh_duplicate_count: minesData.length - mineIdentityIndex.byTbbh.size,
+    manifest_sha256: assetManifestInfo.sha256,
+    asset_manifest: Boolean(assetManifestInfo.path),
+    model_device: normalizeInferenceDevice(),
+  });
+});
+
 // --- API Endpoints ---
 
 // Get Global Statistics
@@ -575,14 +704,15 @@ app.get('/api/mines/search', (req, res) => {
   if (!q) return res.status(400).json({ error: 'Missing query parameter q' });
 
   const qStr = String(q).toLowerCase();
-  const fid = parseInt(q, 10);
+  const mapFid = Number(q);
 
   let found = null;
 
-  // Try exact FID match first
-  if (!isNaN(fid)) {
-    found = minesData.find((f) => f.properties && f.properties.FID_1 === fid);
+  // Exact TBBH or technical map_fid match first.
+  if (Number.isSafeInteger(mapFid)) {
+    found = mineIdentityIndex.byMapFid.get(mapFid) || null;
   }
+  if (!found) found = mineIdentityIndex.byTbbh.get(String(q).trim()) || null;
 
   // If not found, try name match
   if (!found) {
@@ -593,26 +723,28 @@ app.get('/api/mines/search', (req, res) => {
     });
   }
 
-  if (!found) return res.status(404).json({ error: 'Mine not found' });
+  if (!found)
+    return res.status(404).json({ error: 'TBBH 或地图编号不存在', code: 'mine_not_found' });
 
   res.json(found);
 });
 
 // Get Indices Data (NDVI, NDBI, NDWI)
 app.get('/api/mines/indices', (req, res) => {
-  const { fid } = req.query;
-  if (!fid) return res.status(400).json({ error: 'Missing FID parameter' });
-
-  const fidNum = Number(fid);
+  const resolved = getFeatureByTbbh(req.query.tbbh);
+  if (resolved.error)
+    return res.status(resolved.code === 'tbbh_not_found' ? 404 : 400).json(resolved);
+  const { tbbh, mapFid } = resolved;
 
   res.json(
     buildIndicesPayload({
-      fid: fidNum,
+      tbbh,
+      map_fid: mapFid,
       sourceData: {
-        ndvi: ndviData[fidNum] || [],
-        ndbi: ndbiData[fidNum] || [],
-        ndwi: ndwiData[fidNum] || [],
-        ndsi: ndsiData[fidNum] || [],
+        ndvi: ndviData[mapFid] || [],
+        ndbi: ndbiData[mapFid] || [],
+        ndwi: ndwiData[mapFid] || [],
+        ndsi: ndsiData[mapFid] || [],
       },
       availability: indexAvailability,
     })
@@ -620,15 +752,21 @@ app.get('/api/mines/indices', (req, res) => {
 });
 
 app.get('/api/mines/ecology-series', (req, res) => {
-  const { fid } = req.query;
-  if (!fid) return res.status(400).json({ error: 'Missing FID parameter' });
+  const resolved = getFeatureByTbbh(req.query.tbbh);
+  if (resolved.error)
+    return res.status(resolved.code === 'tbbh_not_found' ? 404 : 400).json(resolved);
 
-  res.json(
-    buildEcologySeriesPayload({
-      fid: Number(fid),
-      dataMap: ecologySeriesData,
-    })
-  );
+  const payload = buildEcologySeriesPayload({ tbbh: resolved.tbbh, dataMap: ecologySeriesData });
+  if (!ecologySeriesData[resolved.tbbh]) {
+    return res.status(404).json({
+      error: `TBBH 存在但无历史生态结果: ${resolved.tbbh}`,
+      code: 'tbbh_history_not_found',
+      tbbh: resolved.tbbh,
+      map_fid: resolved.mapFid,
+      data: payload,
+    });
+  }
+  return res.json({ ...payload, map_fid: resolved.mapFid });
 });
 
 app.get('/api/mines/ecology-profile', (req, res) => {
@@ -647,24 +785,13 @@ app.get('/api/mines/ecology-profile', (req, res) => {
 
 // Get Change Matrix Data
 app.get('/api/mines/change-matrix', (req, res) => {
-  const { fid } = req.query;
-  if (!fid) return res.status(400).json({ error: 'Missing FID parameter' });
+  const resolved = getFeatureByTbbh(req.query.tbbh);
+  if (resolved.error)
+    return res.status(resolved.code === 'tbbh_not_found' ? 404 : 400).json(resolved);
+  const fidText = String(resolved.mapFid);
 
-  let fidText;
-  try {
-    fidText = parsePositiveIdentifier(fid, 'FID');
-  } catch (error) {
-    return res.status(400).json({ error: error.message });
-  }
-  const fidNum = Number(fidText);
-
-  const csvPath = path.resolve(
-    process.cwd(),
-    'change_matrix_outputs',
-    fidText,
-    'change_matrix_percent_rownorm.csv'
-  );
-  const dirPath = path.resolve(process.cwd(), 'change_matrix_outputs', fidText);
+  const csvPath = path.resolve(defaultOutputRoot, fidText, 'change_matrix_percent_rownorm.csv');
+  const dirPath = path.resolve(defaultOutputRoot, fidText);
 
   if (fs.existsSync(csvPath)) {
     try {
@@ -700,7 +827,8 @@ app.get('/api/mines/change-matrix', (req, res) => {
           : 'historical_output';
 
       res.json({
-        fid: fidNum,
+        tbbh: resolved.tbbh,
+        map_fid: resolved.mapFid,
         has_change_matrix: true,
         data_source: matrixSource,
         changed_area_km2: changeArea.changed_area_km2,
@@ -714,14 +842,16 @@ app.get('/api/mines/change-matrix', (req, res) => {
         },
       });
     } catch (e) {
-      console.error(`Failed to read change matrix for FID ${fid}:`, e);
-      res.status(500).json({ error: 'Failed to read matrix file' });
+      console.error(`Failed to read change matrix for TBBH ${resolved.tbbh}:`, e);
+      res.status(500).json({ error: '数据文件损坏，无法读取变化矩阵', code: 'data_file_corrupt' });
     }
   } else {
     const changeArea = computeMineChangedArea(fidText);
     res.status(404).json({
-      error: 'Change matrix not found for this FID',
-      fid: fidNum,
+      error: `TBBH 存在但无历史变化矩阵: ${resolved.tbbh}`,
+      code: 'tbbh_history_not_found',
+      tbbh: resolved.tbbh,
+      map_fid: resolved.mapFid,
       has_change_matrix: false,
       data_source: 'none',
       changed_area_km2: changeArea.changed_area_km2,
@@ -734,11 +864,12 @@ app.get('/api/mines/change-matrix', (req, res) => {
 app.get('/api/mines/change-area-summary', (req, res) => {
   const list = minesData.map((f) => {
     const p = f.properties || {};
-    const fid = p.FID_1;
-    const area = computeMineChangedArea(fid);
+    const mapFid = p.map_fid;
+    const area = computeMineChangedArea(mapFid);
     return {
-      fid: Number(fid),
-      mine_name: p.mine_name || p.name || `Mine_${fid}`,
+      tbbh: p.tbbh,
+      map_fid: Number(mapFid),
+      mine_name: p.mine_name || p.name || `Mine_${mapFid}`,
       changed_area_km2: area.changed_area_km2,
       area_source: area.area_source,
       has_inference_output: area.has_inference_output,
@@ -783,20 +914,25 @@ app.post('/api/kml/upload', (req, res) => {
 
 // Get NDVI data and trend (Legacy/Specific)
 app.get('/api/mines/ndvi', (req, res) => {
-  const { fid } = req.query;
-  if (!fid) return res.status(400).json({ error: 'Missing FID parameter' });
-
-  const fidNum = Number(fid);
-  const data = ndviData[fidNum];
+  const resolved = getFeatureByTbbh(req.query.tbbh);
+  if (resolved.error)
+    return res.status(resolved.code === 'tbbh_not_found' ? 404 : 400).json(resolved);
+  const data = ndviData[resolved.mapFid];
 
   if (!data || data.length === 0) {
-    return res.status(404).json({ error: 'No NDVI data for this FID' });
+    return res.status(404).json({
+      error: `TBBH 存在但无 NDVI 历史结果: ${resolved.tbbh}`,
+      code: 'tbbh_history_not_found',
+      tbbh: resolved.tbbh,
+      map_fid: resolved.mapFid,
+    });
   }
 
   const stats = calculateStats(data);
 
   res.json({
-    fid: fidNum,
+    tbbh: resolved.tbbh,
+    map_fid: resolved.mapFid,
     ndvi_data: data, // Keep naming for compatibility if needed, but data has .value now
     ndvi_mean: stats.mean,
     ndvi_trend: stats.trend,
@@ -834,7 +970,7 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       ['.kml', '.kmz']
     );
     const outputRoot = defaultOutputRoot;
-    normalizeInferenceDevice(req.body?.device);
+    const device = normalizeInferenceDevice(req.body?.device);
     const limitNum = Number(req.body?.limit || 0);
     const year = normalizePathInput(req.body?.year || '');
     const oldYear = normalizePathInput(req.body?.old_year || '');
@@ -856,10 +992,12 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       newTifPath,
       kmlPath,
       outputRoot,
+      manifestPath: assetManifestInfo.path,
       limit: limitNum,
       year,
       oldYear,
       newYear,
+      device,
     });
 
     const { stdout, stderr } = await execFile(
@@ -872,18 +1010,50 @@ app.post('/api/inference/kml-roi', async (req, res) => {
     );
 
     const parsed = parseJsonFromStdout(stdout);
-    const matchedFidList = Array.isArray(parsed?.matched_fid_list) ? parsed.matched_fid_list : [];
-    const writtenFidList = (
-      Array.isArray(parsed?.written_fid_list) ? parsed.written_fid_list : matchedFidList
-    ).map((fid) => parsePositiveIdentifier(fid, 'FID'));
+    const rawMatchedMapFidList = Array.isArray(parsed?.matched_fid_list)
+      ? parsed.matched_fid_list.map((fid) => parsePositiveIdentifier(fid, 'map_fid'))
+      : [];
+    const matchedTbbhList = Array.isArray(parsed?.matched_tbbh_list)
+      ? parsed.matched_tbbh_list.map((value) => normalizeTbbh(value))
+      : rawMatchedMapFidList.map((mapFid) => {
+          const feature = mineIdentityIndex.byMapFid.get(Number(mapFid));
+          if (!feature) throw new Error(`推理结果 map_fid 无法映射 TBBH: ${mapFid}`);
+          return feature.properties.tbbh;
+        });
+    const matchedMapFidList = rawMatchedMapFidList.length
+      ? rawMatchedMapFidList
+      : matchedTbbhList.map((tbbh) => {
+          const feature = mineIdentityIndex.byTbbh.get(tbbh);
+          if (!feature) throw new Error(`推理结果 TBBH 无法映射 map_fid: ${tbbh}`);
+          return Number(feature.properties.map_fid);
+        });
 
-    const results = writtenFidList.map((fid) => {
+    const rawWrittenMapFidList = Array.isArray(parsed?.written_fid_list)
+      ? parsed.written_fid_list.map((fid) => parsePositiveIdentifier(fid, 'map_fid'))
+      : [];
+    const writtenTbbhList = Array.isArray(parsed?.written_tbbh_list)
+      ? parsed.written_tbbh_list.map((value) => normalizeTbbh(value))
+      : (rawWrittenMapFidList.length ? rawWrittenMapFidList : matchedMapFidList).map((mapFid) => {
+          const feature = mineIdentityIndex.byMapFid.get(Number(mapFid));
+          if (!feature) throw new Error(`推理结果 map_fid 无法映射 TBBH: ${mapFid}`);
+          return feature.properties.tbbh;
+        });
+    const writtenMapFidList = rawWrittenMapFidList.length
+      ? rawWrittenMapFidList
+      : writtenTbbhList.map((tbbh) => {
+          const feature = mineIdentityIndex.byTbbh.get(tbbh);
+          if (!feature) throw new Error(`推理结果 TBBH 无法映射 map_fid: ${tbbh}`);
+          return Number(feature.properties.map_fid);
+        });
+
+    const results = writtenMapFidList.map((fid, index) => {
       const fidStr = String(fid);
       const dirPath = path.resolve(outputRoot, fidStr);
       const oldName = `${fidStr}_old.png`;
       const newName = `${fidStr}_new.png`;
       return {
-        fid: Number(fidStr),
+        tbbh: writtenTbbhList[index],
+        map_fid: Number(fidStr),
         images: {
           old: fs.existsSync(path.join(dirPath, oldName))
             ? buildChangeMatrixAssetPath(fidStr, oldName)
@@ -898,10 +1068,10 @@ app.post('/api/inference/kml-roi', async (req, res) => {
     return res.json({
       status: parsed?.status || 'completed',
       total_features: parsed?.total_features ?? null,
-      matched_fids: parsed?.matched_fids ?? matchedFidList.length,
-      matched_fid_list: matchedFidList,
-      written_fids: parsed?.written_fids ?? writtenFidList.length,
-      written_fid_list: writtenFidList,
+      matched_tbbhs: matchedTbbhList.length,
+      matched_tbbh_list: matchedTbbhList,
+      written_tbbhs: writtenTbbhList.length,
+      written_tbbh_list: writtenTbbhList,
       failed_tiles: parsed?.failed_tiles || [],
       runtime: parsed?.runtime || null,
       stderr_tail: String(stderr || '')
@@ -915,7 +1085,7 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       return res.status(400).json({ error: err.message });
     }
     const message = err?.message || String(err);
-    const status = /device 仅支持|江西项目仅支持 CPU/.test(message) ? 400 : 500;
+    const status = /device 仅支持|CUDA 不可用|江西项目仅支持 CPU/.test(message) ? 400 : 500;
     return res.status(status).json({
       error: 'Failed to run kml roi inference',
       detail: message,

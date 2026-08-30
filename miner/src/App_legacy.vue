@@ -103,7 +103,7 @@ import LeftSidebar from './components/LeftSidebar.vue';
 import RightSidebar from './components/RightSidebar.vue';
 import MapContainer from './components/MapContainer.vue';
 import MineDetailModal from './components/MineDetailModal.vue';
-import { JIANGXI_FALLBACK_CENTER } from './config/minerDefaults.js';
+import { INFERENCE_DEVICE, JIANGXI_FALLBACK_CENTER } from './config/minerDefaults.js';
 
 // Composables
 import { useWeather } from './composables/useWeather';
@@ -120,7 +120,7 @@ const mapContainerRef = ref(null);
 const oldTifPath = ref('/app/backend/bianhua_2years/mine_TEST.tif');
 const newTifPath = ref('/app/backend/bianhua_2years/mine_TEST.tif');
 const kmlPath = ref('');
-const inferenceDevice = ref('cpu');
+const inferenceDevice = ref(INFERENCE_DEVICE);
 const inferenceLimit = ref(0);
 const showInferencePanel = ref(false);
 
@@ -340,6 +340,5 @@ onMounted(() => {
   gap: 6px;
 }
 </style>
-
 
 

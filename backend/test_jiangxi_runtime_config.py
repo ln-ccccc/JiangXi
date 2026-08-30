@@ -34,6 +34,12 @@ class JiangxiRuntimeConfigTests(unittest.TestCase):
             "/app/runtime_data/Jiangxi_NaturalMine.kmz",
         )
 
+    def test_session_lifetime_covers_long_running_cpu_inference(self):
+        self.assertEqual(
+            CONFIG_MODULE.BaseConfig.PERMANENT_SESSION_LIFETIME.total_seconds(),
+            12 * 60 * 60,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

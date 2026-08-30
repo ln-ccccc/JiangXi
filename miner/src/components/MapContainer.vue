@@ -414,7 +414,7 @@ const renderMapMarkers = () => {
       const name =
         feature.properties.mine_name ||
         feature.properties.name ||
-        `ID: ${feature.properties.FID_1}`;
+        `TBBH: ${feature.properties.tbbh}`;
       layer.bindTooltip(name, { direction: 'top', className: 'map-tooltip' });
 
       layer.on('click', () => {
@@ -446,11 +446,11 @@ const renderMapMarkers = () => {
   }
 };
 
-const flyToMine = (fid) => {
+const flyToMine = (tbbh) => {
   if (!map.value || !mineLayer.value) return;
   let targetLayer = null;
   mineLayer.value.eachLayer((layer) => {
-    if (layer.feature.properties.FID_1 === fid) {
+    if (String(layer.feature.properties.tbbh) === String(tbbh)) {
       targetLayer = layer;
     }
   });

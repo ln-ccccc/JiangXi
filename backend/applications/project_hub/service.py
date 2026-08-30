@@ -27,11 +27,30 @@ from applications.schemas.project import (
 )
 from applications.models.jiangxi_seed import JiangxiMinePlot
 from applications.common.utils.safe_paths import PathValidationError, resolve_managed_file, resolve_output_directory
+from applications.project_hub.tbbh_identity import normalize_tbbh
 
 
 ALLOWED_PROJECT_STATUSES = {"draft", "active", "completed", "archived"}
 ALLOWED_DATASET_KINDS = {"imagery", "inference_result", "report", "export_package"}
 ALLOWED_EXPORT_FORMATS = {"geojson", "csv", "shp"}
+BINDING_INPUT_FIELDS = {
+    "tbbh",
+    "mine_name_snapshot",
+    "city_snapshot",
+    "area_snapshot",
+    "status_snapshot",
+    "sort_order",
+}
+DATASET_INPUT_FIELDS = {
+    "dataset_kind",
+    "display_name",
+    "file_path",
+    "source_format",
+    "tbbh",
+    "year_start",
+    "year_end",
+    "slice_config_json",
+}
 
 
 def _json_dump(value):
@@ -165,12 +184,33 @@ def update_project(project_id, payload):
 def replace_project_mines(project_id, mines):
     project = _get_project_or_404(project_id)
     mines = mines or []
+    normalized_tbbhs = []
+    for item in mines:
+        if not isinstance(item, dict):
+            raise ValueError("项目矿山绑定必须为对象")
+        unsupported = sorted(set(item) - BINDING_INPUT_FIELDS)
+        if unsupported:
+            raise ValueError(
+                "项目矿山绑定包含不支持字段: "
+                + ", ".join(unsupported)
+                + "；业务关联必须使用 tbbh"
+            )
+        normalized_tbbhs.append(normalize_tbbh(item.get("tbbh")))
+    if len(set(normalized_tbbhs)) != len(normalized_tbbhs):
+        raise ValueError("同一项目内 TBBH 不能重复")
+    removed_tbbhs = {
+        dataset.tbbh
+        for dataset in project.datasets
+        if dataset.tbbh and dataset.tbbh not in set(normalized_tbbhs)
+    }
+    if removed_tbbhs:
+        raise ValueError("不能移除仍被数据集引用的 TBBH: " + ", ".join(sorted(removed_tbbhs)))
     project.mines[:] = []
     db.session.flush()
-    for item in mines:
+    for item, tbbh in zip(mines, normalized_tbbhs):
         project.mines.append(
             ProjectMineBinding(
-                mine_fid=int(item["mine_fid"]),
+                tbbh=tbbh,
                 mine_name_snapshot=str(item.get("mine_name_snapshot") or "").strip() or None,
                 city_snapshot=str(item.get("city_snapshot") or "").strip() or None,
                 area_snapshot=item.get("area_snapshot"),
@@ -194,13 +234,25 @@ def create_dataset(project_id, payload):
     file_path = str(payload.get("file_path") or "").strip()
     if not file_path:
         raise ValueError("数据文件路径不能为空")
+    unsupported = sorted(set(payload) - DATASET_INPUT_FIELDS)
+    if unsupported:
+        raise ValueError(
+            "数据集包含不支持字段: "
+            + ", ".join(unsupported)
+            + "；业务关联必须使用 tbbh"
+        )
+    tbbh = payload.get("tbbh")
+    if tbbh not in (None, ""):
+        tbbh = normalize_tbbh(tbbh)
+        if not any(binding.tbbh == tbbh for binding in project.mines):
+            raise ValueError(f"项目未绑定 TBBH: {tbbh}")
     dataset = ProjectDataset(
         project_id=project.id,
         dataset_kind=dataset_kind,
         display_name=display_name,
         file_path=file_path,
         source_format=str(payload.get("source_format") or "").strip() or None,
-        mine_fid=payload.get("mine_fid"),
+        tbbh=tbbh,
         year_start=payload.get("year_start"),
         year_end=payload.get("year_end"),
         slice_config_json=_json_dump(payload.get("slice_config_json")),
@@ -225,7 +277,7 @@ def create_dataset(project_id, payload):
 def get_project_detail(project_id):
     project = _get_project_or_404(project_id)
     plot_rows = JiangxiMinePlot.query.filter_by(project_id=project.id).order_by(
-        JiangxiMinePlot.mine_fid.asc(),
+        JiangxiMinePlot.tbbh.asc(),
         JiangxiMinePlot.plot_code.asc(),
     ).all()
     return {
@@ -293,7 +345,7 @@ def _write_csv(path_obj, project):
     headers = [
         "project_id",
         "project_name",
-        "mine_fid",
+        "tbbh",
         "mine_name",
         "dataset_id",
         "dataset_kind",
@@ -304,7 +356,7 @@ def _write_csv(path_obj, project):
     ]
     dataset_by_mine = {}
     for dataset in project.datasets:
-        dataset_by_mine.setdefault(dataset.mine_fid, []).append(dataset)
+        dataset_by_mine.setdefault(dataset.tbbh, []).append(dataset)
     with open(path_obj, "w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(headers)
@@ -312,13 +364,13 @@ def _write_csv(path_obj, project):
             writer.writerow([project.id, project.name, "", "", "", "", "", "", "", ""])
             return
         for binding in project.mines:
-            rows = dataset_by_mine.get(binding.mine_fid) or [None]
+            rows = dataset_by_mine.get(binding.tbbh) or [None]
             for dataset in rows:
                 writer.writerow(
                     [
                         project.id,
                         project.name,
-                        binding.mine_fid,
+                        binding.tbbh,
                         binding.mine_name_snapshot or "",
                         getattr(dataset, "id", ""),
                         getattr(dataset, "dataset_kind", ""),
@@ -351,7 +403,7 @@ def _write_shp_zip(path_obj, geojson_payload):
     srs.ImportFromEPSG(4326)
     layer = dataset.CreateLayer(path_obj.stem, srs, ogr.wkbPolygon)
     layer.CreateField(ogr.FieldDefn("project_id", ogr.OFTInteger))
-    layer.CreateField(ogr.FieldDefn("mine_fid", ogr.OFTInteger))
+    layer.CreateField(ogr.FieldDefn("tbbh", ogr.OFTString))
     layer.CreateField(ogr.FieldDefn("dataset_id", ogr.OFTInteger))
     layer.CreateField(ogr.FieldDefn("result_type", ogr.OFTString))
     layer.CreateField(ogr.FieldDefn("year_start", ogr.OFTInteger))
@@ -364,7 +416,7 @@ def _write_shp_zip(path_obj, geojson_payload):
         row = ogr.Feature(layer.GetLayerDefn())
         props = feature.get("properties") or {}
         row.SetField("project_id", int(props.get("project_id") or 0))
-        row.SetField("mine_fid", int(props.get("mine_fid") or 0))
+        row.SetField("tbbh", str(props.get("tbbh") or ""))
         row.SetField("dataset_id", int(props.get("dataset_id") or 0))
         row.SetField("result_type", str(props.get("result_type") or ""))
         row.SetField("year_start", int(props.get("year_start") or 0))
@@ -445,6 +497,12 @@ def _project_manifest(project):
         },
         "mines": ProjectMineBindingSchema(many=True).dump(project.mines),
         "datasets": ProjectDatasetSchema(many=True).dump(project.datasets),
+        "plots": JiangxiMinePlotSchema(many=True).dump(
+            JiangxiMinePlot.query.filter_by(project_id=project.id).order_by(
+                JiangxiMinePlot.tbbh.asc(),
+                JiangxiMinePlot.plot_code.asc(),
+            ).all()
+        ),
         "exports": ProjectExportRecordSchema(many=True).dump(project.exports),
         "activities": ProjectActivityLogSchema(many=True).dump(project.activities),
     }
@@ -503,6 +561,7 @@ def restore_backup(project_id, backup_id):
 
     ProjectMineBinding.query.filter_by(project_id=project.id).delete()
     ProjectDataset.query.filter_by(project_id=project.id).delete()
+    JiangxiMinePlot.query.filter_by(project_id=project.id).delete()
     ProjectExportRecord.query.filter_by(project_id=project.id).delete()
     ProjectActivityLog.query.filter_by(project_id=project.id).delete()
     db.session.flush()
@@ -511,7 +570,7 @@ def restore_backup(project_id, backup_id):
         db.session.add(
             ProjectMineBinding(
                 project_id=project.id,
-                mine_fid=item["mine_fid"],
+                tbbh=normalize_tbbh(item.get("tbbh")),
                 mine_name_snapshot=item.get("mine_name_snapshot"),
                 city_snapshot=item.get("city_snapshot"),
                 area_snapshot=item.get("area_snapshot"),
@@ -528,10 +587,33 @@ def restore_backup(project_id, backup_id):
                 display_name=item["display_name"],
                 file_path=item["file_path"],
                 source_format=item.get("source_format"),
-                mine_fid=item.get("mine_fid"),
+                tbbh=normalize_tbbh(item["tbbh"]) if item.get("tbbh") not in (None, "") else None,
                 year_start=item.get("year_start"),
                 year_end=item.get("year_end"),
                 slice_config_json=_json_dump(item.get("slice_config_json")),
+            )
+        )
+
+    for item in manifest.get("plots") or []:
+        db.session.add(
+            JiangxiMinePlot(
+                project_id=project.id,
+                tbbh=normalize_tbbh(item.get("tbbh")),
+                city=item.get("city"),
+                county=item.get("county"),
+                location_text=item.get("location_text"),
+                plot_code=item["plot_code"],
+                restored_plot_code=item.get("restored_plot_code"),
+                plot_category=item.get("plot_category"),
+                repair_status=item.get("repair_status"),
+                repair_mode=item.get("repair_mode"),
+                completed_at=item.get("completed_at"),
+                area=item.get("area"),
+                untreated_area=item.get("untreated_area"),
+                center_lng=item.get("center_lng"),
+                center_lat=item.get("center_lat"),
+                closed_year=item.get("closed_year"),
+                plot_attr=item.get("plot_attr"),
             )
         )
 

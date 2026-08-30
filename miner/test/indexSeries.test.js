@@ -32,7 +32,8 @@ test('calculateStats returns no_data when no series exists', () => {
 
 test('buildIndicesPayload marks missing source files as unavailable', () => {
   const payload = buildIndicesPayload({
-    fid: 696,
+    tbbh: 'TBBH-696',
+    map_fid: 23,
     sourceData: {
       ndvi: [{ year: 2024, value: 0.31 }],
       ndbi: [],
@@ -55,7 +56,8 @@ test('buildIndicesPayload marks missing source files as unavailable', () => {
     },
   });
 
-  assert.equal(payload.fid, 696);
+  assert.equal(payload.tbbh, 'TBBH-696');
+  assert.equal(payload.map_fid, 23);
   assert.equal(payload.ndvi.available, true);
   assert.equal(payload.ndvi.reason, null);
   assert.equal(payload.ndbi.available, false);
@@ -66,7 +68,8 @@ test('buildIndicesPayload marks missing source files as unavailable', () => {
 
 test('buildIndicesPayload marks missing mine history as unavailable for the current fid', () => {
   const payload = buildIndicesPayload({
-    fid: 11191,
+    tbbh: 'TBBH-11191',
+    map_fid: 24,
     sourceData: {
       ndvi: [{ year: 2024, value: 0.31 }],
       ndbi: [],

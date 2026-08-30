@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import axios from 'axios';
+import { INFERENCE_DEVICE } from '../config/minerDefaults.js';
 
 const rawMinerApiBase = import.meta.env.VITE_MINER_API_BASE_URL;
 const MINER_API_BASE_URL = rawMinerApiBase ? String(rawMinerApiBase).replace(/\/$/, '') : '';
@@ -154,10 +155,11 @@ export function useMineData() {
       let searchMatch = true;
       if (searchMineId.value) {
         const q = searchMineId.value.toLowerCase();
-        const idMatch = String(p.FID_1) === q;
+        const idMatch = String(p.tbbh || '').toLowerCase() === q;
+        const mapFidMatch = String(p.map_fid ?? '') === q;
         const nameText = String(p.mine_name || p.name || '').toLowerCase();
         const nameMatch = nameText.includes(q);
-        searchMatch = idMatch || nameMatch;
+        searchMatch = idMatch || mapFidMatch || nameMatch;
       }
 
       return cityMatch && methodMatch && statusMatch && (searchMineId.value ? searchMatch : true);
@@ -172,13 +174,19 @@ export function useMineData() {
     applyFilters();
   };
 
-  const fetchIndices = async (fid) => {
+  const fetchIndices = async (tbbh) => {
+    const normalizedTbbh = String(tbbh || '').trim();
+    if (!normalizedTbbh) return;
     try {
-      const res = await axios.get(apiUrl(`/api/mines/indices?fid=${fid}`));
+      const res = await axios.get(
+        apiUrl(`/api/mines/indices?tbbh=${encodeURIComponent(normalizedTbbh)}`)
+      );
       const merged = res.data || {};
 
       try {
-        const liveRes = await axios.get(apiUrl(`/api/geoview/spectral_live/${fid}`));
+        const liveRes = await axios.get(
+          apiUrl(`/api/geoview/spectral_live/${encodeURIComponent(normalizedTbbh)}`)
+        );
         const live = (liveRes.data && liveRes.data.data && liveRes.data.data.indices) || {};
         ['ndvi', 'ndbi', 'ndwi', 'ndsi'].forEach((key) => {
           if (!Array.isArray(live[key]) || live[key].length === 0) return;
@@ -230,7 +238,7 @@ export function useMineData() {
 
       mineIndices.value = merged;
     } catch (e) {
-      console.warn('No indices data for FID:', fid);
+      console.warn('No indices data for TBBH:', normalizedTbbh);
       mineIndices.value = {
         ndvi: buildEmptyIndexEntry(),
         ndbi: buildEmptyIndexEntry(),
@@ -240,9 +248,13 @@ export function useMineData() {
     }
   };
 
-  const fetchEcologySeries = async (fid) => {
+  const fetchEcologySeries = async (tbbh) => {
+    const normalizedTbbh = String(tbbh || '').trim();
+    if (!normalizedTbbh) return;
     try {
-      const res = await axios.get(apiUrl(`/api/mines/ecology-series?fid=${fid}`));
+      const res = await axios.get(
+        apiUrl(`/api/mines/ecology-series?tbbh=${encodeURIComponent(normalizedTbbh)}`)
+      );
       const payload = res.data || {};
       mineEcologySeries.value = {
         ndvi: payload.ndvi || buildEmptyEcologyEntry('NDVI'),
@@ -302,7 +314,8 @@ export function useMineData() {
   const exportTrendReport = async () => {
     const rows = trendReport.value?.tables?.selected_class_rows || [];
     const header = [
-      'FID',
+      'TBBH',
+      'map_fid',
       'MineName',
       'StartYear',
       'EndYear',
@@ -317,7 +330,8 @@ export function useMineData() {
     rows.forEach((r) => {
       lines.push(
         [
-          r.fid ?? '',
+          r.tbbh ?? '',
+          r.map_fid ?? '',
           `"${(r.mine_name || '').replace(/"/g, '""')}"`,
           r.start_year ?? '',
           r.end_year ?? '',
@@ -347,7 +361,7 @@ export function useMineData() {
     oldTifPath,
     newTifPath,
     kmlPath = '',
-    device = 'cpu',
+    device = INFERENCE_DEVICE,
     limit = 0,
     year = '',
     oldYear = '',

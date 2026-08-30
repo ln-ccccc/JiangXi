@@ -28,7 +28,7 @@ const productionSource = [
   uploadUtility,
 ].join("\n");
 
-test("两类分析页都呈现江西同步 CPU 四步工作流", () => {
+test("两类分析页都呈现江西同步四步工作流", () => {
   for (const source of workflowPages) {
     assert.match(source, /class="[^"]*\banalysis-workflow\b[^"]*"/);
     assert.match(source, /workflow-step__number">01<\/span><span>数据源/);
@@ -37,11 +37,12 @@ test("两类分析页都呈现江西同步 CPU 四步工作流", () => {
     assert.match(source, /workflow-step__number">04<\/span><span>结果预览/);
     assert.match(source, /江西/);
     assert.match(source, /同步分析/);
-    assert.match(source, />CPU</);
   }
+  assert.match(segmentation, /VUE_APP_JIANGXI_INFERENCE_DEVICE/);
+  assert.match(spectral, />CPU</);
 });
 
-test("工作流保持江西同步链路且不引入云南异步或 GPU 调度", () => {
+test("工作流保持江西同步链路并使用容器设备配置", () => {
   assert.match(
     segmentation,
     /upload\('地物分类','semantic_segmentation'\)/,
@@ -49,7 +50,7 @@ test("工作流保持江西同步链路且不引入云南异步或 GPU 调度", 
   assert.match(spectral, /@click="startCompute"/);
   assert.match(spectral, /this\.createSrc\(formData\)\.then/);
   assert.match(spectral, /return this\.imgUpload\(/);
-  assert.match(uploadUtility, /device:\s*'cpu'/);
+  assert.match(uploadUtility, /VUE_APP_JIANGXI_INFERENCE_DEVICE/);
   assert.doesNotMatch(productionSource, /\/api\/inference\/jobs/i);
   assert.doesNotMatch(productionSource, /自动\s*GPU|GPU\s*回退|自动设备选择/i);
 });
@@ -93,14 +94,17 @@ test("地物分类渲染真实运行状态而不是静态状态说明", () => {
 });
 
 test("地物分类工具链按真实 Promise 分支更新 running、partial、success 与 error", () => {
-  const runningIndex = uploadUtility.indexOf("setAnalysisRunState(this, 'running'");
+  const runningIndex = uploadUtility.search(/setAnalysisRunState\(\s*this,\s*'running'/);
   const createSrcIndex = uploadUtility.indexOf("return this.createSrc(formData).then");
   assert.ok(runningIndex >= 0, "发起上传前必须进入 running");
   assert.ok(createSrcIndex > runningIndex, "running 必须早于 createSrc 请求");
-  assert.match(uploadUtility, /return Promise\.all\(/);
+  assert.match(uploadUtility, /for \(const tifPath of rawTiffPaths\)/);
+  assert.match(uploadUtility, /await kmlRoiInfer\(/);
+  assert.doesNotMatch(uploadUtility, /Promise\.all\(inferenceRequests\)/);
+  assert.match(uploadUtility, /status: 'rejected'/);
   assert.match(
     uploadUtility,
-    /if \(failedCount > 0\) \{[\s\S]*setAnalysisRunState\(this, 'partial'/,
+    /if \(totalFailureCount > 0\) \{[\s\S]*setAnalysisRunState\(this, 'partial'/,
   );
   assert.match(
     uploadUtility,
@@ -123,6 +127,19 @@ test("地物分类工具链按真实 Promise 分支更新 running、partial、su
     uploadUtility,
     /if \(this\.analysisRunState === 'running'\)[\s\S]*setAnalysisRunState\(/,
   );
+});
+
+test("地物分类结果图片加载失败时提供可见错误而不是空白", () => {
+  assert.match(imageShow, /@error="handleImageError/);
+  assert.match(imageShow, /结果图片加载失败/);
+  assert.match(imageShow, /legacySession/);
+});
+
+test("地物分类页面在打开期间刷新会话并在离开时清理定时器", () => {
+  assert.match(segmentation, /legacySession/);
+  assert.match(segmentation, /setInterval\(/);
+  assert.match(segmentation, /10 \* 60 \* 1000/);
+  assert.match(segmentation, /beforeUnmount\(\)/);
 });
 
 test("结果区提供有方向的空态、历史操作和正确简体中文", () => {

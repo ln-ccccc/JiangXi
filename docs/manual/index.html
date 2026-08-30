@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>江西矿山生态遥感平台｜离线使用手册</title>
+  <style>
+    :root { color-scheme: light; font-family: "Microsoft YaHei", Arial, sans-serif; color: #1d2a32; background: #f4f7f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; line-height: 1.7; }
+    header { padding: 28px 5%; color: #fff; background: #173f45; }
+    header h1 { margin: 0 0 6px; font-size: 1.75rem; }
+    .status { display: inline-block; margin-top: 10px; padding: 4px 10px; border-radius: 999px; background: #d9f0dc; color: #174c29; font-weight: 700; }
+    .layout { display: grid; grid-template-columns: minmax(210px, 280px) minmax(0, 1fr); gap: 28px; max-width: 1400px; margin: 0 auto; padding: 28px 5%; }
+    nav { align-self: start; position: sticky; top: 16px; padding: 18px; border: 1px solid #d5e1e2; background: #fff; }
+    nav h2 { margin-top: 0; font-size: 1.1rem; }
+    nav ol { margin: 0; padding-left: 1.3em; }
+    nav a { color: #185e66; text-decoration: none; }
+    nav a[aria-current="location"] { padding: 2px 4px; color: #fff; background: #29656a; font-weight: 700; }
+    main { min-width: 0; }
+    section { margin-bottom: 22px; padding: 24px; border: 1px solid #d5e1e2; border-radius: 6px; background: #fff; }
+    h2 { margin-top: 0; color: #173f45; }
+    h3 { margin: 20px 0 4px; color: #29656a; font-size: 1rem; }
+    .callout { padding: 12px 16px; border-left: 4px solid #d39a17; background: #fff8df; }
+    .ok { padding: 12px 16px; border-left: 4px solid #3c8b57; background: #edf8ef; }
+    code { padding: 1px 4px; background: #edf1f1; font-family: Consolas, monospace; }
+    figure { margin: 18px 0; padding: 12px; border: 1px solid #dce6e6; background: #fafcfc; }
+    figure img { display: block; width: 100%; height: auto; border: 1px solid #d5e1e2; }
+    .image-stage { position: relative; }
+    .image-callout { position: absolute; z-index: 1; border: 3px solid #d92323; box-shadow: 0 0 0 1px rgb(255 255 255 / .86); pointer-events: none; }
+    .image-callout::before { content: attr(data-callout-label); position: absolute; top: -0.8em; left: -0.8em; display: grid; place-items: center; width: clamp(1.45rem, 3.1vw, 2rem); aspect-ratio: 1; border: 2px solid #fff; border-radius: 50%; color: #fff; background: #c51f1f; font: 700 clamp(.8rem, 1.8vw, 1rem)/1 Arial, sans-serif; box-shadow: 0 1px 2px rgb(0 0 0 / .35); }
+    figcaption { margin-top: 9px; color: #4c5d61; font-size: .92rem; }
+    .notes { margin: 8px 0 0; padding-left: 1.4em; }
+    .diagram { width: 100%; max-width: 940px; height: auto; display: block; margin: 16px auto; }
+    .legend { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)); gap: 8px; padding: 0; list-style: none; }
+    .legend span { display: inline-block; width: 15px; height: 15px; margin-right: 6px; vertical-align: -2px; border: 1px solid #667; }
+    .nav-toggle { display: none; margin-top: 12px; padding: 7px 12px; border: 1px solid #b9d3d5; border-radius: 4px; color: #173f45; background: #fff; font: inherit; font-weight: 700; }
+    #manual-progress { margin: 12px 0 0; font-size: .95rem; font-weight: 700; }
+    html:not(.js) [data-copy-button] { display: none; }
+    html:not(.js) .copy-status { display: none; }
+    html:not(.js) [data-zoom-trigger] { display: none; }
+    .js .image-stage [data-zoom-trigger] { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+    :focus-visible { outline: 3px solid #e29b12; outline-offset: 3px; }
+    .command-block { margin: 14px 0; padding: 14px; border-left: 4px solid #29656a; background: #edf6f6; }
+    .command-block p { margin: 0 0 7px; }
+    .command-block pre { overflow-x: auto; margin: 0 0 9px; padding: 10px; color: #f3f8f8; background: #173f45; }
+    .command-block code { padding: 0; color: inherit; background: transparent; }
+    .js [data-copy-button], .lightbox-close { padding: 6px 10px; border: 1px solid #29656a; border-radius: 4px; color: #fff; background: #29656a; font: inherit; }
+    .js .copy-status { display: inline-block; min-height: 1.7em; margin: 0 0 0 8px; color: #415256; font-size: .9rem; }
+    .image-lightbox[hidden] { display: none; }
+    .image-lightbox { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 24px; background: rgb(0 0 0 / .78); }
+    .lightbox-content { position: relative; width: min(1100px, 100%); max-height: 100%; padding: 18px; overflow: auto; background: #fff; }
+    .lightbox-close { position: absolute; top: 8px; right: 8px; }
+    .lightbox-content img { display: block; width: 100%; height: auto; }
+    .lightbox-content p { margin: 10px 0 0; color: #415256; }
+    footer { padding: 18px 5%; color: #415256; background: #e4ecec; font-size: .9rem; }
+    @media (max-width: 780px) { .layout { display: block; } nav { position: static; margin-bottom: 20px; } .js .nav-toggle { display: inline-block; } .js nav { display: none; } .js nav.is-open { display: block; } .legend { grid-template-columns: repeat(2, 1fr); } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+    @media print { .nav-toggle, #manual-progress, .image-lightbox, .js [data-copy-button], .js .copy-status { display: none !important; } .image-callout { print-color-adjust: exact; -webkit-print-color-adjust: exact; } header { color: #000; background: #fff; } nav { position: static; } .js nav { display: block; } section, figure { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>江西矿山生态遥感平台离线使用手册</h1>
+    <p>适用于当前江西 GPU 独立部署。按 TBBH 完成检索、判读、项目归档与导出。</p>
+    <p class="status">运行基线：geoview-jiangxi-gpu ｜ 稳定镜像：geoview-jiangxi:jiangxi-gpu</p>
+    <button class="nav-toggle" type="button" data-manual-nav-toggle aria-expanded="false" aria-controls="manual-nav">显示目录</button>
+    <p id="manual-progress" aria-live="polite">阅读进度：第 1 章，共 10 章</p>
+  </header>
+
+  <div class="layout">
+    <nav id="manual-nav" aria-label="手册目录">
+      <h2>现场导览</h2>
+      <ol>
+        <li><a href="#quick-start">快速开始</a></li>
+        <li><a href="#login-security">登录与会话安全</a></li>
+        <li><a href="#mine-map">矿山地图</a></li>
+        <li><a href="#project-workspace">项目工作台</a></li>
+        <li><a href="#roi-inference">ROI 解译</a></li>
+        <li><a href="#land-cover">地物分类</a></li>
+        <li><a href="#spectral-index">光谱指数</a></li>
+        <li><a href="#result-reading">结果判读</a></li>
+        <li><a href="#admin-maintenance">管理员巡检</a></li>
+        <li><a href="#faq-glossary">常见问题与术语</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="quick-start">
+        <h2>快速开始</h2>
+        <p>在本机浏览器打开地图 <a href="http://127.0.0.1:4173/#/map">http://127.0.0.1:4173/#/map</a>，或打开解译平台 <a href="http://127.0.0.1:4174/#/segmentation">http://127.0.0.1:4174/#/segmentation</a>。后端服务地址为 <a href="http://127.0.0.1:5178">http://127.0.0.1:5178</a>。</p>
+        <p>建议顺序：先登录，再按 TBBH 定位矿山；需要保留数据和成果时建立项目；再选择 ROI、地物分类或光谱指数流程；最后人工复核并导出。</p>
+        <svg class="diagram" viewBox="0 0 1120 180" role="img" aria-label="平台工作流程图">
+          <defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8z" fill="#29656a"/></marker></defs>
+          <g fill="#eff8f8" stroke="#29656a" stroke-width="2">
+            <rect x="12" y="55" width="118" height="58" rx="7"/><rect x="170" y="55" width="150" height="58" rx="7"/><rect x="360" y="55" width="155" height="58" rx="7"/><rect x="555" y="40" width="220" height="88" rx="7"/><rect x="815" y="55" width="118" height="58" rx="7"/><rect x="973" y="55" width="130" height="58" rx="7"/>
+          </g>
+          <g stroke="#29656a" stroke-width="2" marker-end="url(#arrow)"><path d="M130 84H164"/><path d="M320 84H354"/><path d="M515 84H549"/><path d="M775 84H809"/><path d="M933 84H967"/></g>
+          <g fill="#173f45" font-size="15" text-anchor="middle" font-family="Microsoft YaHei, Arial"><text x="71" y="89">登录</text><text x="245" y="80">按 TBBH</text><text x="245" y="101">检索</text><text x="437" y="80">项目绑定</text><text x="437" y="101">/ 数据集</text><text x="665" y="68">ROI / 地物分类</text><text x="665" y="94">/ 光谱指数</text><text x="874" y="89">人工复核</text><text x="1038" y="80">导出</text><text x="1038" y="101">/ 追溯</text></g>
+        </svg>
+      </section>
+
+      <section id="login-security">
+        <h2>登录与会话安全</h2>
+        <p>由管理员通过安全方式分发登录凭据。两个前端共用会话：在其中一个前端登录后，可切换到另一个前端继续操作；退出登录会使该会话失效。</p>
+        <figure data-zoomable data-callout>
+          <div class="image-stage">
+            <img src="assets/login-current.png" alt="平台登录页面">
+            <div aria-hidden="true">
+              <span class="image-callout" data-callout-label="1" style="left:37.1%; top:48.7%; width:25.8%; height:16.6%;"></span>
+              <span class="image-callout" data-callout-label="2" style="left:37.1%; top:66.6%; width:25.8%; height:5.7%;"></span>
+            </div>
+            <button type="button" data-zoom-trigger aria-label="放大查看登录页截图"></button>
+          </div>
+          <figcaption>图 1　登录页示例。请使用管理员分发的账号信息。</figcaption>
+          <ol class="notes"><li>账号与密码输入区：在输入框中填写管理员分发的凭据。</li><li>登录按钮：确认信息无误后，点击“登录”进入平台。</li></ol>
+        </figure>
+      </section>
+
+      <section id="mine-map" data-workflow>
+        <h2>矿山地图</h2>
+        <h3>何时使用</h3><p>需要查看矿山分布、统计、生态诊断或历史趋势时使用地图。</p>
+        <h3>前置条件</h3><p>已登录并取得目标矿山的 TBBH、矿山名称或图幅号之一。</p>
+        <h3>操作步骤</h3><ol><li>进入地图，查看统计与筛选条件。</li><li>用 TBBH、矿山名称或图幅号搜索。</li><li>定位到要素后打开详情，检查生态诊断与趋势信息。</li></ol>
+        <figure data-zoomable data-callout>
+          <div class="image-stage">
+            <img src="assets/map-overview.png" alt="矿山地图总览与筛选界面">
+            <div aria-hidden="true">
+              <span class="image-callout" data-callout-label="1" style="left:.4%; top:9.8%; width:10.6%; height:49.2%;"></span>
+              <span class="image-callout" data-callout-label="2" style="left:11.2%; top:4.9%; width:77.2%; height:94.3%;"></span>
+              <span class="image-callout" data-callout-label="3" style="left:88.6%; top:4.9%; width:11%; height:94.3%;"></span>
+            </div>
+            <button type="button" data-zoom-trigger aria-label="放大查看矿山地图截图"></button>
+          </div>
+          <figcaption>图 2　地图总览。搜索、筛选和统计都以当前可见数据为准。</figcaption>
+          <ol class="notes"><li>筛选查询区：按 TBBH、矿山名称或图幅号检索，并按需要设置筛选条件。</li><li>地图定位区：定位目标要素，再结合页面结果进行判读。</li><li>右侧统计与详情区：查看当前可见数据的汇总和相关信息。</li></ol>
+        </figure>
+        <h3>成功标志</h3><p>地图定位到目标矿山，详情中可读取对应的诊断或已有历史记录。</p>
+        <h3>注意事项与失败处理</h3><ul><li><strong>没有 TBBH：</strong>向业务数据提供方核实后再检索，避免按相近名称误匹配。</li><li><strong>没有历史结果：</strong>这表示当前未提供可读的历史记录，不应据此推断变化结论。</li><li><strong>map_fid 映射缺失：</strong>请记录 TBBH 和出现位置，交由维护人员补齐技术定位映射。</li><li><strong>数据损坏：</strong>停止使用该条结果，保留页面提示和 TBBH，交由维护人员核查源数据。</li></ul>
+      </section>
+
+      <section id="project-workspace" data-workflow>
+        <h2>项目工作台</h2>
+        <h3>何时使用</h3><p>需要把多个矿山、数据集、时间线和处理成果组织为可追溯任务时使用。</p>
+        <h3>前置条件</h3><p>已确定项目名称、所涉 TBBH 与允许使用的数据集。</p>
+        <h3>操作步骤</h3><ol><li>新建项目并填写必要说明。</li><li>按 TBBH 绑定矿山，添加数据集并整理时间线。</li><li>在需要时编辑项目；完成后归档。可导出 GeoJSON、CSV 或 SHP，并创建或恢复备份。</li></ol>
+        <figure data-zoomable data-callout>
+          <div class="image-stage">
+            <img src="assets/project-workspace-current.png" alt="项目工作台总览界面">
+            <div aria-hidden="true">
+              <span class="image-callout" data-callout-label="1" style="left:1.6%; top:14.5%; width:96.8%; height:33.1%;"></span>
+              <span class="image-callout" data-callout-label="2" style="left:1.6%; top:49.1%; width:22.2%; height:25.7%;"></span>
+              <span class="image-callout" data-callout-label="3" style="left:25.1%; top:49.1%; width:73.2%; height:24%;"></span>
+              <span class="image-callout" data-callout-label="4" style="left:25.1%; top:74.6%; width:73.2%; height:24.5%;"></span>
+            </div>
+            <button type="button" data-zoom-trigger aria-label="放大查看项目工作台截图"></button>
+          </div>
+          <figcaption>图 3　项目工作台总览。项目内绑定对象应以 TBBH 为准。</figcaption>
+          <ol class="notes"><li>顶部筛选区：按项目名称、区域、年份或状态筛选项目。</li><li>左侧项目列表：选择需要查看或操作的项目。</li><li>项目概览区：核对项目状态、负责人、矿山数量和数据集数量。</li><li>矿山图斑绑定区：按 TBBH 核对已绑定的矿山对象。</li></ol>
+        </figure>
+        <figure data-zoomable data-callout>
+          <div class="image-stage">
+            <img src="assets/project-workspace-actions-current.png" alt="项目工作台操作菜单">
+            <div aria-hidden="true">
+              <span class="image-callout" data-callout-label="1" style="left:25.1%; top:15.5%; width:73.2%; height:48%;"></span>
+              <span class="image-callout" data-callout-label="2" style="left:25.1%; top:80.4%; width:73.2%; height:17.6%;"></span>
+            </div>
+            <button type="button" data-zoom-trigger aria-label="放大查看项目操作菜单截图"></button>
+          </div>
+          <figcaption>图 4　项目操作入口。归档、导出和备份恢复均应在确认项目对象后执行。</figcaption>
+          <ol class="notes"><li>项目数据集区：登记数据集信息，并按实际情况关联矿山和时间范围。</li><li>导出与备份区：执行导出、生成备份或恢复备份前，先确认当前项目对象和范围。</li></ol>
+        </figure>
+        <h3>成功标志</h3><p>项目中显示正确的 TBBH 绑定、数据集与时间线，导出文件或备份恢复结果可被复查。</p>
+        <h3>注意事项与失败处理</h3><p>TBBH 是业务身份；map_fid 仅用于技术地图/历史输出定位。项目绑定、交接和成果追溯均以 TBBH 为准。归档前确认项目不再需要编辑；导出后抽查字段；恢复备份后重新核对矿山绑定和时间线。</p>
+      </section>
+
+      <section id="roi-inference" data-workflow>
+        <h2>ROI 解译</h2>
+        <h3>何时使用</h3><p>需要针对明确范围比较旧、新影像，并进行单年或双年解译时使用。</p>
+        <h3>前置条件</h3><p>准备可用的 KML 范围文件，以及对应的旧影像和新影像。</p>
+        <h3>操作步骤</h3><ol><li>上传或选择 KML，检查范围位置。</li><li>选择旧、新影像，并选择单年或双年模式。</li><li>提交任务，等待状态完成后读取结果；任务失败时记录页面提示与输入范围。</li></ol>
+        <h3>成功标志</h3><p>任务状态完成，结果与输入影像年份、范围和模式能够对应。</p>
+        <h3>注意事项与失败处理</h3><p>范围偏移、影像缺失或任务失败时，不将空白或局部结果作为结论。先检查 KML 边界、影像年份和任务提示，再重新提交。</p>
+      </section>
+
+      <section id="land-cover" data-workflow>
+        <h2>地物分类</h2>
+        <h3>何时使用</h3><p>需要对选定影像生成地物分类图层并下载处理结果时使用。</p>
+        <h3>前置条件</h3><p>已选择可用影像来源，且页面显示的范围、年份等参数符合本次任务。</p>
+        <h3>操作步骤</h3><ol><li>选择影像来源并核对页面可见参数。</li><li>运行 GPU 推理，等待任务状态返回。</li><li>复核输出图层，按需要下载结果。</li></ol>
+        <h3>成功标志</h3><p>任务完成且输出可预览、下载；人工复核后记录可用范围和疑点。</p>
+        <h3>注意事项与失败处理</h3><p>草地、森林、建筑、道路、裸地、水体是模型标签，不是地面真值。参数不符、输出异常或任务失败时，先保留任务信息并核对影像来源与范围，再决定是否重跑。</p>
+      </section>
+
+      <section id="spectral-index" data-workflow>
+        <h2>光谱指数</h2>
+        <h3>何时使用</h3><p>需要按影像来源、指数类型、年份和 TBBH 查看指数结果时使用。</p>
+        <h3>前置条件</h3><p>已确定数据源、指数、年份和目标 TBBH。</p>
+        <h3>操作步骤</h3><ol><li>选择来源、指数和年份，输入或选择 TBBH。</li><li>运行计算并等待完成。</li><li>预览当前结果，并在历史记录中核对已有任务。</li></ol>
+        <h3>成功标志</h3><p>预览和历史记录均能对应本次 TBBH、年份和指数选择。</p>
+        <h3>注意事项与失败处理</h3><p>不同数据源和年份的可比性需要人工判断。若没有结果或历史记录不一致，先核对 TBBH、年份与数据源，再提交问题给维护人员。</p>
+      </section>
+
+      <section id="result-reading">
+        <h2>结果判读</h2>
+        <p class="callout">所有输出都需要人工复核；它们是解译示例，不构成精度评估或地面调查结论。</p>
+        <p>判读时请区分：原始影像呈现地表观测；模型分类显示模型标签；黄色 ROI 边界表示分析范围；道路类别是模型分类中的一种标签。黄色 ROI 边界不是道路。</p>
+        <svg class="diagram" viewBox="0 0 900 330" role="img" aria-label="分类结果阅读示意图，不是实际输出">
+          <rect x="20" y="25" width="510" height="260" fill="#d9e3c5" stroke="#40545a"/>
+          <path d="M20 78 H530 M20 150 H530 M20 220 H530" stroke="#fff" stroke-width="16" opacity=".55"/>
+          <path d="M70 55 L440 65 L470 235 L100 250 Z" fill="none" stroke="#ffd400" stroke-width="7"/>
+          <text x="270" y="275" text-anchor="middle" font-size="15" fill="#4b3d00">黄色线：ROI 分析边界，不是道路</text>
+          <g font-family="Microsoft YaHei, Arial" font-size="16" fill="#1d2a32"><text x="570" y="42">阅读辅助图（非实际输出）</text><rect x="570" y="62" width="22" height="22" fill="#83b950"/><text x="603" y="80">草地</text><rect x="570" y="98" width="22" height="22" fill="#28783d"/><text x="603" y="116">森林</text><rect x="570" y="134" width="22" height="22" fill="#d45d48"/><text x="603" y="152">建筑</text><rect x="570" y="170" width="22" height="22" fill="#f5f5f0" stroke="#777"/><text x="603" y="188">道路（模型类别）</text><rect x="570" y="206" width="22" height="22" fill="#bd975c"/><text x="603" y="224">裸地</text><rect x="570" y="242" width="22" height="22" fill="#4a9ac6"/><text x="603" y="260">水体</text></g>
+        </svg>
+        <ul class="legend" aria-label="分类图例"><li><span style="background:#83b950"></span>草地</li><li><span style="background:#28783d"></span>森林</li><li><span style="background:#d45d48"></span>建筑</li><li><span style="background:#f5f5f0"></span>道路</li><li><span style="background:#bd975c"></span>裸地</li><li><span style="background:#4a9ac6"></span>水体</li></ul>
+      </section>
+
+      <section id="admin-maintenance">
+        <h2>管理员巡检</h2>
+        <p>以下仅用于安全的只读或可逆检查。检查前保留可回滚的容器，不执行删除、卷移除、数据库清理、模型变更或密钥处理操作。</p>
+        <div class="command-block"><p>查看容器：</p><pre><code id="admin-docker-ps">docker ps --filter name=geoview-jiangxi-gpu</code></pre><button type="button" data-copy-button data-copy-target="admin-docker-ps">复制命令</button><span class="copy-status" role="status" aria-live="polite"></span></div>
+        <div class="command-block"><p>打开健康检查：<a href="http://127.0.0.1:4173/api/health/jiangxi">http://127.0.0.1:4173/api/health/jiangxi</a>。</p><pre><code id="admin-health-check">curl --fail http://127.0.0.1:4173/api/health/jiangxi</code></pre><button type="button" data-copy-button data-copy-target="admin-health-check">复制命令</button><span class="copy-status" role="status" aria-live="polite"></span></div>
+        <ol><li>本次交付的当前基线示例为：<code>status ok</code>、<code>mine_count 348</code>、<code>geojson_count 348</code>、<code>unique_tbbh_count 348</code>、<code>tbbh_duplicate_count 0</code>、<code>asset_manifest true</code> 与 <code>model_device cuda:0</code>；请将实际返回值与当前部署基线比对，不要将这些数值视为永久通用保证。</li><li>核对资源清单与工作进程显示值。</li><li>查看最近日志：<code>docker logs --tail 200 geoview-jiangxi-gpu</code>。</li><li>异常处理前确认回滚容器仍被保留，并记录检查时间和现象。</li></ol>
+      </section>
+
+      <section id="faq-glossary">
+        <h2>常见问题与术语</h2>
+        <h3>TBBH 是什么？</h3><p>TBBH 是矿山业务身份，用于检索、项目绑定、交接和成果追溯。</p>
+        <h3>为什么搜索不到目标？</h3><p>先核对 TBBH、矿山名称或图幅号；若仍不能定位，记录查询条件与页面提示，由数据维护人员核查。</p>
+        <h3>ROI 是什么？</h3><p>ROI 是本次分析所选择的感兴趣区域。它是范围标记，不等同于道路或分类类别。</p>
+        <h3>为什么同一矿山会有不同年份结果？</h3><p>影像来源、采集时间、范围与处理任务可能不同。比较前需确认这些条件一致或记录差异。</p>
+        <h3>登录后出现 401 或共享会话失效怎么办？</h3><p>返回登录页重新登录；若页面提示仍显示会话异常，记录页面提示、发生时间和操作路径，交由维护人员核查。</p>
+        <h3>TBBH 存在但没有历史结果怎么办？</h3><p>先记录 TBBH、查询条件和页面提示，确认时间范围与业务筛选是否一致；仍无结果时交由维护人员核查历史数据是否已入库。</p>
+        <h3>map_fid 映射缺失怎么办？</h3><p>记录 TBBH、当前页面提示和涉及的 map_fid，由维护人员补核技术定位映射；不要用技术编号替代业务主键。</p>
+        <h3>数据文件损坏怎么办？</h3><p>立即停止使用该文件，保留错误现象、校验结果和文件来源，交由维护人员使用受控副本核查或恢复。</p>
+        <h3>地物分类结果加载失败怎么办？</h3><p>记录任务信息、页面提示和影像来源，确认当前任务关联的结果是否完整；随后交由维护人员核查任务输出。</p>
+        <h3>manifest（资产清单）是什么？</h3><p>manifest（资产清单）记录运行数据资产的来源、版本与校验摘要等信息，用于启动或导入前核对资产是否完整一致。</p>
+        <h3>GPU Worker 是什么？</h3><p>GPU Worker 是用于地物分类推理的后台工作进程，负责在服务端处理已提交的分类任务并返回明确状态。</p>
+        <h3>map_fid 是什么？</h3><p>map_fid 是用于技术定位和历史输出关联的技术编号；TBBH 是业务主键，检索、项目绑定和成果追溯均以 TBBH 为准。</p>
+      </section>
+    </main>
+  </div>
+  <div id="image-lightbox" class="image-lightbox" role="dialog" aria-modal="true" aria-labelledby="image-lightbox-title" hidden>
+    <div class="lightbox-content">
+      <button class="lightbox-close" type="button" aria-label="关闭放大截图">关闭</button>
+      <img src="assets/login-current.png" alt="放大后的手册截图">
+      <p id="image-lightbox-title"></p>
+    </div>
+  </div>
+  <footer>离线手册｜请以页面实际状态、任务记录和人工复核结果为准。</footer>
+  <script>
+    (() => {
+      document.documentElement.classList.add("js");
+      const navigation = document.getElementById("manual-nav");
+      const navigationToggle = document.querySelector("[data-manual-nav-toggle]");
+      const lightbox = document.getElementById("image-lightbox");
+      let closeNavigation = () => {};
+
+      if (navigation && navigationToggle) {
+        const progress = document.getElementById("manual-progress");
+        const sections = [...document.querySelectorAll("main section")];
+        const links = [...navigation.querySelectorAll('a[href^="#"]')];
+        function setNavigation(open) {
+          navigation.classList.toggle("is-open", open);
+          navigationToggle.setAttribute("aria-expanded", String(open));
+          navigationToggle.textContent = open ? "隐藏目录" : "显示目录";
+        }
+
+        closeNavigation = () => setNavigation(false);
+        navigationToggle.addEventListener("click", () => {
+          setNavigation(!navigation.classList.contains("is-open"));
+        });
+
+        function updateCurrentSection(section) {
+          const index = sections.indexOf(section);
+          if (index < 0) return;
+          links.forEach((link) => link.removeAttribute("aria-current"));
+          const currentLink = links.find((link) => link.getAttribute("href") === `#${section.id}`);
+          if (currentLink) currentLink.setAttribute("aria-current", "location");
+          const heading = section.querySelector("h2");
+          if (progress && heading) {
+            progress.textContent = `阅读进度：第 ${index + 1} 章，共 ${sections.length} 章（${heading.textContent}）`;
+          }
+        }
+
+        if (sections.length && "IntersectionObserver" in window) {
+          const observer = new IntersectionObserver((entries) => {
+            const currentEntry = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+            if (currentEntry) updateCurrentSection(currentEntry.target);
+          }, { rootMargin: "-20% 0px -65% 0px", threshold: [0, .25, .5] });
+          sections.forEach((section) => observer.observe(section));
+        } else if (sections.length) {
+          updateCurrentSection(sections[0]);
+        }
+      }
+
+      if (lightbox) {
+        const lightboxImage = lightbox.querySelector("img");
+        const lightboxTitle = document.getElementById("image-lightbox-title");
+        const closeLightboxButton = lightbox.querySelector(".lightbox-close");
+        if (lightboxImage && lightboxTitle && closeLightboxButton) {
+          let lastZoomTrigger = null;
+          const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+          function closeLightbox() {
+            if (lightbox.hidden) return;
+            lightbox.hidden = true;
+            if (lastZoomTrigger) lastZoomTrigger.focus();
+          }
+
+          function openLightbox(figure, trigger) {
+            const image = figure.querySelector("img");
+            if (!image) return;
+            const caption = figure.querySelector("figcaption");
+            lastZoomTrigger = trigger;
+            lightboxImage.src = image.src;
+            lightboxImage.alt = image.alt;
+            lightboxTitle.textContent = caption ? caption.textContent : image.alt;
+            lightbox.hidden = false;
+            closeLightboxButton.focus();
+          }
+
+          document.querySelectorAll("[data-zoom-trigger]").forEach((trigger) => {
+            const figure = trigger.closest("figure[data-zoomable]");
+            if (!figure) return;
+            trigger.addEventListener("click", () => openLightbox(figure, trigger));
+          });
+          closeLightboxButton.addEventListener("click", closeLightbox);
+          lightbox.addEventListener("click", (event) => {
+            if (event.target === lightbox) closeLightbox();
+          });
+          document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !lightbox.hidden) closeLightbox();
+            if (event.key !== "Tab" || lightbox.hidden) return;
+            const focusableElements = [...lightbox.querySelectorAll(focusableSelector)];
+            if (!focusableElements.length) {
+              event.preventDefault();
+              return;
+            }
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements[focusableElements.length - 1];
+            if (event.shiftKey && (document.activeElement === firstElement || !lightbox.contains(document.activeElement))) {
+              event.preventDefault();
+              lastElement.focus();
+            } else if (!event.shiftKey && (document.activeElement === lastElement || !lightbox.contains(document.activeElement))) {
+              event.preventDefault();
+              firstElement.focus();
+            }
+          });
+        }
+      }
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeNavigation();
+      });
+
+      document.querySelectorAll("[data-copy-button]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const targetCode = document.getElementById(button.dataset.copyTarget);
+          const status = button.nextElementSibling;
+          if (!targetCode || !status) return;
+          const command = targetCode.textContent.trim();
+          if (!navigator.clipboard || !navigator.clipboard.writeText) {
+            status.textContent = "无法自动复制，请手动选中并复制命令。";
+            return;
+          }
+          try {
+            await navigator.clipboard.writeText(command);
+            status.textContent = "命令已复制。";
+          } catch (error) {
+            status.textContent = "无法自动复制，请手动选中并复制命令。";
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

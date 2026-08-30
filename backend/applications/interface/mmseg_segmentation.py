@@ -159,6 +159,91 @@ def colorize_mask(pred_mask: np.ndarray) -> np.ndarray:
     return color_mask
 
 
+def run_loaded_model_inference(
+    model,
+    input_dir: str,
+    output_dir: str,
+    file_names: List[str],
+    device: str = "cpu",
+    opacity: float = 0.3,
+    runtime: Optional[dict] = None,
+) -> dict:
+    """Run inference with a model that has already passed the Jiangxi contract."""
+    from mmseg.apis import inference_model
+
+    effective_runtime = dict(runtime or resolve_inference_device(device))
+    effective_device = effective_runtime["effective_device"]
+    if effective_device == "cuda:0":
+        import torch
+
+        torch.cuda.reset_peak_memory_stats(0)
+
+    os.makedirs(output_dir, exist_ok=True)
+    results = []
+
+    for filename in file_names:
+        try:
+            img_path = os.path.join(input_dir, filename)
+            img_array = load_rs_image_with_gdal(img_path, to_float32=True)
+            if img_array is None:
+                results.append({
+                    "name": filename,
+                    "status": "error",
+                    "error": "Failed to load image",
+                })
+                continue
+
+            result = inference_model(model, img_array)
+            pred_mask = result.pred_sem_seg.data[0].cpu().numpy().astype(np.uint8)
+            color_mask = colorize_mask(pred_mask)
+
+            if len(img_array.shape) == 3 and img_array.shape[2] >= 3:
+                img_rgb = img_array[:, :, :3]
+                if img_rgb.max() > 1:
+                    img_rgb = img_rgb / img_rgb.max() * 255
+                img_bgr = img_rgb[:, :, ::-1].astype(np.uint8)
+                overlay = cv2.addWeighted(img_bgr, opacity, color_mask, 1 - opacity, 0)
+            else:
+                overlay = color_mask
+
+            base_name = os.path.splitext(filename)[0]
+            out_name = f"pred_{base_name}.png"
+            out_path = os.path.join(output_dir, out_name)
+            cv2.imwrite(out_path, overlay)
+
+            mask_name = f"mask_{base_name}.png"
+            mask_path = os.path.join(output_dir, mask_name)
+            cv2.imwrite(mask_path, pred_mask)
+
+            results.append({
+                "name": out_name,
+                "mask_name": mask_name,
+                "status": "success",
+            })
+            print(f"[MMSeg] Processed: {filename} -> {out_name}", file=sys.stderr)
+        except Exception as exc:
+            results.append({
+                "name": filename,
+                "status": "error",
+                "error": str(exc),
+            })
+            print(f"[MMSeg] Error processing {filename}: {exc}", file=sys.stderr)
+
+    if effective_device == "cuda:0":
+        import torch
+
+        effective_runtime["peak_memory_bytes"] = int(torch.cuda.max_memory_allocated(0))
+    else:
+        effective_runtime["peak_memory_bytes"] = None
+    return {
+        "status": "completed",
+        "total": len(file_names),
+        "success": sum(1 for result in results if result.get("status") == "success"),
+        "results": results,
+        "runtime": effective_runtime,
+    }
+
+
 def run_inference(
     config_file: str,
     checkpoint_file: str,
@@ -170,7 +255,7 @@ def run_inference(
 ) -> dict:
     """
     运行 MMSegmentation 推理
-    
+
     Args:
         config_file: 模型配置文件路径
         checkpoint_file: 模型权重文件路径
@@ -179,99 +264,29 @@ def run_inference(
         file_names: 待处理文件名列表
         device: 计算设备
         opacity: 叠加透明度
-    
+
     Returns:
         推理结果字典
     """
-    from mmseg.apis import init_model, inference_model
+    from mmseg.apis import init_model
 
     runtime = resolve_inference_device(device)
     effective_device = runtime["effective_device"]
-    
+
     # 初始化模型
     print(f"[MMSeg] Loading model from {checkpoint_file}", file=sys.stderr)
     model = init_model(config_file, checkpoint_file, device=effective_device)
     _validate_loaded_model_contract(model)
-    if effective_device == "cuda:0":
-        import torch
-        torch.cuda.reset_peak_memory_stats(0)
     print(f"[MMSeg] Model loaded successfully", file=sys.stderr)
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    results = []
-    
-    for filename in file_names:
-        try:
-            img_path = os.path.join(input_dir, filename)
-            
-            # 加载图像
-            img_array = load_rs_image_with_gdal(img_path, to_float32=True)
-            if img_array is None:
-                results.append({
-                    "name": filename,
-                    "status": "error",
-                    "error": "Failed to load image"
-                })
-                continue
-            
-            # 运行推理
-            result = inference_model(model, img_array)
-            pred_mask = result.pred_sem_seg.data[0].cpu().numpy().astype(np.uint8)
-            
-            # 生成彩色掩码
-            color_mask = colorize_mask(pred_mask)
-            
-            # 叠加原图和掩码
-            if len(img_array.shape) == 3 and img_array.shape[2] >= 3:
-                # 取前三个波段作为 RGB
-                img_rgb = img_array[:, :, :3]
-                if img_rgb.max() > 1:
-                    img_rgb = img_rgb / img_rgb.max() * 255
-                img_bgr = img_rgb[:, :, ::-1].astype(np.uint8)
-                overlay = cv2.addWeighted(img_bgr, opacity, color_mask, 1 - opacity, 0)
-            else:
-                overlay = color_mask
-            
-            # 保存结果
-            base_name = os.path.splitext(filename)[0]
-            out_name = f"pred_{base_name}.png"
-            out_path = os.path.join(output_dir, out_name)
-            cv2.imwrite(out_path, overlay)
-            
-            # 同时保存原始掩码（用于后续分析）
-            mask_name = f"mask_{base_name}.png"
-            mask_path = os.path.join(output_dir, mask_name)
-            cv2.imwrite(mask_path, pred_mask)
-            
-            results.append({
-                "name": out_name,
-                "mask_name": mask_name,
-                "status": "success"
-            })
-            
-            print(f"[MMSeg] Processed: {filename} -> {out_name}", file=sys.stderr)
-            
-        except Exception as e:
-            results.append({
-                "name": filename,
-                "status": "error", 
-                "error": str(e)
-            })
-            print(f"[MMSeg] Error processing {filename}: {e}", file=sys.stderr)
-    
-    if effective_device == "cuda:0":
-        import torch
-        runtime["peak_memory_bytes"] = int(torch.cuda.max_memory_allocated(0))
-    else:
-        runtime["peak_memory_bytes"] = None
-    return {
-        "status": "completed",
-        "total": len(file_names),
-        "success": sum(1 for r in results if r.get("status") == "success"),
-        "results": results
-        ,"runtime": runtime
-    }
+    return run_loaded_model_inference(
+        model=model,
+        input_dir=input_dir,
+        output_dir=output_dir,
+        file_names=file_names,
+        device=effective_device,
+        opacity=opacity,
+        runtime=runtime,
+    )
 
 
 def main():
@@ -281,7 +296,12 @@ def main():
     parser.add_argument("--input_dir", required=True, help="Input directory")
     parser.add_argument("--output_dir", required=True, help="Output directory")
     parser.add_argument("--file_names", required=True, help="Comma-separated file names")
-    parser.add_argument("--device", default="cpu", choices=["cpu"], help="Jiangxi CPU inference device")
+    parser.add_argument(
+        "--device",
+        default=os.getenv("JIANGXI_INFERENCE_DEVICE", "cpu"),
+        choices=["cpu", "cuda", "cuda:0"],
+        help="Jiangxi inference device; CPU is the default, GPU must be explicit",
+    )
     parser.add_argument("--opacity", type=float, default=0.3, help="Overlay opacity")
     
     args = parser.parse_args()

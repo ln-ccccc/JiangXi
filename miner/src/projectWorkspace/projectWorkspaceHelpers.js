@@ -1,8 +1,14 @@
 export function filterProjects(items, filters = {}) {
   const list = Array.isArray(items) ? items : [];
-  const name = String(filters.name || '').trim().toLowerCase();
-  const region = String(filters.region || '').trim().toLowerCase();
-  const status = String(filters.status || '').trim().toLowerCase();
+  const name = String(filters.name || '')
+    .trim()
+    .toLowerCase();
+  const region = String(filters.region || '')
+    .trim()
+    .toLowerCase();
+  const status = String(filters.status || '')
+    .trim()
+    .toLowerCase();
   const monitorYear = Number(filters.monitorYear || 0);
 
   return list.filter((item) => {
@@ -32,21 +38,21 @@ export function buildMineSelectionSet(projectDetail) {
   const mines = Array.isArray(projectDetail?.mines) ? projectDetail.mines : [];
   return new Set(
     mines
-      .map((mine) => mine?.mine_fid)
-      .filter((mineFid) => mineFid !== null && mineFid !== undefined)
-      .map((mineFid) => String(mineFid)),
+      .map((mine) => mine?.tbbh)
+      .filter((tbbh) => tbbh !== null && tbbh !== undefined && String(tbbh).trim())
+      .map((tbbh) => String(tbbh).trim())
   );
 }
 
-export function groupPlotsByMineFid(plotRows = []) {
+export function groupPlotsByTbbh(plotRows = []) {
   const groups = new Map();
   for (const row of Array.isArray(plotRows) ? plotRows : []) {
-    const mineFid = Number(row?.mine_fid);
-    if (!Number.isFinite(mineFid)) continue;
-    if (!groups.has(mineFid)) {
-      groups.set(mineFid, []);
+    const tbbh = String(row?.tbbh || '').trim();
+    if (!tbbh) continue;
+    if (!groups.has(tbbh)) {
+      groups.set(tbbh, []);
     }
-    groups.get(mineFid).push(row);
+    groups.get(tbbh).push(row);
   }
   return groups;
 }

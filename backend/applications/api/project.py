@@ -66,6 +66,8 @@ def project_update_api(project_id):
 def project_replace_mines_api(project_id):
     try:
         return success_api(data=replace_project_mines(project_id, (request.json or {}).get("mines") or []))
+    except ValueError as exc:
+        return fail_api(str(exc)), 400
     except Exception as exc:
         return fail_api(str(exc))
 
@@ -75,6 +77,8 @@ def project_replace_mines_api(project_id):
 def project_dataset_create_api(project_id):
     try:
         return success_api(data=create_dataset(project_id, request.json or {}))
+    except ValueError as exc:
+        return fail_api(str(exc)), 400
     except Exception as exc:
         return fail_api(str(exc))
 

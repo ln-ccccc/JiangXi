@@ -163,19 +163,14 @@
                 v-for="item in currentProjectDetail.mines || []"
                 :key="item.id"
                 class="mine-item mine-item-radio"
-                :class="{ active: String(item.mine_fid) === String(selectedMineDetailFid) }"
+                :class="{ active: String(item.tbbh) === String(selectedMineTbbh) }"
               >
-                <input
-                  v-model="selectedMineDetailFid"
-                  type="radio"
-                  :value="String(item.mine_fid)"
-                />
+                <input v-model="selectedMineTbbh" type="radio" :value="String(item.tbbh)" />
                 <div class="mine-item-main">
-                  <strong>{{ item.mine_name_snapshot || `图斑 ${item.mine_fid}` }}</strong>
+                  <strong>{{ item.mine_name_snapshot || `图斑 ${item.tbbh}` }}</strong>
                   <small class="mine-item-meta">
                     {{ item.city_snapshot || '未标注区域' }}
-                    · {{ item.status_snapshot || '状态待补充' }} · TBBH
-                    {{ plotGroups.get(Number(item.mine_fid))?.[0]?.subject_code || '--' }}
+                    · {{ item.status_snapshot || '状态待补充' }} · TBBH {{ item.tbbh || '--' }}
                   </small>
                 </div>
               </label>
@@ -191,7 +186,7 @@
             <div v-else class="table-list">
               <div
                 v-for="item in selectedMinePlots"
-                :key="`${item.mine_fid}-${item.plot_code}`"
+                :key="`${item.tbbh}-${item.plot_code}`"
                 class="table-row table-row-multi"
               >
                 <strong>{{ item.plot_code || '--' }}</strong>
@@ -202,7 +197,7 @@
                 <span>未治理 {{ formatAreaValue(item.untreated_area) }}</span>
                 <small class="table-row-subline">
                   {{ item.city || '未标注地市' }} / {{ item.county || '未标注区县' }} · 主体
-                  {{ item.subject_code || '--' }}
+                  {{ item.tbbh || '--' }}
                 </small>
               </div>
             </div>
@@ -216,15 +211,11 @@
               </button>
             </div>
             <div class="mine-list">
-              <label v-for="item in mineOptions" :key="item.fid" class="mine-item">
-                <input v-model="selectedMineFids" type="checkbox" :value="item.fid" />
+              <label v-for="item in mineOptions" :key="item.tbbh" class="mine-item">
+                <input v-model="selectedMineTbbhs" type="checkbox" :value="item.tbbh" />
                 <span>{{ item.name }}</span>
                 <small>{{ item.city || '未标注区域' }}</small>
-                <button
-                  class="link-btn"
-                  type="button"
-                  @click.stop="$emit('open-map', Number(item.fid))"
-                >
+                <button class="link-btn" type="button" @click.stop="$emit('open-map', item.tbbh)">
                   定位地图
                 </button>
               </label>
@@ -248,9 +239,9 @@
                 v-model.trim="datasetForm.source_format"
                 placeholder="源格式，例如 tif / xlsx"
               />
-              <select v-model="datasetForm.mine_fid">
+              <select v-model="datasetForm.tbbh">
                 <option value="">关联全部矿山/不指定</option>
-                <option v-for="item in boundMineOptions" :key="item.fid" :value="item.fid">
+                <option v-for="item in boundMineOptions" :key="item.tbbh" :value="item.tbbh">
                   {{ item.name }}
                 </option>
               </select>
@@ -362,7 +353,7 @@ import { APP_KICKER, WORKSPACE_SUBTITLE } from '../config/minerDefaults.js';
 import {
   buildMineSelectionSet,
   filterProjects,
-  groupPlotsByMineFid,
+  groupPlotsByTbbh,
 } from '../projectWorkspace/projectWorkspaceHelpers.js';
 
 defineProps({
@@ -417,8 +408,8 @@ const currentProjectId = ref(null);
 const currentProjectDetail = ref(null);
 const loadingProjects = ref(false);
 const mineOptions = ref([]);
-const selectedMineFids = ref([]);
-const selectedMineDetailFid = ref(null);
+const selectedMineTbbhs = ref([]);
+const selectedMineTbbh = ref(null);
 
 const showProjectForm = ref(false);
 const editingProjectId = ref(null);
@@ -451,7 +442,7 @@ function createDefaultDatasetForm() {
     dataset_kind: 'imagery',
     file_path: '',
     source_format: '',
-    mine_fid: '',
+    tbbh: '',
     year_start: '',
     year_end: '',
     slice_config_text: '',
@@ -485,10 +476,10 @@ function formatAreaValue(value) {
 }
 
 const visibleProjects = computed(() => filterProjects(projects.value, filters.value));
-const plotGroups = computed(() => groupPlotsByMineFid(currentProjectDetail.value?.plots || []));
+const plotGroups = computed(() => groupPlotsByTbbh(currentProjectDetail.value?.plots || []));
 const selectedMinePlots = computed(() => {
-  if (!selectedMineDetailFid.value) return [];
-  return plotGroups.value.get(Number(selectedMineDetailFid.value)) || [];
+  if (!selectedMineTbbh.value) return [];
+  return plotGroups.value.get(String(selectedMineTbbh.value)) || [];
 });
 
 const boundMineOptions = computed(() => {
@@ -496,8 +487,8 @@ const boundMineOptions = computed(() => {
     ? currentProjectDetail.value.mines
     : [];
   return mines.map((item) => ({
-    fid: String(item.mine_fid),
-    name: item.mine_name_snapshot || `矿山 ${item.mine_fid}`,
+    tbbh: String(item.tbbh),
+    name: item.mine_name_snapshot || `矿山 ${item.tbbh}`,
   }));
 });
 
@@ -507,8 +498,9 @@ async function loadMineOptions() {
   mineOptions.value = features.map((feature) => {
     const properties = feature.properties || {};
     return {
-      fid: String(properties.FID_1),
-      name: properties.mine_name || properties.name || `矿山 ${properties.FID_1}`,
+      tbbh: String(properties.tbbh || ''),
+      map_fid: Number(properties.map_fid),
+      name: properties.mine_name || properties.name || `矿山 ${properties.tbbh || ''}`,
       city: properties.SHI || '',
       area: properties.area || properties.TBTYMJ || null,
       status: properties.status_normalized || '',
@@ -572,7 +564,7 @@ async function selectProject(projectId) {
     exports: exportsList,
     backups: backupsList,
   };
-  selectedMineFids.value = Array.from(buildMineSelectionSet(currentProjectDetail.value));
+  selectedMineTbbhs.value = Array.from(buildMineSelectionSet(currentProjectDetail.value));
   datasetError.value = '';
 }
 
@@ -640,12 +632,12 @@ async function saveMineBindings() {
   if (!currentProjectId.value) return;
   savingMineBindings.value = true;
   try {
-    const mineMap = new Map(mineOptions.value.map((item) => [item.fid, item]));
-    const mines = selectedMineFids.value.map((mineFid, index) => {
-      const mine = mineMap.get(String(mineFid)) || {};
+    const mineMap = new Map(mineOptions.value.map((item) => [item.tbbh, item]));
+    const mines = selectedMineTbbhs.value.map((tbbh, index) => {
+      const mine = mineMap.get(String(tbbh)) || {};
       return {
-        mine_fid: Number(mineFid),
-        mine_name_snapshot: mine.name || `矿山 ${mineFid}`,
+        tbbh: String(tbbh),
+        mine_name_snapshot: mine.name || `矿山 ${tbbh}`,
         city_snapshot: mine.city || '',
         area_snapshot: mine.area,
         status_snapshot: mine.status || '',
@@ -675,7 +667,7 @@ async function submitDatasetForm() {
       dataset_kind: datasetForm.value.dataset_kind,
       file_path: datasetForm.value.file_path,
       source_format: datasetForm.value.source_format || null,
-      mine_fid: datasetForm.value.mine_fid ? Number(datasetForm.value.mine_fid) : null,
+      tbbh: datasetForm.value.tbbh || null,
       year_start: datasetForm.value.year_start || null,
       year_end: datasetForm.value.year_end || null,
       slice_config_json: sliceConfigJson,
@@ -739,13 +731,13 @@ watch(
   (items) => {
     const mines = Array.isArray(items) ? items : [];
     if (!mines.length) {
-      selectedMineDetailFid.value = null;
+      selectedMineTbbh.value = null;
       return;
     }
-    const current = String(selectedMineDetailFid.value || '');
-    const exists = mines.some((item) => String(item.mine_fid) === current);
+    const current = String(selectedMineTbbh.value || '');
+    const exists = mines.some((item) => String(item.tbbh) === current);
     if (!exists) {
-      selectedMineDetailFid.value = String(mines[0].mine_fid);
+      selectedMineTbbh.value = String(mines[0].tbbh);
     }
   },
   { immediate: true }

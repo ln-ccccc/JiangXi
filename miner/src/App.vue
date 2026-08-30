@@ -7,9 +7,19 @@
     @login="handleLogin"
   />
   <div v-else class="app-shell">
-    <div class="map-shell">
-      <MapDashboard :username="sessionState.username" @logout="handleLogout" />
-    </div>
+    <ProjectWorkspace
+      v-if="currentView === 'projects'"
+      :username="sessionState.username"
+      @open-map="handleOpenMap"
+      @logout="handleLogout"
+    />
+    <MapDashboard
+      v-else
+      :username="sessionState.username"
+      :focus-tbbh="mapFocusTbbh"
+      @open-workspace="handleOpenWorkspace"
+      @logout="handleLogout"
+    />
   </div>
 </template>
 
@@ -24,35 +34,50 @@ import {
 } from './auth/sessionClient.js';
 import LoginPage from './components/LoginPage.vue';
 import MapDashboard from './components/MapDashboard.vue';
-import { VIEW_HASH } from './navigation/viewNavigation.js';
+import ProjectWorkspace from './components/ProjectWorkspace.vue';
+import { resolveViewFromHash, VIEW_HASH } from './navigation/viewNavigation.js';
 
 const currentView = ref('login');
 const initializing = ref(true);
 const authLoading = ref(false);
 const authError = ref('');
 const sessionState = ref({ authenticated: false, username: '' });
+const mapFocusTbbh = ref('');
 
 let responseInterceptorId = null;
 
 const navigateToLogin = (message = '') => {
   sessionState.value = { authenticated: false, username: '' };
   currentView.value = 'login';
+  mapFocusTbbh.value = '';
   authError.value = message;
   if (window.location.hash !== VIEW_HASH.map) {
     window.history.replaceState(null, '', VIEW_HASH.map);
   }
 };
 
-const syncMapHash = () => {
-  if (window.location.hash !== VIEW_HASH.map) {
-    window.location.hash = VIEW_HASH.map;
+const syncViewHash = (view) => {
+  const nextHash = VIEW_HASH[view] || VIEW_HASH.map;
+  if (window.location.hash !== nextHash) {
+    window.location.hash = nextHash;
   }
+};
+
+const handleOpenWorkspace = () => {
+  mapFocusTbbh.value = '';
+  currentView.value = 'projects';
+  syncViewHash('projects');
+};
+
+const handleOpenMap = (tbbh = '') => {
+  mapFocusTbbh.value = String(tbbh || '').trim();
+  currentView.value = 'map';
+  syncViewHash('map');
 };
 
 const handleHashChange = () => {
   if (sessionState.value.authenticated) {
-    currentView.value = 'map';
-    syncMapHash();
+    currentView.value = resolveViewFromHash(window.location.hash);
   }
 };
 
@@ -65,8 +90,8 @@ const handleLogin = async ({ username, password }) => {
       navigateToLogin('登录状态未建立，请重新登录');
       return;
     }
-    currentView.value = 'map';
-    syncMapHash();
+    currentView.value = resolveViewFromHash(window.location.hash);
+    syncViewHash(currentView.value);
   } catch (error) {
     authError.value = error?.response?.data?.msg || error?.message || '登录失败';
   } finally {
@@ -98,8 +123,10 @@ onMounted(async () => {
   );
   try {
     sessionState.value = await fetchSession();
-    currentView.value = sessionState.value.authenticated ? 'map' : 'login';
-    if (sessionState.value.authenticated) syncMapHash();
+    currentView.value = sessionState.value.authenticated
+      ? resolveViewFromHash(window.location.hash)
+      : 'login';
+    if (sessionState.value.authenticated) syncViewHash(currentView.value);
   } catch (_) {
     navigateToLogin('会话检查失败，请重新登录');
   } finally {

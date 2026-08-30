@@ -58,8 +58,10 @@
             </div>
             <div class="form-group half">
               <label>计算设备</label>
-              <div class="fixed-device" role="status">固定设备：CPU</div>
-              <small class="tip">江西项目采用同步 CPU 推理，不进行设备自动选择。</small>
+              <div class="fixed-device" role="status">当前容器设备：{{ formData.device }}</div>
+              <small class="tip"
+                >设备由镜像配置决定；GPU 不可用时启动会直接失败，不会静默回退。</small
+              >
             </div>
           </div>
 
@@ -96,6 +98,7 @@
 <script setup>
 import { defineProps, defineEmits, reactive, ref, watch } from 'vue';
 import axios from 'axios';
+import { INFERENCE_DEVICE } from '../config/minerDefaults.js';
 
 const props = defineProps({
   visible: Boolean,
@@ -113,7 +116,7 @@ const formData = reactive({
   singleYear: '',
   oldYear: '',
   newYear: '',
-  device: 'cpu',
+  device: INFERENCE_DEVICE,
 });
 
 const errorMsg = ref('');
@@ -143,7 +146,7 @@ watch(
   () => props.result,
   (val) => {
     if (val) {
-      const count = val.written_fid_list ? val.written_fid_list.length : 0;
+      const count = val.written_tbbh_list ? val.written_tbbh_list.length : 0;
       const kmlUpdated = Number(val?.kml_update?.updated || 0);
       const kmlInserted = Number(val?.kml_update?.inserted || 0);
       const changedCount = kmlUpdated + kmlInserted;

@@ -21,18 +21,21 @@ test('buildTrendReport returns real class deltas from class_ratio_percent.json',
         grassland: [20, 10],
       },
     }),
-    'utf-8',
+    'utf-8'
   );
 
   const report = buildTrendReport({
     outputRoot,
-    minesData: [{
-      properties: {
-        FID_1: 101,
-        mine_name: '测试矿山',
-        area: 2000000,
+    minesData: [
+      {
+        properties: {
+          tbbh: 'TBBH-101',
+          map_fid: 101,
+          mine_name: '测试矿山',
+          area: 2000000,
+        },
       },
-    }],
+    ],
     className: 'forest',
     direction: 'upward',
   });
@@ -43,7 +46,8 @@ test('buildTrendReport returns real class deltas from class_ratio_percent.json',
   assert.equal(report.class_trends.selected_class.downward_count, 0);
   assert.equal(report.tables.selected_class_rows.length, 1);
   assert.deepEqual(report.tables.selected_class_rows[0], {
-    fid: 101,
+    tbbh: 'TBBH-101',
+    map_fid: 101,
     mine_name: '测试矿山',
     start_year: 2024,
     end_year: 2025,
@@ -70,12 +74,12 @@ test('buildTrendReport filters downward rows without inventing stable zero rows'
         water: [9, 4],
       },
     }),
-    'utf-8',
+    'utf-8'
   );
 
   const report = buildTrendReport({
     outputRoot,
-    minesData: [{ properties: { FID_1: 102, name: '水体矿山' } }],
+    minesData: [{ properties: { tbbh: 'TBBH-102', map_fid: 102, name: '水体矿山' } }],
     className: 'water',
     direction: 'downward',
   });

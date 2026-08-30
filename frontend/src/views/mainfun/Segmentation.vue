@@ -438,6 +438,8 @@ import {
   historyGetPage
 } from "@/api/history";
 import { getUploadImg, goCompress, upload } from "@/utils/getUploadImg";
+import { legacySession } from "@/api/auth";
+import { redirectToLegacyLogin } from "@/utils/authRedirect";
 import { selectClahe, selectFilter, selectSharpen, selectSmooth, } from "@/utils/preHandle";
 import ImgShow from "@/components/ImgShow";
 import Tabinfor from "@/components/Tabinfor";
@@ -483,7 +485,11 @@ export default {
         type: 4
       },
       imgArr:[],
-      roiYear: ''
+      roiYear: '',
+      sessionRefreshTimer: null,
+      inferenceDevice: String(process.env.VUE_APP_JIANGXI_INFERENCE_DEVICE || 'cpu')
+        .trim()
+        .toLowerCase()
     };
   },
   watch: {
@@ -497,6 +503,17 @@ export default {
   },
   created() {
     this.getUploadImg("地物分类");
+    this.sessionRefreshTimer = window.setInterval(() => {
+      legacySession().then((res) => {
+        if (!res?.data?.data?.authenticated) redirectToLegacyLogin("expired");
+      }).catch(() => { });
+    }, 10 * 60 * 1000);
+  },
+  beforeUnmount() {
+    if (this.sessionRefreshTimer !== null) {
+      window.clearInterval(this.sessionRefreshTimer);
+      this.sessionRefreshTimer = null;
+    }
   },
   methods: {
     getImgArrayBuffer,
@@ -534,7 +551,7 @@ export default {
       if (this.$refs.fileInput) this.$refs.fileInput.value = "";
     },
     getMore() {
-      this.getUploadImg("地物分类");
+      return this.getUploadImg("地物分类");
     },
     deleteHistoryItem(item) {
       this.$confirm("删除该条历史？", "提示", {

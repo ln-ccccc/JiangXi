@@ -34,6 +34,11 @@ def build_parser():
         help="348 图斑 TableMERNet 工作簿路径；提供后以图斑粒度建立默认项目台账。",
     )
     parser.add_argument(
+        "--manifest",
+        default=os.getenv("JIANGXI_ASSET_MANIFEST_PATH"),
+        help="江西权威资产 manifest 路径；发布模式必须提供。",
+    )
+    parser.add_argument(
         "--sync-existing",
         action="store_true",
         help="仅对齐现有江西默认项目，不清空项目、数据集或导出记录。",
@@ -49,12 +54,17 @@ def main():
         if args.sync_existing:
             if not args.workbook_path:
                 parser.error("--sync-existing 必须同时提供 --workbook-path")
-            result = sync_jiangxi_project_from_workbook(args.workbook_path, actor=args.actor)
+            result = sync_jiangxi_project_from_workbook(
+                args.workbook_path,
+                actor=args.actor,
+                manifest_path=args.manifest,
+            )
         else:
             result = seed_jiangxi_project_from_csv(
                 csv_path,
                 actor=args.actor,
                 workbook_path=args.workbook_path,
+                manifest_path=args.manifest,
             )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

@@ -142,6 +142,9 @@
               <el-form-item label="年份">
                 <el-input v-model="year" style="width: 180px;" placeholder="例如 2024（可选）" />
               </el-form-item>
+              <el-form-item label="TBBH">
+                <el-input v-model="tbbh" style="width: 240px;" placeholder="请输入江西图斑 TBBH" />
+              </el-form-item>
               <el-form-item label="NIR波段">
                 <el-input-number v-model="bandMap.nir" :min="1" />
               </el-form-item>
@@ -245,6 +248,7 @@ export default {
       runMessage: "请先选择 tif / tiff 影像。",
       indexType: "NDVI",
       year: "",
+      tbbh: "",
       bandMap: {
         nir: 4,
         red: 3,
@@ -424,6 +428,12 @@ export default {
         this.$message.error("请先上传tif文件");
         return;
       }
+      if (!String(this.tbbh || '').trim()) {
+        this.runState = "error";
+        this.runMessage = "请输入 TBBH 后再计算。";
+        this.$message.error("请输入 TBBH");
+        return;
+      }
       this.runState = "running";
       this.runMessage = `正在同步计算 ${this.indexType}，请保持当前页面开启。`;
       const formData = new FormData();
@@ -442,6 +452,7 @@ export default {
           list,
           index_type: this.indexType,
           year: this.year,
+          tbbh: this.tbbh,
           band_map: this.bandMap
         }, "spectral_indices");
       }).then((res) => {

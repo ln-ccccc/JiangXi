@@ -1,6 +1,7 @@
 import datetime
 
 from applications.extensions import db
+from sqlalchemy import UniqueConstraint
 
 
 class Project(db.Model):
@@ -62,10 +63,13 @@ class Project(db.Model):
 
 class ProjectMineBinding(db.Model):
     __tablename__ = "project_mine_binding"
+    __table_args__ = (
+        UniqueConstraint("project_id", "tbbh", name="uq_project_mine_binding_project_tbbh"),
+    )
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False, index=True)
-    mine_fid = db.Column(db.Integer, nullable=False, index=True)
+    tbbh = db.Column(db.String(128), nullable=False, index=True)
     mine_name_snapshot = db.Column(db.String(255))
     city_snapshot = db.Column(db.String(255))
     area_snapshot = db.Column(db.Float)
@@ -89,7 +93,7 @@ class ProjectDataset(db.Model):
     display_name = db.Column(db.String(255), nullable=False)
     file_path = db.Column(db.String(1024), nullable=False)
     source_format = db.Column(db.String(64))
-    mine_fid = db.Column(db.Integer, index=True)
+    tbbh = db.Column(db.String(128), index=True)
     year_start = db.Column(db.Integer)
     year_end = db.Column(db.Integer)
     slice_config_json = db.Column(db.Text, nullable=False, default="{}")

@@ -69,11 +69,11 @@ test('createProjectRoutes enriches geojson exports with live mine geometries', a
             code: 0,
             data: {
               summary: { id: 8 },
-              mines: [{ mine_fid: 201, mine_name_snapshot: '矿山C' }],
+              mines: [{ tbbh: 'C-201', mine_name_snapshot: '矿山C' }],
               datasets: [
                 {
                   id: 3001,
-                  mine_fid: 201,
+                  tbbh: 'C-201',
                   dataset_kind: 'report',
                   year_start: 2024,
                   year_end: 2025,
@@ -106,7 +106,7 @@ test('createProjectRoutes enriches geojson exports with live mine geometries', a
             ],
           ],
         },
-        properties: { FID_1: 201, mine_name: '矿山C' },
+        properties: { tbbh: 'C-201', map_fid: 201, mine_name: '矿山C' },
       },
     ],
   });

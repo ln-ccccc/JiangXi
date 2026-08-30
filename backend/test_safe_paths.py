@@ -12,7 +12,9 @@ from applications.common.utils.safe_paths import (
 
 class SafePathTestCase(unittest.TestCase):
     def setUp(self):
-        self.root = Path("C:/managed-output")
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.root = Path(self.temp_dir.name) / "managed-output"
 
     def test_resolve_output_file_accepts_numeric_fid_and_png_name(self):
         resolved = resolve_output_file(self.root, "101", "101+2024.png", {".png"})

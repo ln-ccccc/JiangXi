@@ -8,12 +8,18 @@ export function useWeather() {
   const weatherIcon = ref('🌤️');
   const airQuality = ref('良');
   const humidity = ref('--');
+  const mapProvider = String(import.meta.env.VITE_MINER_MAP_PROVIDER || 'gaode').toLowerCase();
+  const offlineMode = mapProvider === 'offline' || mapProvider === 'local';
 
   let timeInterval = null;
 
   const updateDateTime = () => {
     const now = new Date();
-    currentDate.value = now.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    currentDate.value = now.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
     currentTime.value = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -49,17 +55,24 @@ export function useWeather() {
   };
 
   const fetchRealtimeEnvironmentAt = async (lat, lon) => {
+    if (offlineMode) {
+      temperature.value = '--';
+      humidity.value = '--';
+      weatherIcon.value = '—';
+      airQuality.value = '暂无';
+      return;
+    }
     try {
       const weatherUrl = 'https://api.open-meteo.com/v1/forecast';
       const airUrl = 'https://air-quality-api.open-meteo.com/v1/air-quality';
-      
+
       const w = await axios.get(weatherUrl, {
         params: {
           latitude: lat,
           longitude: lon,
           current: 'temperature_2m,relative_humidity_2m,weather_code',
-          timezone: 'Asia/Shanghai'
-        }
+          timezone: 'Asia/Shanghai',
+        },
       });
       const curr = w?.data?.current || {};
       if (curr.temperature_2m != null) temperature.value = Math.round(curr.temperature_2m);
@@ -71,8 +84,8 @@ export function useWeather() {
           latitude: lat,
           longitude: lon,
           hourly: 'us_aqi,pm2_5,pm10', // Note: Using US AQI as proxy, ideally calculate from PM2.5/PM10 per HJ 633-2012
-          timezone: 'Asia/Shanghai'
-        }
+          timezone: 'Asia/Shanghai',
+        },
       });
       const h = aq?.data?.hourly;
       let aqi = null;
@@ -86,13 +99,20 @@ export function useWeather() {
   const getAqiClass = (aqiStr) => {
     // Map text back to class based on HJ 633-2012 colors
     switch (aqiStr) {
-        case '优': return 'aqi-1'; // Green
-        case '良': return 'aqi-2'; // Yellow
-        case '轻度污染': return 'aqi-3'; // Orange
-        case '中度污染': return 'aqi-4'; // Red
-        case '重度污染': return 'aqi-5'; // Purple
-        case '严重污染': return 'aqi-6'; // Maroon
-        default: return '';
+      case '优':
+        return 'aqi-1'; // Green
+      case '良':
+        return 'aqi-2'; // Yellow
+      case '轻度污染':
+        return 'aqi-3'; // Orange
+      case '中度污染':
+        return 'aqi-4'; // Red
+      case '重度污染':
+        return 'aqi-5'; // Purple
+      case '严重污染':
+        return 'aqi-6'; // Maroon
+      default:
+        return '';
     }
   };
 
@@ -114,6 +134,6 @@ export function useWeather() {
     airQuality,
     humidity,
     getAqiClass,
-    fetchRealtimeEnvironmentAt
+    fetchRealtimeEnvironmentAt,
   };
 }

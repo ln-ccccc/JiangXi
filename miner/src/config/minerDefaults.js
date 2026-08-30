@@ -8,6 +8,9 @@ export const JIANGXI_FALLBACK_CENTER = [27.61, 115.95];
 export const JIANGXI_FALLBACK_ZOOM = 7;
 export const DEFAULT_MAP_LAYER = 'satellite';
 export const DEFAULT_MAP_PROVIDER = 'gaode';
+export const INFERENCE_DEVICE = String(import.meta.env?.VITE_JIANGXI_INFERENCE_DEVICE || 'cpu')
+  .trim()
+  .toLowerCase();
 
 const SUPPORTED_MAP_PROVIDERS = new Set(['tianditu', 'gaode', 'osm', 'local', 'offline']);
 

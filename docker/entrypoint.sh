@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [ "${STANDALONE_MODE:-0}" = "1" ]; then
   CONFIG_PATH="${CONFIG_PATH:-/app/docker/standalone/config.standalone.yaml}"
-  export DB_BACKEND="${DB_BACKEND:-sqlite}"
+  export DB_BACKEND="sqlite"
   export SQLITE_PATH="${SQLITE_PATH:-/app/runtime_data/jiangxi.sqlite3}"
 else
   CONFIG_PATH="${CONFIG_PATH:-/app/config.yaml}"
@@ -24,23 +24,37 @@ conda activate MMSeg310
 
 if [ -n "${JIANGXI_MMSEG_SOURCE_ROOT:-}" ] && [ -d "${JIANGXI_MMSEG_SOURCE_ROOT}/mmseg" ]; then
   export PYTHONPATH="${JIANGXI_MMSEG_SOURCE_ROOT}:${PYTHONPATH:-}"
-  python - <<'PY'
-import importlib.util
-
-missing = [name for name in ("prettytable", "wcwidth") if importlib.util.find_spec(name) is None]
-if missing:
-    print(f"[entrypoint] Missing runtime dependencies: {', '.join(missing)}. Please rebuild image to include them.", flush=True)
-PY
-elif python - <<'PY'
-import importlib.util
-import sys
-sys.exit(0 if importlib.util.find_spec("mmseg") is not None else 1)
-PY
-then
-  true
-else
-  echo "[entrypoint] MMSegmentation package is missing and the Jiangxi model source was not found."
 fi
+
+python - <<'PY'
+import importlib.util
+import os
+import shutil
+import sys
+
+sys.path.insert(0, "/app/backend")
+
+required = ("flask", "openpyxl", "rasterio", "torch", "mmseg", "mmcv", "mmdet")
+missing = [name for name in required if importlib.util.find_spec(name) is None]
+if importlib.util.find_spec("geopandas") is None and importlib.util.find_spec("osgeo") is None:
+    missing.append("geopandas or osgeo")
+if missing:
+    raise SystemExit(
+        "[entrypoint] Missing required offline runtime dependencies: " + ", ".join(missing)
+    )
+if shutil.which("node") is None:
+    raise SystemExit("[entrypoint] Node.js is missing")
+if not os.path.isdir("/app/miner/node_modules"):
+    raise SystemExit("[entrypoint] Miner npm dependencies are missing: /app/miner/node_modules")
+from applications.interface.inference_device import resolve_inference_device
+runtime = resolve_inference_device(os.environ.get("JIANGXI_INFERENCE_DEVICE", "cpu"))
+print(
+    f"[entrypoint] inference device={runtime['effective_device']}"
+    + (f" ({runtime['device_name']})" if runtime.get("device_name") else ""),
+    flush=True,
+)
+print("[entrypoint] offline runtime dependencies passed", flush=True)
+PY
 
 CONFIG_EXPORTS=$(python - <<'PY'
 import os
@@ -76,13 +90,13 @@ PY
 
 eval "${CONFIG_EXPORTS}"
 
-# Write GeoView frontend .env (include Miner toggle)
-cat > /app/frontend/.env <<EOF
-VUE_APP_BACKEND_PORT = ${BACKEND_PORT}
-VUE_APP_BACKEND_IP =
-VUE_APP_MINER_ENABLED = ${MINER_ENABLED}
-VUE_APP_MINER_URL =
-EOF
+export VUE_APP_MINER_URL="${VUE_APP_MINER_URL:-http://127.0.0.1:4173/}"
+export VUE_APP_BACKEND_URL="${VUE_APP_BACKEND_URL:-http://127.0.0.1:5178/}"
+export VITE_GEOVIEW_URL="${VITE_GEOVIEW_URL:-http://127.0.0.1:4174/}"
+export MINER_MAP_PROVIDER="$(printf '%s' "${MINER_MAP_PROVIDER:-gaode}" | tr '[:upper:]' '[:lower:]')"
+export MINER_LOCAL_TILE_URL="${MINER_LOCAL_TILE_URL:-/tiles/{z}/{x}/{y}.png}"
+export MINER_LOCAL_TMS="${MINER_LOCAL_TMS:-0}"
+python /app/docker/write-runtime-env.py
 
 if [ "${DB_BACKEND_VALUE}" != "sqlite" ]; then
   python - <<'PY'
@@ -109,6 +123,50 @@ else:
 PY
 fi
 
+MMSEG_WORKER_PID=""
+
+start_mmseg_worker() {
+  if [ "${JIANGXI_MMSEG_WORKER_ENABLED:-0}" != "1" ]; then
+    return
+  fi
+
+  local worker_socket="${JIANGXI_MMSEG_WORKER_SOCKET:-}"
+  if [ -z "${worker_socket}" ]; then
+    echo "[entrypoint] GPU Worker is enabled but no Socket path is configured" >&2
+    exit 1
+  fi
+
+  echo "[entrypoint] Starting persistent MMSeg GPU Worker on ${worker_socket}"
+  python /app/backend/applications/interface/mmseg_worker.py \
+    --socket "${worker_socket}" \
+    --device "${JIANGXI_INFERENCE_DEVICE:-cuda:0}" &
+  MMSEG_WORKER_PID=$!
+
+  local attempt
+  for ((attempt = 1; attempt <= 120; attempt++)); do
+    if python /app/backend/applications/interface/mmseg_worker.py \
+      --socket "${worker_socket}" \
+      --ping \
+      --expect-device "${JIANGXI_INFERENCE_DEVICE:-cuda:0}" >/dev/null 2>&1; then
+      echo "[entrypoint] MMSeg GPU Worker is ready (PID=${MMSEG_WORKER_PID})"
+      return
+    fi
+    if ! kill -0 "${MMSEG_WORKER_PID}" 2>/dev/null; then
+      wait "${MMSEG_WORKER_PID}" || true
+      echo "[entrypoint] MMSeg GPU Worker exited before readiness" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+
+  echo "[entrypoint] MMSeg GPU Worker did not become ready in time" >&2
+  kill -TERM "${MMSEG_WORKER_PID}" 2>/dev/null || true
+  wait "${MMSEG_WORKER_PID}" 2>/dev/null || true
+  exit 1
+}
+
+start_mmseg_worker
+
 cd /app/backend
 python app.py &
 BACKEND_PID=$!
@@ -124,24 +182,11 @@ MINER_FRONTEND_PID=""
 if [ "${MINER_ENABLED}" = "true" ]; then
   echo "[entrypoint] Miner is ENABLED. Starting Miner services..."
 
-  MINER_MAP_PROVIDER="$(printf '%s' "${MINER_MAP_PROVIDER:-gaode}" | tr '[:upper:]' '[:lower:]')"
   MINER_TDT_KEY="${MINER_TDT_KEY:-}"
   MINER_LOCAL_TILE_URL="${MINER_LOCAL_TILE_URL:-}"
   MINER_LOCAL_TMS="${MINER_LOCAL_TMS:-0}"
-
-  # Write Miner .env for GeoView URL
-  cat > /app/miner/.env <<MENV
-VITE_GEOVIEW_URL="${VITE_GEOVIEW_URL:-}"
-VITE_MINER_MAP_PROVIDER=${MINER_MAP_PROVIDER}
-VITE_TDT_KEY=${MINER_TDT_KEY}
-MENV
-
-  if [ "${MINER_MAP_PROVIDER}" = "offline" ] || [ "${MINER_MAP_PROVIDER}" = "local" ]; then
-    cat >> /app/miner/.env <<MENV
-VITE_MINER_LOCAL_TILE_URL=${MINER_LOCAL_TILE_URL}
-VITE_MINER_LOCAL_TMS=${MINER_LOCAL_TMS}
-MENV
-  fi
+  export MINER_TDT_KEY MINER_LOCAL_TILE_URL MINER_LOCAL_TMS
+  python /app/docker/write-runtime-env.py
 
   # Start Miner Express backend (using Node.js 20)
   cd /app/miner
@@ -161,6 +206,9 @@ fi
 cd /app
 
 WAIT_PIDS=("${BACKEND_PID}" "${FRONTEND_PID}")
+if [ -n "${MMSEG_WORKER_PID}" ]; then
+  WAIT_PIDS+=("${MMSEG_WORKER_PID}")
+fi
 if [ -n "${MINER_BACKEND_PID}" ]; then
   WAIT_PIDS+=("${MINER_BACKEND_PID}")
 fi
