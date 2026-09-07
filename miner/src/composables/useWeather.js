@@ -6,7 +6,7 @@ export function useWeather() {
   const currentTime = ref('');
   const temperature = ref('--');
   const weatherIcon = ref('🌤️');
-  const airQuality = ref('良');
+  const airQuality = ref('');
   const humidity = ref('--');
   const mapProvider = String(import.meta.env.VITE_MINER_MAP_PROVIDER || 'gaode').toLowerCase();
   const offlineMode = mapProvider === 'offline' || mapProvider === 'local';

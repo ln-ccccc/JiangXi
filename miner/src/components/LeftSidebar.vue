@@ -83,7 +83,7 @@
             type="text"
             :value="searchMineId"
             @input="$emit('update:searchMineId', $event.target.value)"
-            placeholder="输入图斑名称或ID..."
+            placeholder="输入图斑编号TBBH、序号或名称..."
             @keyup.enter="emitSearch"
           />
           <button @click="emitSearch">定位</button>

@@ -410,4 +410,8 @@ const formatAreaKm2 = (v) => {
 .fade-leave-to {
   opacity: 0;
 }
+/* 离开动画期间 overlay 不得拦截点击，避免 transitionend 延迟时挡住整个页面 */
+.modal-overlay.fade-leave-active {
+  pointer-events: none;
+}
 </style>

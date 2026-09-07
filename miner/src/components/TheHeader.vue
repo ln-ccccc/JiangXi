@@ -13,7 +13,9 @@
           <span class="weather-icon">{{ weatherIcon }}</span>
           <div class="weather-info">
             <span class="temp">{{ temperature }}°C</span>
-            <span class="aqi" :class="getAqiClass(airQuality)">空气{{ airQuality }}</span>
+            <span class="aqi" :class="getAqiClass(airQuality)">{{
+              airQuality ? `空气${airQuality}` : '空气—'
+            }}</span>
           </div>
         </div>
         <span class="status-divider" aria-hidden="true"></span>

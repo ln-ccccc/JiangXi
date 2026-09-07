@@ -212,7 +212,10 @@ const performSearch = () => {
   });
 
   if (!target) {
-    setSearchFeedback('未找到匹配图斑，请检查名称、编号或筛选条件', 'warning');
+    setSearchFeedback(
+      '未找到匹配图斑：请使用权威图斑编号（TBBH）、地图序号或名称，并检查筛选条件',
+      'warning'
+    );
     return;
   }
 
