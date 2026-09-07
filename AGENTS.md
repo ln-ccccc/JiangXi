@@ -103,6 +103,16 @@ python backend/tools/validate_jiangxi_assets.py
 
 容器验收必须确认：348 条 GeoJSON、TBBH 唯一、manifest 哈希一致、模型资产通过、设备为预期值，并完成一次限制数量的真实 CPU/GPU 推理。GPU 未通过前，不删除 CPU 镜像。
 
+### 5.1 连续运行验证（防"单次通过、批量崩溃"）
+
+任何"执行一次"型的验证（推理、导入、导出、备份恢复），单次成功不算通过，必须按三级递进补齐：
+
+1. **重复执行**：同一操作连续跑第二遍。第一遍验证功能，第二遍验证状态清理与资源回收（临时目录、连接、句柄、缓存是否污染下一轮）。
+2. **混合小批次**：抽样 ≥3 组不同形态的输入（不同地市、不同编号格式、不同数据量、最长跨度组合）串行执行，验证批处理路径的逐项隔离与累积效应。
+3. **全量回归**：以上通过后再跑一次全量。
+
+原理：单次冒烟无法暴露"上一轮残留状态毒害下一轮"的失效，而这类失效在交付后几乎必然被用户触发（2026-09-07 推理 worker 崩溃即由此发现，见 §7）。
+
 ## 6. 安全与协作约定
 
 - 不要在日志、文档、提交或回复中写入真实管理员密码、`SECRET_KEY`、数据库密码或 token。
@@ -121,3 +131,10 @@ python backend/tools/validate_jiangxi_assets.py
   直接把该扩展复制到 `jiangxi-runtime:gpu` 会触发 `GLIBC_2.32`，不能跨基础镜像复制 `.so`。
 - `jiangxi-runtime:gpu` 原始 `mmcv 2.2.0` 的 `_ext` 与 Torch ABI 不兼容；最终镜像必须验证
   `from mmcv.ops import nms` 和至少一次真实 CUDA 推理，不能只检查 Python 包名。
+- 推理 worker 崩溃（2026-09-07）：worker 推理耗时长于健康检查 ping 超时（2s）时，
+  healthcheck 会留下一条已被客户端放弃的陈旧连接；worker 处理完推理后 accept 到该连接，
+  `_read_message` 得到空请求、构造错误响应后 `_send_message` 对已关闭的对端写入触发 EPIPE，
+  异常逃逸出 serve 循环导致 worker 进程退出；entrypoint 的 `wait -n` 又将任一子服务退出
+  放大为整机 terminate。表现为"每次启动只能完成一次推理，第二次推理必崩"。修复方向：
+  serve 循环内单连接异常不得杀死 worker（per-connection try/except），worker 进程由
+  entrypoint 改为自动重启监督；教训见 §5.1——原验收只跑一次推理，所以从未暴露。
