@@ -82,12 +82,14 @@ docker run -d --name geoview-jiangxi-gpu --gpus all --env-file .env `
   geoview-jiangxi:jiangxi-gpu
 ```
 
-2026-08-29 当前已验收运行实例：`geoview-jiangxi-gpu`，稳定标签
-`geoview-jiangxi:jiangxi-gpu` 指向 `geoview-jiangxi:jiangxi-gpu-20260829-square512`。
-该镜像仅恢复旧版 ROI 到 512×512 的预处理，不替换江西模型权重。即时回退副本为
-`geoview-jiangxi-gpu-20260829-pre-square512`（停止但保留，使用恢复前镜像）；更早的
-`geoview-jiangxi-gpu-f-20260829c-pre-parity` 也应继续保留。除非用户明确确认，不删除回退容器、CPU
-镜像或运行数据卷。
+2026-09-07 当前已验收运行实例：`geoview-jiangxi-gpu-20260907`，稳定标签
+`geoview-jiangxi:jiangxi-gpu` 指向 `geoview-jiangxi:jiangxi-gpu-20260907-epipefix`
+（含推理 worker EPIPE 修复与 entrypoint 自动重启监督，见 §7）。该镜像恢复旧版
+ROI 512×512 预处理并修复"每次启动只能推理一次"缺陷，不替换江西模型权重。
+旧镜像 `jiangxi-gpu-20260829-square512` 与其容器已经用户确认（磁盘受限）于
+同日删除；回退容器 `geoview-jiangxi-gpu-20260829-pre-square512` 与
+`geoview-jiangxi-gpu-f-20260829c-pre-parity` 继续保留。除非用户明确确认，
+不删除回退容器、CPU 镜像或运行数据卷。
 
 ## 5. 必跑验证
 
@@ -131,10 +133,13 @@ python backend/tools/validate_jiangxi_assets.py
   直接把该扩展复制到 `jiangxi-runtime:gpu` 会触发 `GLIBC_2.32`，不能跨基础镜像复制 `.so`。
 - `jiangxi-runtime:gpu` 原始 `mmcv 2.2.0` 的 `_ext` 与 Torch ABI 不兼容；最终镜像必须验证
   `from mmcv.ops import nms` 和至少一次真实 CUDA 推理，不能只检查 Python 包名。
-- 推理 worker 崩溃（2026-09-07）：worker 推理耗时长于健康检查 ping 超时（2s）时，
+- 推理 worker 崩溃（2026-09-07 发现，同日修复）：worker 推理耗时长于健康检查 ping 超时（2s）时，
   healthcheck 会留下一条已被客户端放弃的陈旧连接；worker 处理完推理后 accept 到该连接，
   `_read_message` 得到空请求、构造错误响应后 `_send_message` 对已关闭的对端写入触发 EPIPE，
   异常逃逸出 serve 循环导致 worker 进程退出；entrypoint 的 `wait -n` 又将任一子服务退出
-  放大为整机 terminate。表现为"每次启动只能完成一次推理，第二次推理必崩"。修复方向：
-  serve 循环内单连接异常不得杀死 worker（per-connection try/except），worker 进程由
-  entrypoint 改为自动重启监督；教训见 §5.1——原验收只跑一次推理，所以从未暴露。
+  放大为整机 terminate。表现为"每次启动只能完成一次推理，第二次推理必崩"。已修复：
+  serve 循环对单连接发送失败仅记日志并继续（per-connection try/except），signal 注册
+  限制主线程使 serve_worker 可测试；entrypoint 将 worker 改入带 TERM 转发的自动重启
+  监督循环（注意脚本头部 `set -euo pipefail`，循环内 `wait` 必须就地兜底非零退出码）。
+  回归测试 `test_survives_client_disconnect_before_response`；验收为同对影像连续双跑
+  跨健康检查窗口。
