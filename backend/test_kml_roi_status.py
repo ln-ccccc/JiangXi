@@ -57,6 +57,9 @@ class TestKmlRoiStatus(unittest.TestCase):
 
             self.assertEqual(result["status"], "failed")
             self.assertEqual(result["written_fids"], 0)
+            self.assertIn("inference", result["stage_durations"])
+            self.assertIn("cleanup", result["stage_durations"])
+            self.assertGreaterEqual(result["total_seconds"], 0)
 
 
 if __name__ == "__main__":

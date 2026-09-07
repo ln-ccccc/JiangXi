@@ -1068,6 +1068,8 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       written_tbbhs: writtenTbbhList.length,
       written_tbbh_list: writtenTbbhList,
       failed_tiles: parsed?.failed_tiles || [],
+      stage_durations: parsed?.stage_durations || null,
+      total_seconds: parsed?.total_seconds ?? null,
       runtime: parsed?.runtime || null,
       stderr_tail: String(stderr || '')
         .split('\n')
