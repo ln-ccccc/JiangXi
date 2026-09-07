@@ -12,6 +12,7 @@ import signal
 import socket
 import stat
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict
@@ -226,8 +227,10 @@ def serve_worker(socket_path: str, worker: MmsegWorker) -> None:
         stopping = True
 
     previous_handlers = {}
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        previous_handlers[signum] = signal.signal(signum, request_stop)
+    if threading.current_thread() is threading.main_thread():
+        # signal 注册仅主线程合法；线程内运行（测试/嵌入场景）时跳过
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            previous_handlers[signum] = signal.signal(signum, request_stop)
 
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
@@ -250,7 +253,16 @@ def serve_worker(socket_path: str, worker: MmsegWorker) -> None:
                         "status": "error",
                         "error": f"GPU 推理 Worker 请求无效：{exc}",
                     }
-                _send_message(connection, response)
+                # 客户端可能不读响应就断开（健康检查超时会留下陈旧连接）：
+                # 单个客户端的死活不得终止 serve 循环
+                try:
+                    _send_message(connection, response)
+                except OSError as exc:
+                    print(
+                        f"[MMSeg-Worker] 响应发送失败，已丢弃该连接：{exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
     finally:
         server.close()
         if os.path.lexists(path) and stat.S_ISSOCK(os.lstat(path).st_mode):
