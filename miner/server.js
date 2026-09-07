@@ -47,11 +47,6 @@ const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 8000;
 const execFile = promisify(execFileCb);
 let kmlInferenceActive = false;
-const startupCwd = process.cwd();
-console.log(`[Startup] miner cwd=${startupCwd}`);
-if (/wsl|\\\\wsl\\.localhost/i.test(startupCwd)) {
-  console.warn('[Startup] Warning: running from WSL path; expected E:\\GeoView\\miner');
-}
 
 // Enable CORS and JSON parsing
 app.use(cors());
