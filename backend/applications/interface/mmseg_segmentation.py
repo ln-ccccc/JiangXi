@@ -20,7 +20,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 # 添加 backend 路径到 sys.path，确保子进程可以导入 applications 包
 backend_root = Path(__file__).resolve().parents[2]
@@ -167,9 +167,22 @@ def run_loaded_model_inference(
     device: str = "cpu",
     opacity: float = 0.3,
     runtime: Optional[dict] = None,
+    inference_fn: Optional[Callable] = None,
 ) -> dict:
-    """Run inference with a model that has already passed the Jiangxi contract."""
-    from mmseg.apis import inference_model
+    """Run inference with a model that has already passed the Jiangxi contract.
+
+    同尺寸瓦片合并为批量前向（JIANGXI_MMSEG_BATCH_SIZE，默认 4）；批量失败
+    自动退回逐张推理，保持逐瓦片的错误隔离与输出契约不变。
+    """
+    if inference_fn is None:
+        from mmseg.apis import inference_model
+
+        inference_fn = inference_model
+
+    try:
+        batch_size = max(1, int(os.getenv("JIANGXI_MMSEG_BATCH_SIZE", "4")))
+    except ValueError:
+        batch_size = 4
 
     effective_runtime = dict(runtime or resolve_inference_device(device))
     effective_device = effective_runtime["effective_device"]
@@ -181,6 +194,7 @@ def run_loaded_model_inference(
     os.makedirs(output_dir, exist_ok=True)
     results = []
 
+    loaded = []
     for filename in file_names:
         try:
             img_path = os.path.join(input_dir, filename)
@@ -191,43 +205,72 @@ def run_loaded_model_inference(
                     "status": "error",
                     "error": "Failed to load image",
                 })
-                continue
-
-            result = inference_model(model, img_array)
-            pred_mask = result.pred_sem_seg.data[0].cpu().numpy().astype(np.uint8)
-            color_mask = colorize_mask(pred_mask)
-
-            if len(img_array.shape) == 3 and img_array.shape[2] >= 3:
-                img_rgb = img_array[:, :, :3]
-                if img_rgb.max() > 1:
-                    img_rgb = img_rgb / img_rgb.max() * 255
-                img_bgr = img_rgb[:, :, ::-1].astype(np.uint8)
-                overlay = cv2.addWeighted(img_bgr, opacity, color_mask, 1 - opacity, 0)
             else:
-                overlay = color_mask
-
-            base_name = os.path.splitext(filename)[0]
-            out_name = f"pred_{base_name}.png"
-            out_path = os.path.join(output_dir, out_name)
-            cv2.imwrite(out_path, overlay)
-
-            mask_name = f"mask_{base_name}.png"
-            mask_path = os.path.join(output_dir, mask_name)
-            cv2.imwrite(mask_path, pred_mask)
-
-            results.append({
-                "name": out_name,
-                "mask_name": mask_name,
-                "status": "success",
-            })
-            print(f"[MMSeg] Processed: {filename} -> {out_name}", file=sys.stderr)
+                loaded.append((filename, img_array))
         except Exception as exc:
             results.append({
                 "name": filename,
                 "status": "error",
                 "error": str(exc),
             })
-            print(f"[MMSeg] Error processing {filename}: {exc}", file=sys.stderr)
+
+    def _predict(img_arrays: List[np.ndarray]) -> List[np.ndarray]:
+        if len(img_arrays) == 1:
+            preds = [inference_fn(model, img_arrays[0])]
+        else:
+            preds = inference_fn(model, img_arrays)
+        return [p.pred_sem_seg.data[0].cpu().numpy().astype(np.uint8) for p in preds]
+
+    def _emit(filename: str, img_array: np.ndarray, pred_mask: np.ndarray) -> None:
+        color_mask = colorize_mask(pred_mask)
+
+        if len(img_array.shape) == 3 and img_array.shape[2] >= 3:
+            img_rgb = img_array[:, :, :3]
+            if img_rgb.max() > 1:
+                img_rgb = img_rgb / img_rgb.max() * 255
+            img_bgr = img_rgb[:, :, ::-1].astype(np.uint8)
+            overlay = cv2.addWeighted(img_bgr, opacity, color_mask, 1 - opacity, 0)
+        else:
+            overlay = color_mask
+
+        base_name = os.path.splitext(filename)[0]
+        out_name = f"pred_{base_name}.png"
+        cv2.imwrite(os.path.join(output_dir, out_name), overlay)
+
+        mask_name = f"mask_{base_name}.png"
+        cv2.imwrite(os.path.join(output_dir, mask_name), pred_mask)
+
+        results.append({
+            "name": out_name,
+            "mask_name": mask_name,
+            "status": "success",
+        })
+        print(f"[MMSeg] Processed: {filename} -> {out_name}", file=sys.stderr)
+
+    # 同尺寸瓦片分组批量前向，减少 GPU/内存往返次数
+    shape_groups: Dict[Any, List] = {}
+    for item in loaded:
+        shape_groups.setdefault(tuple(item[1].shape), []).append(item)
+
+    for group in shape_groups.values():
+        for start in range(0, len(group), batch_size):
+            chunk = group[start:start + batch_size]
+            try:
+                preds = _predict([img for _, img in chunk])
+                for (filename, img_array), pred_mask in zip(chunk, preds):
+                    _emit(filename, img_array, pred_mask)
+            except Exception:
+                # 批量失败（如显存不足）退回逐张推理，保持逐瓦片错误隔离
+                for filename, img_array in chunk:
+                    try:
+                        _emit(filename, img_array, _predict([img_array])[0])
+                    except Exception as exc:
+                        results.append({
+                            "name": filename,
+                            "status": "error",
+                            "error": str(exc),
+                        })
+                        print(f"[MMSeg] Error processing {filename}: {exc}", file=sys.stderr)
 
     if effective_device == "cuda:0":
         import torch
