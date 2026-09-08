@@ -82,12 +82,14 @@ docker run -d --name geoview-jiangxi-gpu --gpus all --env-file .env `
   geoview-jiangxi:jiangxi-gpu
 ```
 
-2026-08-29 当前已验收运行实例：`geoview-jiangxi-gpu`，稳定标签
-`geoview-jiangxi:jiangxi-gpu` 指向 `geoview-jiangxi:jiangxi-gpu-20260829-square512`。
-该镜像仅恢复旧版 ROI 到 512×512 的预处理，不替换江西模型权重。即时回退副本为
-`geoview-jiangxi-gpu-20260829-pre-square512`（停止但保留，使用恢复前镜像）；更早的
-`geoview-jiangxi-gpu-f-20260829c-pre-parity` 也应继续保留。除非用户明确确认，不删除回退容器、CPU
-镜像或运行数据卷。
+2026-09-07 当前已验收运行实例：`geoview-jiangxi-gpu-20260907`，稳定标签
+`geoview-jiangxi:jiangxi-gpu` 指向 `geoview-jiangxi:jiangxi-gpu-20260907-epipefix`
+（含推理 worker EPIPE 修复与 entrypoint 自动重启监督，见 §7）。该镜像恢复旧版
+ROI 512×512 预处理并修复"每次启动只能推理一次"缺陷，不替换江西模型权重。
+旧镜像 `jiangxi-gpu-20260829-square512` 与其容器已经用户确认（磁盘受限）于
+同日删除；回退容器 `geoview-jiangxi-gpu-20260829-pre-square512` 与
+`geoview-jiangxi-gpu-f-20260829c-pre-parity` 继续保留。除非用户明确确认，
+不删除回退容器、CPU 镜像或运行数据卷。
 
 ## 5. 必跑验证
 
@@ -102,6 +104,18 @@ python backend/tools/validate_jiangxi_assets.py
 ```
 
 容器验收必须确认：348 条 GeoJSON、TBBH 唯一、manifest 哈希一致、模型资产通过、设备为预期值，并完成一次限制数量的真实 CPU/GPU 推理。GPU 未通过前，不删除 CPU 镜像。
+
+### 5.1 连续运行验证（防"单次通过、批量崩溃"）
+
+任何"执行一次"型的验证（推理、导入、导出、备份恢复），单次成功不算通过，必须按三级递进补齐：
+
+1. **重复执行**：同一操作连续跑第二遍。第一遍验证功能，第二遍验证状态清理与资源回收（临时目录、连接、句柄、缓存是否污染下一轮）。
+2. **混合小批次**：抽样 ≥3 组不同形态的输入（不同地市、不同编号格式、不同数据量、最长跨度组合）串行执行，验证批处理路径的逐项隔离与累积效应。
+3. **全量回归**：以上通过后再跑一次全量。
+
+技巧细则、失效机制分析与本项目案例见 `docs/testing_playbook.md`（随迭代持续补充，新条目须按其模板回答"为什么有效"）。
+
+原理：单次冒烟无法暴露"上一轮残留状态毒害下一轮"的失效，而这类失效在交付后几乎必然被用户触发（2026-09-07 推理 worker 崩溃即由此发现，见 §7）。
 
 ## 6. 安全与协作约定
 
@@ -121,3 +135,13 @@ python backend/tools/validate_jiangxi_assets.py
   直接把该扩展复制到 `jiangxi-runtime:gpu` 会触发 `GLIBC_2.32`，不能跨基础镜像复制 `.so`。
 - `jiangxi-runtime:gpu` 原始 `mmcv 2.2.0` 的 `_ext` 与 Torch ABI 不兼容；最终镜像必须验证
   `from mmcv.ops import nms` 和至少一次真实 CUDA 推理，不能只检查 Python 包名。
+- 推理 worker 崩溃（2026-09-07 发现，同日修复）：worker 推理耗时长于健康检查 ping 超时（2s）时，
+  healthcheck 会留下一条已被客户端放弃的陈旧连接；worker 处理完推理后 accept 到该连接，
+  `_read_message` 得到空请求、构造错误响应后 `_send_message` 对已关闭的对端写入触发 EPIPE，
+  异常逃逸出 serve 循环导致 worker 进程退出；entrypoint 的 `wait -n` 又将任一子服务退出
+  放大为整机 terminate。表现为"每次启动只能完成一次推理，第二次推理必崩"。已修复：
+  serve 循环对单连接发送失败仅记日志并继续（per-connection try/except），signal 注册
+  限制主线程使 serve_worker 可测试；entrypoint 将 worker 改入带 TERM 转发的自动重启
+  监督循环（注意脚本头部 `set -euo pipefail`，循环内 `wait` 必须就地兜底非零退出码）。
+  回归测试 `test_survives_client_disconnect_before_response`；验收为同对影像连续双跑
+  跨健康检查窗口。

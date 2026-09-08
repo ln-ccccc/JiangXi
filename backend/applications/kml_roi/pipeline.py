@@ -1,5 +1,6 @@
 import json
 import shutil
+import time
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -28,6 +29,17 @@ def run_kml_roi_pipeline(
     tile_dir = work_dir / "tiles"
     mmseg_out_dir = work_dir / "mmseg_out"
 
+    # 逐阶段耗时：供容量评估与性能归因，随 summary 一并返回
+    stage_durations: Dict[str, float] = {}
+    stage_started = time.monotonic()
+    run_started = stage_started
+
+    def mark(stage: str) -> None:
+        nonlocal stage_started
+        now = time.monotonic()
+        stage_durations[stage] = round(now - stage_started, 3)
+        stage_started = now
+
     if not old_tif.exists() or not new_tif.exists():
         raise FileNotFoundError("old_tif or new_tif does not exist")
     if not kml_path.exists():
@@ -38,15 +50,23 @@ def run_kml_roi_pipeline(
     tile_dir.mkdir(parents=True, exist_ok=True)
     mmseg_out_dir.mkdir(parents=True, exist_ok=True)
     output_root.mkdir(parents=True, exist_ok=True)
+    mark("prep_dirs")
 
     features = load_kml_features(kml_path)
+    mark("kml_load")
     bounds_4326 = raster_union_bounds_4326(old_tif, new_tif)
     features = filter_features_by_bounds(features, bounds_4326)
     if limit > 0:
         features = features[:limit]
+    mark("bounds_filter")
 
     if not features:
-        return {"status": "no_features", "message": "No usable polygons in KML"}
+        return {
+            "status": "no_features",
+            "message": "No usable polygons in KML",
+            "stage_durations": dict(stage_durations),
+            "total_seconds": round(time.monotonic() - run_started, 3),
+        }
 
     matched_fids, file_names, variants_by_fid = prepare_tiles(
         old_tif,
@@ -57,12 +77,15 @@ def run_kml_roi_pipeline(
         old_year=old_year or None,
         new_year=new_year or None,
     )
+    mark("tiles")
     if not matched_fids:
         return {
             "status": "completed",
             "message": "No overlaps between polygons and rasters, all skipped",
             "total_features": len(features),
             "matched_fids": 0,
+            "stage_durations": dict(stage_durations),
+            "total_seconds": round(time.monotonic() - run_started, 3),
         }
 
     failed_tiles, tile_errors, inference_runtime = run_mmseg_tiles(
@@ -72,7 +95,9 @@ def run_kml_roi_pipeline(
         file_names=file_names,
         device=device,
     )
+    mark("inference")
     dist = distribute_outputs(matched_fids, mmseg_out_dir, output_root, variants_by_fid, tile_dir=tile_dir)
+    mark("distribute")
     written_fids = int(dist.get("written_fids", 0) or 0)
     if written_fids == 0:
         run_status = "failed"
@@ -92,8 +117,12 @@ def run_kml_roi_pipeline(
         **dist,
     }
 
+    cleanup_started = time.monotonic()
     if not keep_workdir:
         shutil.rmtree(work_dir, ignore_errors=True)
+    stage_durations["cleanup"] = round(time.monotonic() - cleanup_started, 3)
+    summary["stage_durations"] = dict(stage_durations)
+    summary["total_seconds"] = round(time.monotonic() - run_started, 3)
 
     # keep JSON-serializable contract explicit for callers
     json.dumps(summary, ensure_ascii=False)
