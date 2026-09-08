@@ -82,14 +82,14 @@ docker run -d --name geoview-jiangxi-gpu --gpus all --env-file .env `
   geoview-jiangxi:jiangxi-gpu
 ```
 
-2026-09-07 当前已验收运行实例：`geoview-jiangxi-gpu-20260907`，稳定标签
-`geoview-jiangxi:jiangxi-gpu` 指向 `geoview-jiangxi:jiangxi-gpu-20260907-epipefix`
-（含推理 worker EPIPE 修复与 entrypoint 自动重启监督，见 §7）。该镜像恢复旧版
-ROI 512×512 预处理并修复"每次启动只能推理一次"缺陷，不替换江西模型权重。
-旧镜像 `jiangxi-gpu-20260829-square512` 与其容器已经用户确认（磁盘受限）于
-同日删除；回退容器 `geoview-jiangxi-gpu-20260829-pre-square512` 与
-`geoview-jiangxi-gpu-f-20260829c-pre-parity` 继续保留。除非用户明确确认，
-不删除回退容器、CPU 镜像或运行数据卷。
+2026-09-08 当前已验收运行实例：`geoview-jiangxi-gpu-20260908`，稳定标签
+`geoview-jiangxi:jiangxi-gpu` 指向 `geoview-jiangxi:jiangxi-gpu-20260908-batching`
+（在 epipefix 基础上新增：同尺寸瓦片批量前向——实测 GPU 暖跑推理约 -45%，
+批量大小 JIANGXI_MMSEG_BATCH_SIZE 可调、批量失败自动退回逐张；EPIPE 修复与
+entrypoint 自动重启监督见 §7；测试方法手册见 docs/testing_playbook.md）。
+不替换江西模型权重。历史镜像与回退容器已经用户确认（磁盘受限）于 2026-09-08
+清理；CPU 版镜像 `geoview-jiangxi:cpu-20260908`（协作者 Mac 用）保留。除非
+用户明确确认，不删除 CPU 镜像或运行数据卷。
 
 ## 5. 必跑验证
 
