@@ -91,6 +91,12 @@ entrypoint 自动重启监督见 §7；测试方法手册见 docs/testing_playbo
 清理；CPU 版镜像 `geoview-jiangxi:cpu-20260908`（协作者 Mac 用）保留。除非
 用户明确确认，不删除 CPU 镜像或运行数据卷。
 
+注意：两期对比影像（`/app/backend/bianhua_2years/`，甲方 189 个 tif）位于
+容器可写层，**重建容器即丢失**；需从宿主机 `D:\项目\jiangxi_data\影像文件\`
+重新 `docker cp` 放入（`docker cp "D:\项目\jiangxi_data\影像文件\." 容器名:/app/backend/bianhua_2years/`）。
+GPU 镜像重建必须使用本节原样参数（JIANGXI_BASE_IMAGE=jiangxi-analysis-worker:gpu），
+换用其他 base 会复现 §7 的 GLIBC_2.32 worker 崩溃。
+
 ## 5. 必跑验证
 
 ```powershell
