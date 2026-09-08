@@ -137,9 +137,23 @@ start_mmseg_worker() {
   fi
 
   echo "[entrypoint] Starting persistent MMSeg GPU Worker on ${worker_socket}"
-  python /app/backend/applications/interface/mmseg_worker.py \
-    --socket "${worker_socket}" \
-    --device "${JIANGXI_INFERENCE_DEVICE:-cuda:0}" &
+  # 监督循环：worker 进程意外退出（含 CUDA OOM/段错误）时自动拉起，
+  # 不得因单个子服务退出而触发 wait -n 的整机 terminate
+  (
+    trap 'kill -TERM "${wpid:-}" 2>/dev/null; exit 0' TERM INT
+    wpid=""
+    while true; do
+      python /app/backend/applications/interface/mmseg_worker.py \
+        --socket "${worker_socket}" \
+        --device "${JIANGXI_INFERENCE_DEVICE:-cuda:0}" &
+      wpid=$!
+      # set -e 环境下 wait 的非零退出码必须就地兜底，否则监督循环自身会退出
+      rc=0
+      wait "${wpid}" || rc=$?
+      echo "[entrypoint] MMSeg GPU Worker exited (code=${rc}), restarting in 2s" >&2
+      sleep 2
+    done
+  ) &
   MMSEG_WORKER_PID=$!
 
   local attempt
@@ -148,12 +162,11 @@ start_mmseg_worker() {
       --socket "${worker_socket}" \
       --ping \
       --expect-device "${JIANGXI_INFERENCE_DEVICE:-cuda:0}" >/dev/null 2>&1; then
-      echo "[entrypoint] MMSeg GPU Worker is ready (PID=${MMSEG_WORKER_PID})"
+      echo "[entrypoint] MMSeg GPU Worker is ready (supervisor PID=${MMSEG_WORKER_PID})"
       return
     fi
     if ! kill -0 "${MMSEG_WORKER_PID}" 2>/dev/null; then
-      wait "${MMSEG_WORKER_PID}" || true
-      echo "[entrypoint] MMSeg GPU Worker exited before readiness" >&2
+      echo "[entrypoint] MMSeg GPU Worker supervisor exited before readiness" >&2
       exit 1
     fi
     sleep 1

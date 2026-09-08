@@ -1,4 +1,6 @@
+import json
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -9,6 +11,7 @@ from applications.interface.mmseg_worker import (
     WorkerUnavailableError,
     _remove_stale_socket,
     request_worker,
+    serve_worker,
 )
 
 
@@ -92,6 +95,56 @@ class MmsegWorkerTests(unittest.TestCase):
                     _remove_stale_socket(str(socket_path))
             finally:
                 server.close()
+
+    @unittest.skipUnless(hasattr(socket, "AF_UNIX"), "AF_UNIX 仅在 Linux/容器环境可用")
+    def test_survives_client_disconnect_before_response(self):
+        """客户端不读响应就断开（如健康检查超时留下的陈旧连接）不得终止 serve 循环。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            socket_path = Path(temp_dir) / "worker.sock"
+            serve_failures = []
+
+            def run_server():
+                try:
+                    serve_worker(str(socket_path), self.worker)
+                except Exception as exc:
+                    serve_failures.append(exc)
+
+            thread = threading.Thread(target=run_server, daemon=True)
+            thread.start()
+            deadline = time.time() + 5
+            while not socket_path.exists() and time.time() < deadline:
+                time.sleep(0.05)
+            self.assertTrue(socket_path.exists(), "serve_worker 未在期限内创建 socket")
+
+            abusive = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                abusive.connect(str(socket_path))
+                request = {
+                    "action": "infer",
+                    "input_dir": "/input",
+                    "output_dir": "/output",
+                    "file_names": ["a.tif"],
+                }
+                abusive.sendall((json.dumps(request) + "\n").encode("utf-8"))
+            finally:
+                abusive.close()
+
+            pong = request_worker(str(socket_path), {"action": "ping"}, timeout=5.0)
+            self.assertEqual(pong.get("status"), "ok")
+            third = request_worker(
+                str(socket_path),
+                {
+                    "action": "infer",
+                    "input_dir": "/input",
+                    "output_dir": "/output",
+                    "file_names": ["b.tif"],
+                },
+                timeout=5.0,
+            )
+            self.assertEqual(third.get("status"), "completed")
+            self.assertEqual(third["results"][0]["name"], "pred_b.png")
+            self.assertTrue(thread.is_alive(), "serve_worker 因单客户端断开而退出")
+            self.assertEqual(serve_failures, [])
 
 
 if __name__ == "__main__":

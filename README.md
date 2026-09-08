@@ -23,3 +23,4 @@
 - [重启与排障](docs/docker_restart_guide.md)
 - [江西成果迁移规则](docs/legacy_data_migration.md)
 - [交付检查清单](docs/delivery_checklist.md)
+- [测试方法手册](docs/testing_playbook.md)
