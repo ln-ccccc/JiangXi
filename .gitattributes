@@ -1,0 +1,3 @@
+# shell 脚本必须 LF：CRLF 会让容器内 bash 报 "pipefail: invalid option name"
+*.sh text eol=lf
+*.py text eol=lf
