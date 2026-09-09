@@ -13,10 +13,10 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 
-LON_MIN, LAT_MIN, LON_MAX, LAT_MAX = 117.40, 28.30, 117.80, 28.62
-Z_MIN, Z_MAX = 8, 15
-TILE_DIR = "/app/runtime_data/jiangxi_tiles"
-OUT_TIF = "/app/runtime_data/jiangxi-test-basemap.tif"
+LON_MIN, LAT_MIN, LON_MAX, LAT_MAX = 112.90, 23.95, 119.00, 30.65  # 江西省全域 + 0.5° 缓冲
+Z_MIN, Z_MAX = 8, 13
+TILE_DIR = "/app/miner/public/tiles"
+OUT_TIF = ""
 URL_TMPL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 
 
@@ -92,40 +92,7 @@ def main():
     ok = sum(1 for _ in os.popen(f"find {TILE_DIR} -name '*.png'"))
     print(f"[dl] 完成，磁盘瓦片 {ok} 个", flush=True)
 
-    xa, ya, xb, yb = z15_meta
-    cols, rows = (xb - xa) * 256, (yb - ya) * 256
-    print(f"[stitch] z15 画布 {cols}x{rows}px", flush=True)
-    canvas = np.zeros((rows, cols, 3), dtype=np.uint8)
-    filled = 0
-    for x in range(xa, xb):
-        for y in range(ya, yb):
-            p = os.path.join(TILE_DIR, str(Z_MAX), str(x), f"{y}.png")
-            if not os.path.exists(p):
-                continue
-            tile = cv2.imread(p)
-            if tile is None:
-                continue
-            px, py = (x - xa) * 256, (y - ya) * 256
-            canvas[py:py + 256, px:px + 256] = cv2.cvtColor(tile, cv2.COLOR_BGR2RGB)
-            filled += 1
-    print(f"[stitch] 贴入 {filled} 块瓦片", flush=True)
-
-    tmp_png = "/app/runtime_data/jiangxi-test-basemap.png"
-    cv2.imwrite(tmp_png, canvas)
-
-    # 范围 = 左上瓦片的左/上边缘 与 右下瓦片的右/下边缘
-    left, _, _, top = tile_bounds_merc(Z_MAX, xa, ya)
-    _, _, right, bottom = tile_bounds_merc(Z_MAX, xb - 1, yb - 1)
-    rc = subprocess.run(
-        ["gdal_translate", "-of", "GTiff", "-a_srs", "EPSG:3857",
-         "-a_ullr", str(left), str(top), str(right), str(bottom),
-         "-co", "COMPRESS=JPEG", "-co", "JPEG_QUALITY=85",
-         tmp_png, OUT_TIF],
-        check=False,
-    ).returncode
-    print(f"[gdal] rc={rc} 输出: {OUT_TIF}", flush=True)
-    os.remove(tmp_png)
-    return 0 if rc == 0 else 1
+    print('[done] 全部层级下载完成', flush=True)
 
 
 if __name__ == "__main__":

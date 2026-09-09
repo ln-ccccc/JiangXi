@@ -153,7 +153,8 @@ const bindTileErrorFallback = (layer, onTileError) => {
 };
 
 const providerFallbackOrder = {
-  local: ['gaode', 'osm', 'offline'],
+  // local 为离线部署形态：缺瓦片只落 offline 占位，绝不回退在线底图（2026-09-09 产品决策）
+  local: ['offline'],
   tianditu: ['gaode', 'osm', 'offline'],
   gaode: ['osm', 'offline'],
   osm: ['offline'],
