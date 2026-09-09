@@ -91,13 +91,22 @@ entrypoint 自动重启监督见 §7；测试方法手册见 docs/testing_playbo
 清理；CPU 版镜像 `geoview-jiangxi:cpu-20260908`（协作者 Mac 用）保留。除非
 用户明确确认，不删除 CPU 镜像或运行数据卷。
 
-2026-09-09 镜像落后于仓库：main 上 e064f1f/878ae10（离线底图边界遮罩、层级钳制、
-瓦片 URL env 严格校验）已热部署（docker cp）进运行容器，但**不在** 
-`jiangxi-gpu-20260908-batching` 镜像里；下次重建镜像自然纳入，无需专门构建。
-运行容器内两份资产位于可写层，重建容器即失、需重新放入：
-`/app/backend/bianhua_2years/`（甲方 189 tif）与 `/app/miner/public/tiles/`
-（离线底图 32,214 张 z7-13；镜像内只有早期 22,796 张 z8-13，z7 增量与重取的
-全量在容器层）。
+2026-09-10 起现行已验收实例：`geoview-jiangxi-gpu-20260909`，镜像
+`geoview-jiangxi:jiangxi-gpu-20260909-offline`（stable 标签 `jiangxi-gpu` 已同步指向）。
+该镜像为**自包含收尾版**：main 全部修复（离线底图边界遮罩、层级钳制、瓦片 URL env
+严格校验、批量前向、EPIPE 修复）+ 32,214 张离线瓦片 z8-13 全部烘焙，容器创建即
+完整可用，不再依赖 docker cp 热部署。运行参数与 §4 命令一致，env 文件改为
+`D:\项目\JiangXi\jx_env_gpu_20260909.env`（从旧容器运行时 env 净化生成，去重并
+钉死权威值；原 Temp 下 jx_env_offline.txt 血统污染已弃用）。
+仍需容器创建后重放的只剩 `/app/backend/bianhua_2years/`（甲方 189 tif）。
+验收记录：资产校验 PASS（348/348/348、无重复）；推理 001 对 2011→2021 连续双跑 +
+002 对（纯数字 TBBH）均 completed，cuda:0/RTX 5060、峰值显存 2.8GB、暖跑单图斑
+推理 0.79s；浏览器视觉验收（边界内影像、边界外遮罩）通过。
+回退副本：旧容器 `geoview-jiangxi-gpu-20260908`（已停止）与旧镜像
+`jiangxi-gpu-20260908-batching` 保留，经用户确认后方可删除。
+不替换江西模型权重。CPU 版镜像 `geoview-jiangxi:cpu-20260908`（协作者 Mac 用，
+不含 2026-09-09 之后的修复）保留，需时再重建。除非用户明确确认，不删除 CPU
+镜像或运行数据卷。
 
 注意：两期对比影像（`/app/backend/bianhua_2years/`，甲方 189 个 tif）位于
 容器可写层，**重建容器即丢失**；需从宿主机 `D:\项目\jiangxi_data\影像文件\`
