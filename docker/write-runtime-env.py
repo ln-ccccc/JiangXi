@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -30,6 +31,13 @@ def main():
     backend_url = os.environ.get("VUE_APP_BACKEND_URL", "")
     miner_url = os.environ.get("VUE_APP_MINER_URL", "")
     inference_device = os.environ.get("JIANGXI_INFERENCE_DEVICE", "cpu").strip().lower() or "cpu"
+    # 本地瓦片模板严格校验：只接受标准 XYZ 形态（/tiles/{z}/{x}/{y}.png，层级字母可换），
+    # 其余任何值（历史 env 血统污染/损坏串）一律回退默认模板，防止坏模板导致整层瓦片 404
+    local_tile_url_raw = os.environ.get("MINER_LOCAL_TILE_URL", "").strip()
+    if re.fullmatch(r"/tiles/\{[a-z0-9]+\}/\{[a-z0-9]+\}/\{[a-z0-9]+\}\.png", local_tile_url_raw):
+        local_tile_url = local_tile_url_raw
+    else:
+        local_tile_url = "/tiles/{z}/{x}/{y}.png"
 
     write_text(
         "/app/frontend/.env",
@@ -54,14 +62,20 @@ def main():
         or os.environ.get("MINER_TILE_MAX_ZOOM")
         or "13"
     )
+    local_min_native_zoom = (
+        os.environ.get("VITE_MINER_LOCAL_MIN_NATIVE_ZOOM")
+        or os.environ.get("MINER_LOCAL_MIN_NATIVE_ZOOM")
+        or "8"
+    )
     miner_env = [
         f'VITE_GEOVIEW_URL="{geoview_url}"',
         f"VITE_MINER_API_BASE_URL={miner_api_base_url}",
         f"VITE_MINER_MAP_PROVIDER={os.environ.get('MINER_MAP_PROVIDER', 'gaode')}",
         f"VITE_TDT_KEY={os.environ.get('MINER_TDT_KEY', '')}",
-        f"VITE_MINER_LOCAL_TILE_URL={os.environ.get('MINER_LOCAL_TILE_URL', '/tiles/{z}/{x}/{y}.png')}",
+        f"VITE_MINER_LOCAL_TILE_URL={local_tile_url}",
         f"VITE_MINER_LOCAL_TMS={os.environ.get('MINER_LOCAL_TMS', '0')}",
         f"VITE_MINER_LOCAL_MAX_NATIVE_ZOOM={local_max_native_zoom}",
+        f"VITE_MINER_LOCAL_MIN_NATIVE_ZOOM={local_min_native_zoom}",
         f"VITE_JIANGXI_INFERENCE_DEVICE={inference_device}",
         "",
     ]

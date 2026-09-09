@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 LON_MIN, LAT_MIN, LON_MAX, LAT_MAX = 112.90, 23.95, 119.00, 30.65  # 江西省全域 + 0.5° 缓冲
-Z_MIN, Z_MAX = 8, 13
+Z_MIN, Z_MAX = 7, 13
 TILE_DIR = "/app/miner/public/tiles"
 OUT_TIF = ""
 URL_TMPL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
