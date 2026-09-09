@@ -1,3 +1,9 @@
 # shell 脚本必须 LF：CRLF 会让容器内 bash 报 "pipefail: invalid option name"
 *.sh text eol=lf
 *.py text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.vue text eol=lf
+*.css text eol=lf
+*.json text eol=lf
+*.md text eol=lf

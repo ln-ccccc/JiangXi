@@ -25,7 +25,8 @@ test('uses Jiangxi branding copy by default', () => {
 
 test('uses Jiangxi fallback map view and online satellite defaults', () => {
   assert.deepEqual(JIANGXI_FALLBACK_CENTER, [27.61, 115.95]);
-  assert.equal(JIANGXI_FALLBACK_ZOOM, 7);
+  // 离线瓦片从 z8 起步：初始视野必须落在原生层级，进入即见影像
+  assert.equal(JIANGXI_FALLBACK_ZOOM, 8);
   assert.equal(DEFAULT_MAP_PROVIDER, 'gaode');
   assert.equal(DEFAULT_MAP_LAYER, 'satellite');
 });
