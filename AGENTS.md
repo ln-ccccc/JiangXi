@@ -107,14 +107,27 @@ GPU 镜像重建必须使用本节原样参数（JIANGXI_BASE_IMAGE=jiangxi-anal
 
 ## 5. 必跑验证
 
+后端单测必须在**与镜像一致的解释器**里跑（2026-09-09 教训：宿主机三个 Python
+环境漂移，同一命令给出三份假失败清单，见 docs/testing_playbook.md T19）。权威跑法
+是在运行容器内用 MMSeg310 环境：
+
+```bash
+docker exec <运行容器> bash -c \
+  'source /opt/conda/etc/profile.d/conda.sh && conda activate MMSeg310 \
+   && cd /app && python -m unittest discover -s backend -p "test*.py"'
+docker exec <运行容器> bash -c \
+  'source /opt/conda/etc/profile.d/conda.sh && conda activate MMSeg310 \
+   && python /app/backend/tools/validate_jiangxi_assets.py'
+```
+
+前端两道门在宿主机跑（Node 环境稳定，未观察到漂移）：
+
 ```powershell
-python -m unittest discover -s backend -p "test*.py"
 Set-Location miner
 npm run verify
 Set-Location ..\frontend
 npm run build
 Set-Location ..
-python backend/tools/validate_jiangxi_assets.py
 ```
 
 容器验收必须确认：348 条 GeoJSON、TBBH 唯一、manifest 哈希一致、模型资产通过、设备为预期值，并完成一次限制数量的真实 CPU/GPU 推理。GPU 未通过前，不删除 CPU 镜像。
