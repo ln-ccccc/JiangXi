@@ -750,7 +750,10 @@ onMounted(async () => {
 
 <style scoped>
 .workspace-page {
-  min-height: 100vh;
+  /* index.html 对 html/body/#app 设置了 height:100% + overflow:hidden（为地图全屏设计），
+     工作台内容超过一屏时无法滚动，因此本页自带滚动容器 */
+  height: 100vh;
+  overflow-y: auto;
   padding: 24px;
   background:
     radial-gradient(circle at top left, rgba(78, 205, 196, 0.13), transparent 32%),
