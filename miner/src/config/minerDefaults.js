@@ -5,7 +5,7 @@ export const LOGIN_SUBTITLE =
 export const WORKSPACE_SUBTITLE = '江西版默认入口，承接项目建档、矿山绑定、数据登记和只读溯源。';
 
 export const JIANGXI_FALLBACK_CENTER = [27.61, 115.95];
-export const JIANGXI_FALLBACK_ZOOM = 7;
+export const JIANGXI_FALLBACK_ZOOM = 8; // 离线瓦片从 z8 起步，初始视野直接落在原生层级
 export const DEFAULT_MAP_LAYER = 'satellite';
 export const DEFAULT_MAP_PROVIDER = 'gaode';
 export const INFERENCE_DEVICE = String(import.meta.env?.VITE_JIANGXI_INFERENCE_DEVICE || 'cpu')

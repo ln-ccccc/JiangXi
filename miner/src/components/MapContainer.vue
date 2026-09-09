@@ -21,6 +21,8 @@ import 'leaflet/dist/leaflet.css';
 import { createTileFallbackState, noteTileError, noteTileLoad } from '../map/tileFallbackPolicy.js';
 import {
   JIANGXI_CITY_BOUNDARY_URL,
+  JIANGXI_MAP_MAX_ZOOM,
+  JIANGXI_MAP_MIN_ZOOM,
   JIANGXI_PROVINCE_BOUNDARY_URL,
   createJiangxiMapOptions,
 } from '../map/jiangxiMapPolicy.js';
@@ -48,10 +50,21 @@ const map = ref(null);
 const mineLayer = ref(null);
 const provinceBoundaryLayer = ref(null);
 const cityBoundaryLayer = ref(null);
+const basemapMaskLayer = ref(null);
+let provinceGeoJsonCache = null;
 const currentLayer = ref(DEFAULT_MAP_LAYER);
 const activeMapProvider = ref(mapProvider);
 const mapContainer = ref(null);
 const mapElement = ref(null);
+
+// 离线形态：底图瓦片只显示江西矢量边界内，边界外以背景色遮罩（世界矩形外环 + 省界内孔）
+const WORLD_MASK_RING = [
+  [-85, -180],
+  [-85, 180],
+  [85, 180],
+  [85, -180],
+];
+const BASEMAP_MASK_COLOR = '#071923';
 let baseMaps = {};
 let providerMaps = {};
 let resizeObserver = null;
@@ -69,7 +82,13 @@ const rawLocalTileMaxNativeZoom = Number(import.meta.env.VITE_MINER_LOCAL_MAX_NA
 const localTileMaxNativeZoom = Number.isFinite(rawLocalTileMaxNativeZoom)
   ? rawLocalTileMaxNativeZoom
   : 13;
-const localTileDisplayMaxZoom = Math.max(localTileMaxNativeZoom, 15);
+// 离线瓦片最高 z13：显示上限钉在数据覆盖层级，避免放大到无影像级别
+const localTileDisplayMaxZoom = localTileMaxNativeZoom;
+// 已烘焙瓦片的最低层级：缩小到该层级以下时 Leaflet 复用该级瓦片降采样，保证任何视野都有影像
+const rawLocalTileMinNativeZoom = Number(import.meta.env.VITE_MINER_LOCAL_MIN_NATIVE_ZOOM || 8);
+const localTileMinNativeZoom = Number.isFinite(rawLocalTileMinNativeZoom)
+  ? rawLocalTileMinNativeZoom
+  : 8;
 
 const makeTdtLayer = (kind) => {
   const kindMap = {
@@ -103,6 +122,8 @@ const makeLocalLayer = (url) => {
   const value = String(url || '').trim();
   if (!value) return null;
   return L.tileLayer(value, {
+    // 不设图层 minZoom（会在低层级直接隐藏整层）；minNativeZoom 让低层级复用 z8 瓦片降采样
+    minNativeZoom: localTileMinNativeZoom,
     maxZoom: localTileDisplayMaxZoom,
     maxNativeZoom: localTileMaxNativeZoom,
     crossOrigin: true,
@@ -248,6 +269,56 @@ const buildFallbackStatusMessage = (fromProvider, toProvider) => {
     : '底图服务均不可用，已切换为离线占位底图';
 };
 
+const basemapMaskPane = 'basemapMask';
+
+const buildMaskRings = (provinceGeoJson) => {
+  const features = provinceGeoJson?.features?.length
+    ? provinceGeoJson.features
+    : provinceGeoJson?.geometry
+      ? [provinceGeoJson]
+      : [];
+  const rings = [];
+  for (const feature of features) {
+    const coords = feature?.geometry?.coordinates;
+    if (!coords) continue;
+    const polys =
+      feature.geometry.type === 'MultiPolygon'
+        ? feature.geometry.coordinates
+        : [feature.geometry.coordinates];
+    for (const poly of polys) {
+      if (poly[0]?.length) {
+        // GeoJSON 是 [lng,lat]，Leaflet 要 [lat,lng]，必须轴序翻转（不翻会被投影到视口外，
+        // 孔洞环在渲染裁剪后整个丢失，遮罩变成盖满全球的实心块）；
+        // 同时反绕向，兼容 canvas nonzero 填充规则
+        rings.push(poly[0].map(([lng, lat]) => [lat, lng]).reverse());
+      }
+    }
+  }
+  return rings;
+};
+
+const removeBasemapMask = () => {
+  if (basemapMaskLayer.value) {
+    map.value?.removeLayer(basemapMaskLayer.value);
+    basemapMaskLayer.value = null;
+  }
+};
+
+const applyBasemapMask = () => {
+  if (!map.value || !provinceGeoJsonCache) return;
+  removeBasemapMask();
+  const rings = buildMaskRings(provinceGeoJsonCache);
+  if (!rings.length) return;
+  basemapMaskLayer.value = L.polygon([WORLD_MASK_RING, ...rings], {
+    color: BASEMAP_MASK_COLOR,
+    weight: 0,
+    fillColor: BASEMAP_MASK_COLOR,
+    fillOpacity: 1,
+    interactive: false,
+    pane: basemapMaskPane,
+  }).addTo(map.value);
+};
+
 const applyBaseProvider = (providerName, { fallback = false, fromProvider = '' } = {}) => {
   if (!map.value || !hasRenderableProvider(providerName)) return false;
 
@@ -278,7 +349,9 @@ const applyBaseProvider = (providerName, { fallback = false, fromProvider = '' }
     });
   };
 
-  if (providerName !== 'offline') {
+  // local 为离线部署形态：缺瓦片是常态（视野边缘/无影像区），不得因 tileerror
+  // 触发换源回退；offline 占位层同理。仅在线源（gaode/osm/tianditu）保留回退绑定。
+  if (providerName !== 'offline' && providerName !== 'local') {
     Object.values(baseMaps).forEach((layer) => bindTileErrorFallback(layer, onTileError));
   }
 
@@ -286,6 +359,19 @@ const applyBaseProvider = (providerName, { fallback = false, fromProvider = '' }
   if (firstLayer) {
     firstLayer.addTo(map.value);
   }
+
+  if (providerName === 'local' || providerName === 'offline') {
+    applyBasemapMask();
+  } else {
+    removeBasemapMask();
+  }
+
+  // 地图级缩放钳制：图层 maxZoom/minZoom 的 Leaflet 语义是"越界隐藏整层"（黑屏），
+  // 不是限制缩放。local 的层级上下限必须落在地图上，放大才真正停在瓦片覆盖上限。
+  const mapMaxZoom = providerName === 'local' ? localTileDisplayMaxZoom : JIANGXI_MAP_MAX_ZOOM;
+  map.value.setMinZoom(JIANGXI_MAP_MIN_ZOOM);
+  map.value.setMaxZoom(mapMaxZoom);
+  if (map.value.getZoom() > mapMaxZoom) map.value.setZoom(mapMaxZoom);
 
   if (fallback) {
     mapStatusKind.value = 'warning';
@@ -303,6 +389,10 @@ const initMap = () => {
     ...createJiangxiMapOptions(),
   }).setView(JIANGXI_FALLBACK_CENTER, JIANGXI_FALLBACK_ZOOM);
   L.control.zoom({ position: 'bottomright' }).addTo(map.value);
+
+  // 底图遮罩专用 pane：位于瓦片层(200)之上、矢量边界/图斑层(400)之下
+  map.value.createPane(basemapMaskPane);
+  map.value.getPane(basemapMaskPane).style.zIndex = 350;
 
   providerMaps = buildProviderMaps();
 
@@ -359,6 +449,11 @@ const loadJiangxiBoundaries = async () => {
       },
       { labelCities: true }
     );
+    // 边界数据就绪后，为离线底图补上边界外遮罩
+    provinceGeoJsonCache = province;
+    if (activeMapProvider.value === 'local' || activeMapProvider.value === 'offline') {
+      applyBasemapMask();
+    }
   } catch (error) {
     console.warn('江西行政边界加载失败，已保留卫星影像和矿山图斑。', error);
   }

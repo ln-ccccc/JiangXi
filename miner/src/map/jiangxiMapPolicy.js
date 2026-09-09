@@ -5,12 +5,15 @@ export const JIANGXI_MAP_MAX_BOUNDS = [
   [30.2, 118.8],
 ];
 
+export const JIANGXI_MAP_MIN_ZOOM = 7;
+export const JIANGXI_MAP_MAX_ZOOM = 15;
+
 export function createJiangxiMapOptions() {
   return {
     maxBounds: JIANGXI_MAP_MAX_BOUNDS,
     maxBoundsViscosity: 1,
-    minZoom: 7,
-    maxZoom: 15,
+    minZoom: JIANGXI_MAP_MIN_ZOOM,
+    maxZoom: JIANGXI_MAP_MAX_ZOOM,
     worldCopyJump: false,
   };
 }
