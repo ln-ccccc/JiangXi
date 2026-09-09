@@ -91,6 +91,14 @@ entrypoint 自动重启监督见 §7；测试方法手册见 docs/testing_playbo
 清理；CPU 版镜像 `geoview-jiangxi:cpu-20260908`（协作者 Mac 用）保留。除非
 用户明确确认，不删除 CPU 镜像或运行数据卷。
 
+2026-09-09 镜像落后于仓库：main 上 e064f1f/878ae10（离线底图边界遮罩、层级钳制、
+瓦片 URL env 严格校验）已热部署（docker cp）进运行容器，但**不在** 
+`jiangxi-gpu-20260908-batching` 镜像里；下次重建镜像自然纳入，无需专门构建。
+运行容器内两份资产位于可写层，重建容器即失、需重新放入：
+`/app/backend/bianhua_2years/`（甲方 189 tif）与 `/app/miner/public/tiles/`
+（离线底图 32,214 张 z7-13；镜像内只有早期 22,796 张 z8-13，z7 增量与重取的
+全量在容器层）。
+
 注意：两期对比影像（`/app/backend/bianhua_2years/`，甲方 189 个 tif）位于
 容器可写层，**重建容器即丢失**；需从宿主机 `D:\项目\jiangxi_data\影像文件\`
 重新 `docker cp` 放入（`docker cp "D:\项目\jiangxi_data\影像文件\." 容器名:/app/backend/bianhua_2years/`）。
@@ -151,3 +159,17 @@ python backend/tools/validate_jiangxi_assets.py
   监督循环（注意脚本头部 `set -euo pipefail`，循环内 `wait` 必须就地兜底非零退出码）。
   回归测试 `test_survives_client_disconnect_before_response`；验收为同对影像连续双跑
   跨健康检查窗口。
+- 环境变量"血统污染"（2026-09-09 定性）：最初 PowerShell `docker run -e` 里的瓦片
+  URL 模板值被损坏成 `/tiles/{z}/{x}/{y}.png/{x}/{y}.png}`，经 env 导出文件与容器
+  重建链路代代相传，被 write-runtime-env.py 写进前端 .env 使整层瓦片 404。Git Bash
+  下 `docker run -e VAR=/tiles/...` 还会被 MSYS 路径转换加 `D:/Git` 前缀，属同类坑
+  （容器内传路径参数一律 `MSYS_NO_PATHCONV=1`）。根治：write-runtime-env.py 对
+  MINER_LOCAL_TILE_URL 做正则严格校验，非标准 XYZ 模板一律回退默认值，启动自愈；
+  不要试图逐个清洗 env 文件血统。
+- 离线底图 Leaflet 三课（2026-09-09）：① GeoJSON 坐标是 `[lng,lat]`，喂给
+  `L.polygon` 前必须翻转为 `[lat,lng]`，否则孔洞环被投影到视口外、经渲染裁剪后
+  整个从 `d` 属性消失，遮罩变成盖满全球的实心块（症状：省界内也黑屏但瓦片请求
+  全部 200）；② 图层级 `maxZoom/minZoom` 的语义是"越界隐藏整层"而不是限制缩放，
+  防黑屏的层级钳制必须用地图级 `setMaxZoom/setMinZoom`；③ `minNativeZoom` 让低
+  层级复用所设层级瓦片降采样（配 map minZoom=7），是"缩小影像不消失"的关键，
+  而图层 `minZoom` 会在低层级直接隐藏整层，二者不可混用。
