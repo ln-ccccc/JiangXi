@@ -24,6 +24,16 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 14px 44px rgba(2, 10, 14, 0.45);
 
+  /* 字体：与 Miner 统一的系统栈（离线部署不引外部字体） */
+  --jx-font-body:
+    'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    system-ui, sans-serif;
+  --jx-font-display: var(--jx-font-body);
+  --jx-font-data: 'Bahnschrift', 'DIN Alternate', 'MiSans', 'PingFang SC', sans-serif;
+  --jx-shadow-1:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 44px rgba(2, 10, 14, 0.45);
+
   --primary-color: var(--jx-primary);
   --primary-light: var(--jx-primary-hover);
   --primary-dark: var(--jx-primary);
