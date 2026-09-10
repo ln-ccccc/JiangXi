@@ -726,38 +726,37 @@ defineExpose({
   transform: translateX(-50%);
   z-index: 12;
   max-width: min(72vw, 680px);
-  padding: 7px 12px;
+  padding: 7px 18px;
   border: 1px solid var(--jx-border);
-  border-radius: 4px;
-  background: var(--jx-surface);
-  color: var(--jx-info);
+  border-radius: 999px;
+  background: var(--jx-surface-glass);
+  backdrop-filter: var(--jx-blur);
+  -webkit-backdrop-filter: var(--jx-blur);
+  color: var(--jx-text-muted);
   font-size: 12px;
-  font-weight: 600;
   line-height: 1.45;
   text-align: center;
   pointer-events: none;
-  backdrop-filter: blur(8px);
   box-shadow: none;
 }
 
 .map-status-banner.info {
-  color: var(--jx-info);
-  border-color: var(--jx-info);
+  color: var(--jx-text-muted);
 }
 
 .map-status-banner.success {
-  color: var(--jx-success);
-  border-color: var(--jx-success);
+  color: var(--jx-primary);
+  border-color: rgba(127, 216, 166, 0.32);
 }
 
 .map-status-banner.warning {
   color: var(--jx-warning);
-  border-color: var(--jx-warning);
+  border-color: rgba(226, 194, 133, 0.32);
 }
 
 .map-status-banner.error {
   color: var(--jx-danger);
-  border-color: var(--jx-danger);
+  border-color: rgba(224, 138, 128, 0.32);
 }
 
 .map-legend.shifted-left {

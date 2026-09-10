@@ -202,9 +202,8 @@ const emitSearch = () => emit('search');
 .glass-panel {
   background: var(--jx-surface);
   border: 1px solid var(--jx-border);
-  border-radius: 6px;
-  padding: 10px;
-  box-shadow: inset 2px 0 0 rgba(143, 198, 200, 0.26);
+  border-radius: var(--jx-radius);
+  padding: 14px;
 }
 
 .error-panel {
@@ -224,11 +223,11 @@ const emitSearch = () => emit('search');
   margin-bottom: 10px;
 }
 .panel-header h3 {
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--jx-text);
   margin: 0;
-  border-left: 2px solid var(--jx-primary);
-  padding-left: 8px;
+  letter-spacing: 0.02em;
 }
 .reset-btn {
   height: 32px;
@@ -247,10 +246,10 @@ const emitSearch = () => emit('search');
   gap: 7px;
 }
 .metric-card {
-  background: rgba(7, 25, 35, 0.72);
-  border: 1px solid rgba(156, 231, 189, 0.12);
-  padding: 8px 7px;
-  border-radius: 5px;
+  background: rgba(6, 22, 30, 0.66);
+  border: 1px solid var(--jx-border);
+  padding: 12px 10px;
+  border-radius: var(--jx-radius);
   text-align: center;
 }
 
@@ -260,10 +259,12 @@ const emitSearch = () => emit('search');
   line-height: 1.35;
 }
 .metric-value {
-  font-size: 21px;
-  font-weight: 700;
+  font-family: var(--font-num);
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
   line-height: 1.1;
-  margin: 5px 0 3px;
+  margin: 6px 0 4px;
   font-variant-numeric: tabular-nums;
 }
 .metric-unit {
@@ -323,7 +324,7 @@ const emitSearch = () => emit('search');
   padding: 0 11px;
   border-radius: 5px;
   cursor: pointer;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .search-feedback {
@@ -391,10 +392,9 @@ const emitSearch = () => emit('search');
 }
 .rank-bar-container {
   flex: 1;
-  height: 6px;
-  background: rgba(143, 198, 200, 0.12);
-  border: 1px solid rgba(143, 198, 200, 0.16);
-  border-radius: 3px;
+  height: 4px;
+  background: rgba(148, 210, 189, 0.1);
+  border-radius: 2px;
   overflow: hidden;
 }
 .rank-bar {

@@ -871,7 +871,7 @@ onMounted(async () => {
   background: var(--jx-surface);
   border: 1px solid var(--jx-border);
   border-radius: var(--jx-radius-large);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--jx-shadow-1);
   padding: 18px;
   box-sizing: border-box;
 }
@@ -1070,7 +1070,7 @@ button {
 .primary-btn {
   border: none;
   background: var(--jx-primary);
-  color: #06211f;
+  color: var(--jx-primary-ink);
   font-weight: 600;
 }
 
