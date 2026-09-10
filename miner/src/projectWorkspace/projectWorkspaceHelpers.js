@@ -56,3 +56,16 @@ export function groupPlotsByTbbh(plotRows = []) {
   }
   return groups;
 }
+
+export function paginateList(items, page, size = 10) {
+  const list = Array.isArray(items) ? items : [];
+  const pageSize = Number.isFinite(size) && size > 0 ? Math.floor(size) : list.length || 1;
+  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+  const rawPage = Number.isFinite(page) ? Math.floor(page) : 1;
+  const safePage = Math.min(Math.max(rawPage, 1), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    pageItems: list.slice(start, start + pageSize),
+    totalPages,
+  };
+}
