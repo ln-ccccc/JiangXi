@@ -169,7 +169,7 @@ const formatCoordinateText = (lat, lng) => {
   height: min(760px, calc(100vh - 96px));
   background: rgba(7, 20, 31, 0.94);
   border: 1px solid #4ecdc4;
-  box-shadow: 0 0 30px rgba(78, 205, 196, 0.2);
+  box-shadow: var(--jx-shadow-1);
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
@@ -200,7 +200,7 @@ const formatCoordinateText = (lat, lng) => {
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
-  scrollbar-color: rgba(78, 205, 196, 0.58) transparent;
+  scrollbar-color: rgba(127, 216, 166, 0.58) transparent;
   scrollbar-width: thin;
 }
 .modal-body::-webkit-scrollbar {
@@ -210,13 +210,13 @@ const formatCoordinateText = (lat, lng) => {
   background: transparent;
 }
 .modal-body::-webkit-scrollbar-thumb {
-  background: rgba(78, 205, 196, 0.48);
+  background: rgba(127, 216, 166, 0.48);
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
 .modal-body::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(78, 205, 196, 0.76);
+  background-color: rgba(127, 216, 166, 0.76);
 }
 
 .info-grid {
@@ -270,7 +270,7 @@ const formatCoordinateText = (lat, lng) => {
   margin-bottom: 15px;
   overflow-x: auto;
   padding-bottom: 4px;
-  scrollbar-color: rgba(78, 205, 196, 0.58) transparent;
+  scrollbar-color: rgba(127, 216, 166, 0.58) transparent;
   scrollbar-width: thin;
 }
 .tabs::-webkit-scrollbar {
@@ -280,13 +280,13 @@ const formatCoordinateText = (lat, lng) => {
   background: transparent;
 }
 .tabs::-webkit-scrollbar-thumb {
-  background: rgba(78, 205, 196, 0.48);
+  background: rgba(127, 216, 166, 0.48);
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
 .tabs::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(78, 205, 196, 0.76);
+  background-color: rgba(127, 216, 166, 0.76);
 }
 .tabs button {
   background: rgba(255, 255, 255, 0.05);

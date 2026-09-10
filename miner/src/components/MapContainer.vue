@@ -803,7 +803,7 @@ defineExpose({
 }
 
 :global(.city-boundary-label) {
-  background: rgba(7, 19, 31, 0.62);
+  background: var(--jx-surface-glass);
   border: 1px solid rgba(156, 231, 189, 0.38);
   border-radius: 4px;
   box-shadow: none;

@@ -811,7 +811,7 @@ onMounted(async () => {
   overflow-y: auto;
   padding: 24px;
   background:
-    radial-gradient(circle at top left, rgba(78, 205, 196, 0.13), transparent 32%),
+    radial-gradient(circle at top left, rgba(127, 216, 166, 0.13), transparent 32%),
     linear-gradient(180deg, var(--jx-bg) 0%, var(--jx-bg-elevated) 100%);
   color: var(--jx-text);
   box-sizing: border-box;
@@ -926,7 +926,7 @@ onMounted(async () => {
 
 .project-card.active {
   border-color: var(--jx-primary);
-  background: rgba(78, 205, 196, 0.12);
+  background: rgba(127, 216, 166, 0.12);
 }
 
 .project-card p,
@@ -992,7 +992,7 @@ onMounted(async () => {
 
 .mine-item.active {
   border-color: var(--jx-border-strong);
-  background: rgba(78, 205, 196, 0.12);
+  background: rgba(127, 216, 166, 0.12);
 }
 
 .mine-item-radio {
@@ -1023,7 +1023,7 @@ onMounted(async () => {
 
 .table-row-subline {
   grid-column: 1 / -1;
-  color: #5d6f6d;
+  color: var(--jx-text-muted);
 }
 
 .sub-panel + .sub-panel {
@@ -1045,7 +1045,7 @@ textarea {
   border: 1px solid var(--jx-border);
   border-radius: var(--jx-radius);
   padding: 10px 12px;
-  background: rgba(7, 19, 31, 0.72);
+  background: rgba(4, 15, 21, 0.66);
   color: var(--jx-text);
 }
 
@@ -1053,7 +1053,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--jx-primary);
-  outline: 2px solid rgba(78, 205, 196, 0.18);
+  outline: 2px solid rgba(127, 216, 166, 0.18);
 }
 
 textarea {
