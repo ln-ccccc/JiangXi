@@ -112,9 +112,11 @@ ghcr 标签 `20260910-ui` 已备）包含全部 main 修复与新 UI（分页、
 `geoview-jiangxi-gpu-20260909/20260908` 与镜像 `jiangxi-gpu-20260909-offline`
 、`jiangxi-gpu-20260908-batching`、`jiangxi-gpu-20260910-fixes`（含 ghcr 标签）。
 代码级回退仍可用 git tag `ui-legacy-20260910`（重建镜像即可恢复旧 UI）。
-不替换江西模型权重。CPU 版镜像 `geoview-jiangxi:cpu-20260908`（协作者 Mac 用，
-不含 2026-09-09 之后的修复）保留，需时再重建。除非用户明确确认，不删除 CPU
-镜像或运行数据卷。
+不替换江西模型权重。2026-09-10 已重建协作者 CPU 镜像 `cpu-20260910-ui`
+（main d874d2b，含全部修复与新 UI；验收：healthy、cpu 推理 completed、
+瓦片 32,214）；交付包在 `F:\images\jiangxi\handoff-20260910\`（tar.gz 14.5GB
++ jx_env_cpu_20260910.env + MAC-RUNGUIDE.md）。旧 `cpu-20260908` 可在协作者
+确认新版可用后删除。除非用户明确确认，不删除 CPU 镜像或运行数据卷。
 
 注意：两期对比影像（`/app/backend/bianhua_2years/`，甲方 189 个 tif）位于
 容器可写层，**重建容器即丢失**；需从宿主机 `D:\项目\jiangxi_data\影像文件\`
