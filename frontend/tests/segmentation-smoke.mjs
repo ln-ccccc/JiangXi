@@ -2,7 +2,24 @@
 // 覆盖：工作流渲染 / 文件选择注入 / 年份校验 / 执行按钮状态机 / 全局导航。
 // 上传→推理的请求契约由 tests/upload-contract.test.mjs 在 Node 层覆盖。
 // 运行：npm run smoke（需 4174/5178 容器在运行）
-import { chromium } from 'playwright';
+import { createRequire } from 'node:module';
+// playwright 安装在仓库外的测试基建目录（不进 package.json，离线镜像构建不受影响）
+const require = createRequire(import.meta.url);
+function loadPlaywright() {
+  const candidates = [
+    process.env.SMOKE_PLAYWRIGHT_DIR,
+    'D:/项目/jiangxi-smoke',
+  ].filter(Boolean);
+  for (const dir of candidates) {
+    try {
+      return createRequire(dir + '/package.json')('playwright');
+    } catch (_) {
+      /* 尝试下一个 */
+    }
+  }
+  return require('playwright');
+}
+const { chromium } = loadPlaywright();
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
