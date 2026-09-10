@@ -94,13 +94,13 @@ const goToGeoView = () => {
 
 <style scoped>
 .header {
-  height: 64px;
-  min-height: 64px;
+  height: 60px;
+  min-height: 60px;
   width: 100%;
-  background: linear-gradient(120deg, var(--jx-surface), var(--jx-bg-elevated) 72%, var(--jx-bg));
-  backdrop-filter: blur(10px);
+  background: var(--jx-surface-glass);
+  backdrop-filter: var(--jx-blur);
+  -webkit-backdrop-filter: var(--jx-blur);
   border-bottom: 1px solid var(--jx-border);
-  box-shadow: 0 1px 0 rgba(156, 231, 189, 0.06);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -131,12 +131,11 @@ const goToGeoView = () => {
 }
 
 .brand-mark {
-  width: 8px;
-  height: 28px;
+  width: 10px;
+  height: 26px;
   flex: 0 0 auto;
-  border-radius: 4px 2px 4px 2px;
-  background: var(--jx-primary);
-  box-shadow: 0 0 0 4px rgba(156, 231, 189, 0.08);
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--jx-primary) 0%, rgba(127, 216, 166, 0.35) 100%);
 }
 
 .brand-copy {

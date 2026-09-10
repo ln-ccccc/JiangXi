@@ -5,10 +5,13 @@ import test from 'node:test';
 const baseCss = await readFile(new URL('../src/assets/base.css', import.meta.url), 'utf8');
 
 test('defines the ecology atlas theme tokens and reduced-motion rule', () => {
-  assert.match(baseCss, /--jx-bg:\s*#071923\s*;/);
-  assert.match(baseCss, /--jx-primary:\s*#9ce7bd\s*;/);
-  assert.match(baseCss, /--jx-warning:\s*#d68058\s*;/);
-  assert.match(baseCss, /--jx-sand:\s*#e6c98c\s*;/);
+  // 2026-09-10「山地制图台」重设计：深潭基底 + 植被薄荷主色 + 矿砂警示
+  assert.match(baseCss, /--jx-bg:\s*#06141c\s*;/);
+  assert.match(baseCss, /--jx-primary:\s*#7fd8a6\s*;/);
+  assert.match(baseCss, /--jx-warning:\s*#e2c285\s*;/);
+  assert.match(baseCss, /--jx-sand:\s*#e2c285\s*;/);
+  assert.match(baseCss, /--jx-surface-glass:\s*rgba\(7,\s*24,\s*33,\s*0\.72\)\s*;/);
+  assert.match(baseCss, /--jx-blur:\s*saturate\(150%\)\s*blur\(18px\)\s*;/);
 
   const reducedMotionBlock = baseCss.match(
     /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?transition-duration:\s*0\.01ms\s*!important;/

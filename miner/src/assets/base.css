@@ -1,21 +1,46 @@
 :root {
-    --jx-bg: #071923;
-    --jx-bg-elevated: #0b222b;
-    --jx-surface: #0d2630;
-    --jx-surface-muted: rgba(230, 201, 140, 0.06);
-    --jx-border: rgba(156, 231, 189, 0.22);
-    --jx-border-strong: rgba(156, 231, 189, 0.5);
-    --jx-text: #e5f1ed;
-    --jx-text-muted: #9bb0ab;
-    --jx-primary: #9ce7bd;
-    --jx-primary-hover: #b7f0d0;
-    --jx-success: #82d7a7;
-    --jx-warning: #d68058;
-    --jx-danger: #d96b6b;
+    /* —— 基底：深潭。界面安静到让卫星影像成为唯一光源 —— */
+    --jx-bg: #06141c;
+    --jx-bg-elevated: #0a1f2a;
+    --jx-surface: #0b2230;
+    --jx-surface-muted: rgba(127, 216, 166, 0.05);
+    --jx-surface-glass: rgba(7, 24, 33, 0.72);
+
+    /* —— 线：制图级发丝线 —— */
+    --jx-border: rgba(148, 210, 189, 0.14);
+    --jx-border-strong: rgba(148, 210, 189, 0.38);
+
+    /* —— 文字 —— */
+    --jx-text: #e9f3ef;
+    --jx-text-muted: #8fa9a0;
+
+    /* —— 主色：植被薄荷，全站唯一强调色 —— */
+    --jx-primary: #7fd8a6;
+    --jx-primary-hover: #98e2b9;
+    --jx-primary-ink: #04231a;
+
+    /* —— 状态：矿砂色属于「采矿/未治理」，与主题同源 —— */
+    --jx-success: #7fd8a6;
+    --jx-warning: #e2c285;
+    --jx-danger: #e08a80;
     --jx-info: #8fc6c8;
-    --jx-sand: #e6c98c;
-    --jx-radius: 10px;
-    --jx-radius-large: 16px;
+    --jx-sand: #e2c285;
+
+    /* —— 几何：两级圆角，收敛全站弧度 —— */
+    --jx-radius: 8px;
+    --jx-radius-large: 14px;
+
+    /* —— 玻璃与阴影：极弱阴影，玻璃靠 blur 而不是投影表达高度 —— */
+    --jx-blur: saturate(150%) blur(18px);
+    --jx-shadow-1: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 14px 44px rgba(2, 10, 14, 0.45);
+
+    /* —— 字体：系统栈（离线部署不可引外部字体），性格靠阶梯与字重表达 —— */
+    --font-sans:
+        'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+        system-ui, sans-serif;
+    --font-num: 'Bahnschrift', 'DIN Alternate', 'MiSans', 'PingFang SC', sans-serif;
+
+    /* 遗留别名（旧组件引用，值随新体系走） */
     --border-color: var(--jx-border);
     --color-background: var(--jx-bg);
     --color-text: var(--jx-text);
@@ -33,23 +58,35 @@ body {
     min-height: 100vh;
     color: var(--color-text);
     background: var(--color-background);
-    line-height: 1.6;
-    font-family:
-        'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', Bahnschrift,
-        'DIN Alternate', ui-monospace, monospace, sans-serif;
+    line-height: 1.65;
+    font-family: var(--font-sans);
     font-size: 15px;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* 数据数字统一等宽：对齐的数字列是监测台可信度的一部分 */
+.num,
+temp,
+time {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+}
+
+::selection {
+    background: rgba(127, 216, 166, 0.28);
+    color: #f2fbf6;
+}
+
 :focus-visible {
     outline: 2px solid var(--jx-primary);
     outline-offset: 3px;
+    border-radius: 2px;
 }
 
 * {
-    scrollbar-color: rgba(156, 231, 189, 0.35) transparent;
+    scrollbar-color: rgba(148, 210, 189, 0.28) transparent;
     scrollbar-width: thin;
 }
 
@@ -59,8 +96,12 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-    background: rgba(156, 231, 189, 0.35);
+    background: rgba(148, 210, 189, 0.28);
     border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 210, 189, 0.45);
 }
 
 *::-webkit-scrollbar-track {
