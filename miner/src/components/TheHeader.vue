@@ -8,7 +8,27 @@
           <span class="brand-meta">生态监测档案</span>
         </div>
       </div>
-      <div class="status-capsule" role="group" aria-label="实时状态">
+      <nav class="view-tabs" role="tablist" aria-label="视图切换">
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="currentView === 'map'"
+          :class="{ active: currentView === 'map' }"
+          @click="$emit('open-map')"
+        >
+          矿山地图
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="currentView === 'projects'"
+          :class="{ active: currentView === 'projects' }"
+          @click="$emit('open-workspace')"
+        >
+          项目工作台
+        </button>
+      </nav>
+      <div v-if="showStatus" class="status-capsule" role="group" aria-label="实时状态">
         <div class="status-item weather-widget">
           <span class="weather-icon">{{ weatherIcon }}</span>
           <div class="weather-info">
@@ -26,11 +46,16 @@
       </div>
     </div>
     <div class="header-right">
+      <button
+        v-if="currentView === 'projects'"
+        class="primary-btn"
+        type="button"
+        @click="$emit('create-project')"
+      >
+        <span>新建项目</span>
+      </button>
       <button v-if="username" class="secondary-btn" type="button" @click="$emit('logout')">
         <span>退出登录</span>
-      </button>
-      <button class="secondary-btn" type="button" @click="$emit('open-workspace')">
-        <span>项目工作台</span>
       </button>
       <div class="platform-link-control">
         <button
@@ -66,6 +91,14 @@ import { APP_TITLE } from '../config/minerDefaults.js';
 import { buildGeoViewUrl } from '../navigation/platformLinks.js';
 
 defineProps({
+  currentView: {
+    type: String,
+    default: 'map',
+  },
+  showStatus: {
+    type: Boolean,
+    default: true,
+  },
   weatherIcon: String,
   temperature: [Number, String],
   airQuality: String,
@@ -78,7 +111,7 @@ defineProps({
   },
 });
 
-defineEmits(['logout', 'open-workspace']);
+defineEmits(['logout', 'open-workspace', 'open-map', 'create-project']);
 
 const geoViewUrl = buildGeoViewUrl(import.meta.env.VITE_GEOVIEW_URL);
 const geoViewButtonLabel = geoViewUrl ? '打开解译平台' : '解译平台地址未配置';
@@ -136,6 +169,39 @@ const goToGeoView = () => {
   flex: 0 0 auto;
   border-radius: 3px;
   background: linear-gradient(180deg, var(--jx-primary) 0%, rgba(127, 216, 166, 0.35) 100%);
+}
+
+.view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: clamp(10px, 1.6vw, 22px);
+  padding: 3px;
+  border: 1px solid var(--jx-border);
+  border-radius: 999px;
+}
+
+.view-tabs button {
+  border: none;
+  background: transparent;
+  color: var(--jx-text-muted);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.view-tabs button:hover {
+  color: var(--jx-text);
+}
+
+.view-tabs button.active {
+  color: var(--jx-primary);
+  background: rgba(127, 216, 166, 0.12);
 }
 
 .brand-copy {

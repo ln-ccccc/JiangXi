@@ -1,6 +1,7 @@
 <template>
   <div class="dashboard">
     <TheHeader
+      current-view="map"
       :weatherIcon="weatherIcon"
       :temperature="temperature"
       :airQuality="airQuality"

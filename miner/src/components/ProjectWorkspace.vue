@@ -1,17 +1,19 @@
 <template>
   <div class="workspace-page">
+    <TheHeader
+      current-view="projects"
+      :show-status="false"
+      :username="username"
+      @logout="$emit('logout')"
+      @open-map="$emit('open-map', null)"
+      @open-workspace="() => {}"
+      @create-project="startCreateProject"
+    />
     <header class="workspace-header">
       <div>
         <p class="workspace-kicker">{{ APP_KICKER }}</p>
         <h1>项目工作台</h1>
         <p class="workspace-subtitle">{{ WORKSPACE_SUBTITLE }}</p>
-      </div>
-      <div class="workspace-header-actions">
-        <button v-if="username" class="ghost-btn" @click="$emit('logout')">
-          {{ username }} 退出登录
-        </button>
-        <button class="secondary-btn" @click="$emit('open-map', null)">打开矿山地图</button>
-        <button class="primary-btn" @click="startCreateProject">新建项目</button>
       </div>
     </header>
 
@@ -396,6 +398,8 @@ import {
 } from '../projectWorkspace/projectWorkspaceHelpers.js';
 
 const MINE_PAGE_SIZE = 10;
+
+import TheHeader from './TheHeader.vue';
 
 defineProps({
   username: {
