@@ -270,6 +270,7 @@ const buildFallbackStatusMessage = (fromProvider, toProvider) => {
 };
 
 const basemapMaskPane = 'basemapMask';
+let basemapMaskRenderer = null;
 
 const buildMaskRings = (provinceGeoJson) => {
   const features = provinceGeoJson?.features?.length
@@ -307,6 +308,7 @@ const removeBasemapMask = () => {
 const applyBasemapMask = () => {
   if (!map.value || !provinceGeoJsonCache) return;
   removeBasemapMask();
+  if (!basemapMaskRenderer) return;
   const rings = buildMaskRings(provinceGeoJsonCache);
   if (!rings.length) return;
   basemapMaskLayer.value = L.polygon([WORLD_MASK_RING, ...rings], {
@@ -316,7 +318,70 @@ const applyBasemapMask = () => {
     fillOpacity: 1,
     interactive: false,
     pane: basemapMaskPane,
+    renderer: basemapMaskRenderer,
   }).addTo(map.value);
+};
+
+// —— 瓦片级裁剪（tile bleeding 的构造级修复）——
+// overlay 遮罩多边形依赖 Leaflet Renderer 的投影/变换内部状态，连续缩放后会与瓦片层
+// 失步（实测 1.9.4：renderer 停在旧层级投影，省界外瓦片裸露）。改为把省界多边形做成
+// SVG clipPath 直接挂在瓦片 level 容器上：clip-path 属于元素自身的用户坐标系，随容器
+// 的 transform 一起动，与瓦片几何天然同步，不存在生命周期错位。
+const JX_CLIP_NS = 'http://www.w3.org/2000/svg';
+let basemapClipDefsSvg = null;
+let clippedTileLayers = [];
+let tileClipSeq = 0;
+
+const ensureTileClipDefsSvg = () => {
+  if (basemapClipDefsSvg) return basemapClipDefsSvg;
+  basemapClipDefsSvg = document.createElementNS(JX_CLIP_NS, 'svg');
+  basemapClipDefsSvg.setAttribute('width', '0');
+  basemapClipDefsSvg.setAttribute('height', '0');
+  basemapClipDefsSvg.style.position = 'absolute';
+  document.body.appendChild(basemapClipDefsSvg);
+  return basemapClipDefsSvg;
+};
+
+const updateTileClips = () => {
+  if (!clippedTileLayers.length) return;
+  if (!map.value || !provinceGeoJsonCache) return;
+  const defs = ensureTileClipDefsSvg();
+  const rings = buildMaskRings(provinceGeoJsonCache);
+  if (!rings.length) return;
+  for (const layer of clippedTileLayers) {
+    // _levels/_origin 为 Leaflet 1.9.4 GridLayer 内部结构（版本锁定，升级需回归本逻辑）。
+    // 每个 level 实例一个专属 clipPath：d 直接以 level 局部坐标（worldPx - origin）表达，
+    // 不依赖 clipPath transform 的浏览器兼容语义；origin 在 level 生命周期内不变，一次成型。
+    const levels = layer._levels || {};
+    for (const key of Object.keys(levels)) {
+      const level = levels[key];
+      if (!level?.el) continue;
+      if (level.el.dataset.jxClipId) continue;
+      const origin = level.origin;
+      if (!origin) continue;
+      const clipId = `jx-tile-clip-${(tileClipSeq += 1)}`;
+      const clipPath = document.createElementNS(JX_CLIP_NS, 'clipPath');
+      clipPath.setAttribute('id', clipId);
+      clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse');
+      const d = rings
+        .map((ring) =>
+          ring
+            .map((latlng) => {
+              const p = map.value.project(latlng, level.zoom);
+              return `${(p.x - origin.x).toFixed(1)},${(p.y - origin.y).toFixed(1)}`;
+            })
+            .join(' L ')
+        )
+        .map((seg) => `M${seg} Z`)
+        .join(' ');
+      const path = document.createElementNS(JX_CLIP_NS, 'path');
+      path.setAttribute('d', d);
+      clipPath.appendChild(path);
+      defs.appendChild(clipPath);
+      level.el.dataset.jxClipId = clipId;
+      level.el.style.clipPath = `url(#${clipId})`;
+    }
+  }
 };
 
 const applyBaseProvider = (providerName, { fallback = false, fromProvider = '' } = {}) => {
@@ -360,6 +425,12 @@ const applyBaseProvider = (providerName, { fallback = false, fromProvider = '' }
     firstLayer.addTo(map.value);
   }
 
+  // local 瓦片层走 clipPath 级裁剪（见 updateTileClips 注释）；level 容器在 addTo 时已创建
+  clippedTileLayers = providerName === 'local' ? Object.values(baseMaps).filter(Boolean) : [];
+  if (clippedTileLayers.length) {
+    updateTileClips();
+  }
+
   if (providerName === 'local' || providerName === 'offline') {
     applyBasemapMask();
   } else {
@@ -393,6 +464,28 @@ const initMap = () => {
   // 底图遮罩专用 pane：位于瓦片层(200)之上、矢量边界/图斑层(400)之下
   map.value.createPane(basemapMaskPane);
   map.value.getPane(basemapMaskPane).style.zIndex = 350;
+
+  // 遮罩走独立 renderer：与默认渲染器的 viewBox/节流互不干扰，便于按 pane 定位问题
+  basemapMaskRenderer = L.svg({ pane: basemapMaskPane, padding: 1 });
+
+  // tile bleeding 防御（2026-09-10 实测复现）：连续多级滚轮缩放时，Renderer._update()
+  // 在 _animatingZoom 期间被跳过，动画结束后无人补跑，遮罩停留在旧层级投影
+  // （transform 缺少层级间缩放，孔洞跑偏 → 省界外瓦片持续裸露）。
+  // zoomend 时 _animatingZoom 已复位，强制重挂遮罩逼迫 renderer 完整重投影，
+  // 使遮罩与瓦片层收敛到同一视图状态。
+  map.value.on('zoomend', () => {
+    applyBasemapMask();
+  });
+  // 缩放后 GridLayer 可能新建/裁剪 level 容器，重刷 clip 归属与原点平移
+  map.value.on('zoomend viewreset', () => {
+    updateTileClips();
+  });
+
+  // 调试句柄：仅 dev 构建存在（import.meta.env.DEV 静态替换，生产包整段消除），
+  // 供自动化测试/控制台直取地图实例做确定性缩放验证
+  if (import.meta.env.DEV) {
+    window.__jxMap = map.value;
+  }
 
   providerMaps = buildProviderMaps();
 
@@ -453,6 +546,8 @@ const loadJiangxiBoundaries = async () => {
     provinceGeoJsonCache = province;
     if (activeMapProvider.value === 'local' || activeMapProvider.value === 'offline') {
       applyBasemapMask();
+      // 省界到位晚于瓦片层挂载，此时才有坐标可建 clipPath，补触发一次
+      updateTileClips();
     }
   } catch (error) {
     console.warn('江西行政边界加载失败，已保留卫星影像和矿山图斑。', error);
