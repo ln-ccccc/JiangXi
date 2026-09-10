@@ -8,7 +8,8 @@
     "test:backend-url": "node --test test/backendUrl.test.mjs",
     "test:navigation": "node --test test/platformNavigation.test.mjs test/tablogin.contract.test.mjs test/applicationShell.contract.test.mjs",
     "test:ui": "node scripts/verify-brand-theme.cjs",
-    "test:workflow": "node --test test/analysisWorkflow.contract.test.mjs"
+    "test:workflow": "node --test test/analysisWorkflow.contract.test.mjs",
+    "smoke": "node tests/segmentation-smoke.mjs"
   },
   "dependencies": {
     "@vueuse/core": "^8.5.0",
@@ -36,7 +37,8 @@
     "@vue/cli-plugin-vuex": "~5.0.0",
     "@vue/cli-service": "~5.0.0",
     "less": "^4.0.0",
-    "less-loader": "^8.0.0"
+    "less-loader": "^8.0.0",
+    "playwright": "^1.49.1"
   },
   "browserslist": [
     "> 1%",
