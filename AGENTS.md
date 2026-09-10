@@ -104,6 +104,10 @@ entrypoint 自动重启监督见 §7；测试方法手册见 docs/testing_playbo
 推理 0.79s；浏览器视觉验收（边界内影像、边界外遮罩）通过。
 回退副本：旧容器 `geoview-jiangxi-gpu-20260908`（已停止）与旧镜像
 `jiangxi-gpu-20260908-batching` 保留，经用户确认后方可删除。
+2026-09-10 增量：工作台分页（main 43f34cb）、瓦片裁剪 tile bleeding 根治
+（main 2d18c70，省界 clipPath 改挂 tile level 容器，与瓦片 transform 构造级同步）
+均已热部署进运行容器，**不在**
+`jiangxi-gpu-20260909-offline` 镜像里；下次重建镜像自然纳入。
 不替换江西模型权重。CPU 版镜像 `geoview-jiangxi:cpu-20260908`（协作者 Mac 用，
 不含 2026-09-09 之后的修复）保留，需时再重建。除非用户明确确认，不删除 CPU
 镜像或运行数据卷。

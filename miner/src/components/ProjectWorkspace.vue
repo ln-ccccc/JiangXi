@@ -160,7 +160,7 @@
             </div>
             <div v-else class="mine-list">
               <label
-                v-for="item in currentProjectDetail.mines || []"
+                v-for="item in projectMinesPaged.pageItems"
                 :key="item.id"
                 class="mine-item mine-item-radio"
                 :class="{ active: String(item.tbbh) === String(selectedMineTbbh) }"
@@ -174,6 +174,25 @@
                   </small>
                 </div>
               </label>
+            </div>
+            <div v-if="projectMinesPaged.totalPages > 1" class="pagination-bar">
+              <button
+                class="link-btn"
+                type="button"
+                :disabled="mineListPage <= 1"
+                @click="mineListPage -= 1"
+              >
+                上一页
+              </button>
+              <span>第 {{ mineListPage }} / {{ projectMinesPaged.totalPages }} 页</span>
+              <button
+                class="link-btn"
+                type="button"
+                :disabled="mineListPage >= projectMinesPaged.totalPages"
+                @click="mineListPage += 1"
+              >
+                下一页
+              </button>
             </div>
           </section>
 
@@ -211,7 +230,7 @@
               </button>
             </div>
             <div class="mine-list">
-              <label v-for="item in mineOptions" :key="item.tbbh" class="mine-item">
+              <label v-for="item in mineOptionsPaged.pageItems" :key="item.tbbh" class="mine-item">
                 <input v-model="selectedMineTbbhs" type="checkbox" :value="item.tbbh" />
                 <span>{{ item.name }}</span>
                 <small>{{ item.city || '未标注区域' }}</small>
@@ -219,6 +238,25 @@
                   定位地图
                 </button>
               </label>
+            </div>
+            <div v-if="mineOptionsPaged.totalPages > 1" class="pagination-bar">
+              <button
+                class="link-btn"
+                type="button"
+                :disabled="bindMinePage <= 1"
+                @click="bindMinePage -= 1"
+              >
+                上一页
+              </button>
+              <span>第 {{ bindMinePage }} / {{ mineOptionsPaged.totalPages }} 页</span>
+              <button
+                class="link-btn"
+                type="button"
+                :disabled="bindMinePage >= mineOptionsPaged.totalPages"
+                @click="bindMinePage += 1"
+              >
+                下一页
+              </button>
             </div>
           </section>
 
@@ -354,7 +392,10 @@ import {
   buildMineSelectionSet,
   filterProjects,
   groupPlotsByTbbh,
+  paginateList,
 } from '../projectWorkspace/projectWorkspaceHelpers.js';
+
+const MINE_PAGE_SIZE = 10;
 
 defineProps({
   username: {
@@ -410,6 +451,20 @@ const loadingProjects = ref(false);
 const mineOptions = ref([]);
 const selectedMineTbbhs = ref([]);
 const selectedMineTbbh = ref(null);
+
+// 图斑较多（348 条）时全量渲染过长：两个列表各自分页，每页 10 条
+const mineListPage = ref(1);
+const bindMinePage = ref(1);
+const projectMinesPaged = computed(() =>
+  paginateList(currentProjectDetail.value?.mines || [], mineListPage.value, MINE_PAGE_SIZE)
+);
+const mineOptionsPaged = computed(() =>
+  paginateList(mineOptions.value, bindMinePage.value, MINE_PAGE_SIZE)
+);
+watch(currentProjectDetail, () => {
+  mineListPage.value = 1;
+  bindMinePage.value = 1;
+});
 
 const showProjectForm = ref(false);
 const editingProjectId = ref(null);
@@ -842,6 +897,21 @@ onMounted(async () => {
   flex-direction: column;
   gap: 10px;
   margin-top: 12px;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--jx-text-muted, #8fa8b8);
+}
+
+.pagination-bar .link-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .project-card {

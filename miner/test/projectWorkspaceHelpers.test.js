@@ -5,6 +5,7 @@ import {
   buildMineSelectionSet,
   filterProjects,
   groupPlotsByTbbh,
+  paginateList,
 } from '../src/projectWorkspace/projectWorkspaceHelpers.js';
 
 test('filterProjects matches by name, region, year and status', () => {
@@ -58,4 +59,29 @@ test('groupPlotsByTbbh groups jiangxi plot rows under one TBBH', () => {
 
   assert.equal(grouped.get('A').length, 2);
   assert.equal(grouped.get('B').length, 1);
+});
+
+test('paginateList slices the requested page and reports total pages', () => {
+  const items = Array.from({ length: 23 }, (_, i) => `item-${i + 1}`);
+
+  const page1 = paginateList(items, 1, 10);
+  assert.deepEqual(page1.pageItems, items.slice(0, 10));
+  assert.equal(page1.totalPages, 3);
+
+  const page3 = paginateList(items, 3, 10);
+  assert.deepEqual(page3.pageItems, items.slice(20, 23));
+  assert.equal(page3.totalPages, 3);
+});
+
+test('paginateList clamps out-of-range pages into valid range', () => {
+  const items = Array.from({ length: 12 }, (_, i) => i);
+
+  assert.deepEqual(paginateList(items, 0, 10).pageItems, items.slice(0, 10));
+  assert.deepEqual(paginateList(items, 99, 10).pageItems, items.slice(10, 12));
+});
+
+test('paginateList handles empty lists and negative page size', () => {
+  assert.deepEqual(paginateList([], 1, 10), { pageItems: [], totalPages: 1 });
+  const items = [1, 2, 3];
+  assert.deepEqual(paginateList(items, 1, 0), { pageItems: items, totalPages: 1 });
 });
