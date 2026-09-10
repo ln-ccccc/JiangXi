@@ -1,22 +1,28 @@
 /* 江西生态图册：canonical tokens 原值同步自 Miner。 */
 :root {
-  --jx-bg: #071923;
-  --jx-bg-elevated: #0b222b;
-  --jx-surface: #0d2630;
-  --jx-surface-muted: rgba(230, 201, 140, 0.06);
-  --jx-border: rgba(156, 231, 189, 0.22);
-  --jx-border-strong: rgba(156, 231, 189, 0.5);
-  --jx-text: #e5f1ed;
-  --jx-text-muted: #9bb0ab;
-  --jx-primary: #9ce7bd;
-  --jx-primary-hover: #b7f0d0;
-  --jx-success: #82d7a7;
-  --jx-warning: #d68058;
-  --jx-danger: #d96b6b;
+  /* 2026-09-10 与 Miner「山地制图台」token 同步（源：miner/src/assets/base.css） */
+  --jx-bg: #06141c;
+  --jx-bg-elevated: #0a1f2a;
+  --jx-surface: #0b2230;
+  --jx-surface-muted: rgba(127, 216, 166, 0.05);
+  --jx-border: rgba(148, 210, 189, 0.14);
+  --jx-border-strong: rgba(148, 210, 189, 0.38);
+  --jx-text: #e9f3ef;
+  --jx-text-muted: #8fa9a0;
+  --jx-primary: #7fd8a6;
+  --jx-primary-hover: #98e2b9;
+  --jx-success: #7fd8a6;
+  --jx-warning: #e2c285;
+  --jx-danger: #e08a80;
   --jx-info: #8fc6c8;
-  --jx-sand: #e6c98c;
-  --jx-radius: 10px;
-  --jx-radius-large: 16px;
+  --jx-sand: #e2c285;
+  --jx-radius: 8px;
+  --jx-radius-large: 14px;
+  --jx-surface-glass: rgba(7, 24, 33, 0.72);
+  --jx-blur: saturate(150%) blur(18px);
+  --jx-shadow-1:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 44px rgba(2, 10, 14, 0.45);
 
   --primary-color: var(--jx-primary);
   --primary-light: var(--jx-primary-hover);
