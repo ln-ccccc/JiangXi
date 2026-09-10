@@ -29,402 +29,13 @@
     >
       <el-col :span="24">
         <el-card class="workflow-sheet">
-          <section class="workflow-panel" data-step="01">
-            <header class="workflow-panel__header">
-              <div>
-                <span class="workflow-panel__index data-label">01 / SOURCE</span>
-                <h2 class="atlas-title">数据源</h2>
-              </div>
-              <p>选择包含江西矿区影像的文件夹，或直接选择一个或多个 tif / tiff 文件。</p>
-            </header>
-          <div
-            v-if="fileList.length"
-            class="clear-queue"
-          >
-            <el-button
-              type="primary"
-              class="btn-animate2 btn-animate__surround"
-              @click="clearQueue"
-            >
-              清空图片
-            </el-button>
-          </div>
-          <div
-            class="upload-card upload-dropzone"
-            role="button"
-            tabindex="0"
-            aria-label="选择 tif 或 tiff 遥感影像文件夹"
-            @click="fileClick"
-            @keydown.enter="fileClick"
-            @keydown.space.prevent="fileClick"
-            @dragover.prevent
-            @dragenter.prevent
-            @drop.prevent="handleNativeDrop"
-          >
-            <i class="iconfont icon-yunduanshangchuan" />
-            <div class="el-upload__text">
-              将文件夹拖到此处，或<em>点击上传整个文件夹</em>
-            </div>
-            <div class="el-upload__tip">
-              递归读取文件夹内容，仅上传 tif / tiff
-            </div>
-            <div
-              v-if="fileList.length"
-              class="selected-files"
-              @click.stop
-            >
-              <div class="selected-files__title">
-                已选择 {{ fileList.length }} 个 tif/tiff 文件
-              </div>
-              <div
-                v-for="item in fileList.slice(0, 8)"
-                :key="item.uid"
-                class="selected-files__item"
-              >
-                {{ item.name }}
-              </div>
-              <div
-                v-if="fileList.length > 8"
-                class="selected-files__item"
-              >
-                其余 {{ fileList.length - 8 }} 个文件待上传
-              </div>
-            </div>
-          </div>
-          <el-row justify="center">
-            <el-button
-              plain
-              size="small"
-              style="margin-top: 8px;"
-              @click="fileClick"
-            >
-              选择整个文件夹
-            </el-button>
-            <el-button
-              plain
-              size="small"
-              style="margin-top: 8px; margin-left: 8px;"
-              @click="openFilePicker"
-            >
-              选择文件
-            </el-button>
-          </el-row>
-          <input
-            ref="folderInput"
-            type="file"
-            webkitdirectory
-            multiple
-            style="display: none;"
-            @change="handleFolderSelect"
-          >
-          <input
-            ref="fileInput"
-            type="file"
-            accept=".tif,.tiff,.TIF,.TIFF"
-            multiple
-            style="display: none;"
-            @change="handleFileSelect"
-          >
-          <el-row justify="center">
-            <div class="upload-guidance">
-              支持拖拽文件夹、点击选择整个文件夹，自动递归过滤非 tif / tiff 文件
-            </div>
-          </el-row>
-          </section>
-
-          <section class="workflow-panel" data-step="02">
-            <header class="workflow-panel__header">
-              <div>
-                <span class="workflow-panel__index data-label">02 / PARAMETERS</span>
-                <h2 class="atlas-title">参数设置</h2>
-              </div>
-              <p>填写成果年份，并按影像情况选择裁剪、增强或降噪预处理。</p>
-            </header>
-          <el-row justify="center">
-            <p>
-              <label class="prehandle-label container">
-                <input
-                  ref="cut"
-                  type="checkbox"
-                  @change="select()"
-                >
-                <span class="checkmark" />
-                <span class="go-bold label-words">上传时编辑图片</span><i
-                  class="iconfont icon-crop-full"
-                />
-              </label>
-            </p>
-          </el-row>
-          <div style="text-align: center; margin-bottom: 20px;">
-            <el-input
-              v-model="roiYear"
-              style="width: 240px;"
-              maxlength="4"
-              placeholder="年份（YYYY，用于KML ROI命名）"
-              clearable
-            />
-          </div>
-          <el-row
-            justify="center"
-            align="middle"
-          >
-            <i
-              class="iconfont icon-tuxingtuxiangchuli"
-            />
-            <p>图像增强：</p>
-            <p>
-              <label class="prehandle-label container">
-                <input
-                  ref="clahe"
-                  type="checkbox"
-
-                  @change="selectClahe(4)"
-                >
-                <span class="checkmark" />
-                <span class="go-bold label-words">CLAHE</span>
-              </label>
-            </p>
-            <p>
-              <label class="prehandle-label container">
-                <input
-                  ref="sharpen"
-                  type="checkbox"
-
-                  @change="selectSharpen(4)"
-                >
-                <span class="checkmark" />
-                <span class="go-bold label-words">锐化</span>
-              </label>
-            </p>
-          </el-row>
-          <el-row
-            justify="center"
-            align="middle"
-          >
-            <i
-              class="iconfont icon-agora_AIjiangzao"
-            />
-            <p>降噪处理：</p>
-            <p>
-              <label class="prehandle-label container">
-                <input
-                  ref="smooth"
-                  type="checkbox"
-
-                  @change="selectSmooth()"
-                >
-                <span class="checkmark" />
-                <span class="go-bold label-words">平滑</span>
-              </label>
-              <label class="prehandle-label container">
-                <input
-                  ref="filter"
-                  type="checkbox"
-
-                  @change="selectFilter()"
-                >
-                <span class="checkmark" />
-                <span class="go-bold label-words">滤波</span>
-              </label>
-            </p>
-          </el-row>
-          </section>
-
-          <section class="workflow-panel workflow-panel--execute" data-step="03">
-            <header class="workflow-panel__header">
-              <div>
-                <span class="workflow-panel__index data-label">03 / RUN</span>
-                <h2 class="atlas-title">执行分析</h2>
-              </div>
-              <p>使用江西固定 CPU 配置同步分析；页面会等待本批次完成后再刷新成果。</p>
-            </header>
-          <div class="handle-button execution-action">
-            <el-button
-              type="primary"
-              class="btn-animate btn-animate__shiny"
-              :disabled="fileList.length === 0"
-              @click="upload('地物分类','semantic_segmentation')"
-            >
-              开始地物分类
-            </el-button>
-          </div>
-          <div class="run-status" aria-live="polite">
-            <p :data-state="analysisRunState">
-              {{ analysisRunMessage }}
-            </p>
-          </div>
-          <el-divider v-if="!uploadSrc.prehandle" />
-          <div v-if="uploadSrc.prehandle">
-            <div v-if="uploadSrc.prehandle===2">
-              <div
-                id="sub-title"
-              >
-                CLAHE处理结果预览<i
-                  class="iconfont icon-dianji"
-                />
-              </div>
-            </div>
-            <div v-else-if="uploadSrc.prehandle===4">
-              <div
-                id="sub-title"
-              >
-                锐化处理结果预览<i
-                  class="iconfont icon-dianji"
-                />
-              </div>
-            </div>
-            <el-divider />
-            <el-row
-              justify="center"
-              :gutter="20"
-            >
-              <el-col
-                :xs="24"
-                :sm="24"
-                :md="6"
-                :lg="6"
-                :xl="6"
-              >
-                <div
-                  v-for="(item,index) in before"
-                  :key="index"
-                >
-                  <el-image
-                    :src="item"
-                    :preview-src-list="[item]"
-                    :preview-teleported="true"
-                  />
-                  <div class="handle-words">
-                    原图
-                  </div>
-                </div>
-              </el-col>
-              <el-col
-                :md="2"
-                :lg="2"
-                :xl="2"
-              />
-              <el-col
-                v-if="uploadSrc.prehandle===2"
-                :xs="24"
-                :sm="24"
-                :md="6"
-                :lg="6"
-                :xl="6"
-              >
-                <div
-                  v-for="(item,index) in claheImg"
-                  :key="index"
-                >
-                  <el-image
-                    :src="item"
-                    :preview-src-list="[item]"
-                    :preview-teleported="true"
-                  />
-                  <div class="handle-words">
-                    CLAHE处理后 <span
-                      @click="
-                        downloadimgWithWords(
-                          -1,
-                          item,
-                          `CLAHE处理图.png`
-                        )
-                      "
-                    ><i class="iconfont icon-xiazai" /></span>
-                  </div>
-                </div>
-              </el-col>
-              <el-col
-                v-if="uploadSrc.prehandle===4"
-                :xs="24"
-                :sm="24"
-                :md="6"
-                :lg="6"
-                :xl="6"
-              >
-                <div
-                  v-for="(item,index) in sharpenImg"
-                  :key="index"
-                >
-                  <el-image
-                    :src="item"
-                    :preview-src-list="[item]"
-                    :preview-teleported="true"
-                  />
-                  <div class="handle-words">
-                    锐化处理后 <span
-                      @click="
-                        downloadimgWithWords(
-                          -1,
-                          item,
-                          `锐化处理图.png`
-                        )
-                      "
-                    ><i class="iconfont icon-xiazai" /></span>
-                  </div>
-                </div>
-              </el-col>
-            </el-row>
-          </div>
-          </section>
-        </el-card>
+    <SourcePanel />
+    <ParamsPanel />
+    <RunPanel />
+      </el-card>
       </el-col>
     </el-row>
-    <section class="workflow-panel workflow-panel--results" data-step="04">
-      <Tabinfor>
-        <template #left>
-          <div class="workflow-panel__header workflow-panel__header--compact">
-            <div>
-              <span class="workflow-panel__index data-label">04 / RESULTS</span>
-              <h2 class="atlas-title">结果预览</h2>
-              <p>查看原始影像、分类成果与类别图例；选择图片可放大检查。</p>
-            </div>
-          </div>
-        </template>
-        <template #right>
-          <div class="history-tools">
-          <el-button
-            size="mini"
-            type="danger"
-            plain
-            @click="clearCurrentHistory"
-          >
-            一键清空历史
-          </el-button>
-          <i
-            class="iconfont icon-shuaxin"
-            role="button"
-            tabindex="0"
-            @click="getMore"
-            @keydown.enter="getMore"
-          ><span
-            class="hidden-sm-and-down"
-          >点击刷新</span></i>
-        </div>
-        </template>
-      </Tabinfor>
-    <el-dialog
-      v-model="cutVisible"
-      :modal="false"
-      title="编辑"
-      width="75%"
-      top="0"
-    >
-      <MyVueCropper
-        :fileimg="fileimg"
-        :funtype="funtype"
-        :file="file"
-        :child-prehandle="uploadSrc.prehandle"
-        :child-denoise="uploadSrc.denoise"
-        @cut-changed="notvisible"
-        @child-refresh="getMore"
-      />
-    </el-dialog>
-    <ImgShow
-      :img-arr="imgArr"
-      @delete-item="deleteHistoryItem"
-    />
-    </section>
+    <ResultsPanel />
     <Bottominfor />
   </main>
 </template>
@@ -444,6 +55,10 @@ import { selectClahe, selectFilter, selectSharpen, selectSmooth, } from "@/utils
 import ImgShow from "@/components/ImgShow";
 import Tabinfor from "@/components/Tabinfor";
 import Bottominfor from "@/components/Bottominfor";
+import SourcePanel from "./segmentation/SourcePanel.vue";
+import ParamsPanel from "./segmentation/ParamsPanel.vue";
+import RunPanel from "./segmentation/RunPanel.vue";
+import ResultsPanel from "./segmentation/ResultsPanel.vue";
 import MyVueCropper from "@/components/MyVueCropper";
 
 export default {
@@ -453,12 +68,21 @@ export default {
     Tabinfor,
     Bottominfor,
     MyVueCropper,
+    SourcePanel,
+    ParamsPanel,
+    RunPanel,
+    ResultsPanel,
   },
   beforeRouteEnter(to, from, next) {
     next((vm) => {
       document.querySelector(".el-main").scrollTop = 0;
     });
   },
+  provide() {
+    // 步骤子组件通过 inject seg 直接读写本实例状态与方法（拆分不改变状态归属）
+    return { seg: this };
+  },
+
   data() {
     return {
       isUpload: true,
@@ -746,7 +370,9 @@ export default {
   },
 };
 </script>
-<style lang="less" scoped>
+<style lang="less">
+.segmentation-workflow {
+
 .analysis-workflow {
   width: min(100%, 1480px);
   margin: 0 auto;
@@ -1030,4 +656,6 @@ export default {
   }
 }
 
+
+}
 </style>
