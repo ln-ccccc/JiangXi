@@ -83,23 +83,10 @@ const submitLogin = () => {
 .login-backdrop {
   position: absolute;
   inset: 0;
-  background-image:
-    url('/tiles/8/209/106.png'), url('/tiles/8/210/106.png'), url('/tiles/8/209/107.png'),
-    url('/tiles/8/210/107.png');
-  background-size:
-    50% 50%,
-    50% 50%,
-    50% 50%,
-    50% 50%;
-  background-position:
-    0 0,
-    100% 0,
-    0 100%,
-    100% 100%;
-  background-repeat: no-repeat;
+  background-image: url('/login-backdrop.jpg');
   background-size: cover;
-  filter: saturate(0.82) brightness(0.9);
-  transform: scale(1.04);
+  background-position: center 32%;
+  filter: saturate(0.88) brightness(0.94);
 }
 
 .login-veil {

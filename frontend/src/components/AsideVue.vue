@@ -60,6 +60,28 @@
       </template>
     </el-menu-item>
 
+    <div class="sidebar-divider" aria-hidden="true" />
+
+    <el-menu-item index="/miner-map" title="返回矿山地图" @click="goMinerMap">
+      <svg
+        viewBox="0 0 24 24"
+        width="16"
+        height="16"
+        stroke="currentColor"
+        stroke-width="2"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path d="M19 12H5M12 19l-7-7 7-7" />
+      </svg>
+      <template #title>
+        <div class="tool-copy">
+          <strong>矿山地图</strong>
+          <span>返回江西图斑监测</span>
+        </div>
+      </template>
+    </el-menu-item>
+
     <section v-show="!isCollapse" class="sidebar-guidance" aria-labelledby="atlas-guidance-title">
       <div class="specimen-scale" aria-hidden="true" />
       <p id="atlas-guidance-title" class="guidance-title data-label">操作提示</p>
@@ -77,6 +99,7 @@ import {
   goSegmentation,
   goSpectralIndices,
 } from "@/utils/gosomewhere.js";
+import { buildMinerMapUrl } from "@/utils/platformNavigation";
 
 export default {
   name: "JiangxiAtlasAside",
@@ -101,11 +124,25 @@ export default {
     goShow() {
       this.$message.success("江西生态图册已就绪，请选择地物分类或光谱指数");
     },
+    goMinerMap() {
+      const url = buildMinerMapUrl(window.location, process.env.VUE_APP_MINER_URL);
+      if (url) {
+        window.location.href = url;
+      } else {
+        this.$message.warning("矿山地图地址未配置（VUE_APP_MINER_URL）");
+      }
+    },
   },
 };
 </script>
 
 <style scoped>
+.sidebar-divider {
+  height: 1px;
+  margin: 10px 14px;
+  background: var(--jx-border);
+}
+
 .geoview-sidebar {
   position: relative;
   display: flex;
@@ -343,7 +380,13 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .geoview-sidebar {
+  .sidebar-divider {
+  height: 1px;
+  margin: 10px 14px;
+  background: var(--jx-border);
+}
+
+.geoview-sidebar {
     width: 280px;
     height: 100dvh;
   }
