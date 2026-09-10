@@ -104,13 +104,13 @@ entrypoint 自动重启监督见 §7；测试方法手册见 docs/testing_playbo
 推理 0.79s；浏览器视觉验收（边界内影像、边界外遮罩）通过。
 回退副本：旧容器 `geoview-jiangxi-gpu-20260908`（已停止）与旧镜像
 `jiangxi-gpu-20260908-batching` 保留，经用户确认后方可删除。
-2026-09-10 增量：工作台分页（main 43f34cb）、瓦片裁剪 tile bleeding 根治
-（main 2d18c70，省界 clipPath 改挂 tile level 容器，与瓦片 transform 构造级同步）
-均已热部署进运行容器，**并已重建进新镜像** `jiangxi-gpu-20260910-fixes`
-（stable `jiangxi-gpu` 已指向；一次性容器验证：healthy、瓦片 32,214 烘焙、
-分页与裁剪生效）。**当前运行容器仍是旧镜像 `jiangxi-gpu-20260909-offline`
-+ 热部署**，功能等价；切换到新镜像需停旧容器、按 §4 重建容器并重放 189 影像，
-宜安排在人工测试间隙执行。ghcr 推送标签：`20260910-fixes`（本地已备）。
+2026-09-10 收编重建：`jiangxi-gpu-20260910-ui`（stable `jiangxi-gpu` 已指向，
+ghcr 标签 `20260910-ui` 已备）包含全部 main 修复与新 UI（分页、tile bleeding
+根治、山地制图台重设计、解译平台统一、Segmentation 拆分）。运行容器
+`geoview-jiangxi-gpu-20260910` 已验收：116 单测 OK、资产 PASS、推理双跑+
+混合格式 completed（cuda:0）、冒烟 PASS。env 文件同前。旧实例
+`geoview-jiangxi-gpu-20260909`（已停止）与镜像 `jiangxi-gpu-20260909-offline`
+、`jiangxi-gpu-20260908-batching` 保留待用户确认清理。
 不替换江西模型权重。CPU 版镜像 `geoview-jiangxi:cpu-20260908`（协作者 Mac 用，
 不含 2026-09-09 之后的修复）保留，需时再重建。除非用户明确确认，不删除 CPU
 镜像或运行数据卷。
