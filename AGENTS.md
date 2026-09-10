@@ -108,9 +108,10 @@ entrypoint 自动重启监督见 §7；测试方法手册见 docs/testing_playbo
 ghcr 标签 `20260910-ui` 已备）包含全部 main 修复与新 UI（分页、tile bleeding
 根治、山地制图台重设计、解译平台统一、Segmentation 拆分）。运行容器
 `geoview-jiangxi-gpu-20260910` 已验收：116 单测 OK、资产 PASS、推理双跑+
-混合格式 completed（cuda:0）、冒烟 PASS。env 文件同前。旧实例
-`geoview-jiangxi-gpu-20260909`（已停止）与镜像 `jiangxi-gpu-20260909-offline`
-、`jiangxi-gpu-20260908-batching` 保留待用户确认清理。
+混合格式 completed（cuda:0）、冒烟 PASS。env 文件同前。2026-09-10 用户确认后已清理：旧容器
+`geoview-jiangxi-gpu-20260909/20260908` 与镜像 `jiangxi-gpu-20260909-offline`
+、`jiangxi-gpu-20260908-batching`、`jiangxi-gpu-20260910-fixes`（含 ghcr 标签）。
+代码级回退仍可用 git tag `ui-legacy-20260910`（重建镜像即可恢复旧 UI）。
 不替换江西模型权重。CPU 版镜像 `geoview-jiangxi:cpu-20260908`（协作者 Mac 用，
 不含 2026-09-09 之后的修复）保留，需时再重建。除非用户明确确认，不删除 CPU
 镜像或运行数据卷。
