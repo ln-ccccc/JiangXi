@@ -170,13 +170,13 @@ label span {
 
 .login-card h2 {
   margin: 10px 0 8px;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 600;
 }
 
 .login-subtitle {
   color: var(--jx-text-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -192,7 +192,7 @@ label span {
 }
 
 .login-form label span {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--jx-text-muted);
 }
 
@@ -201,10 +201,11 @@ label span {
   box-sizing: border-box;
   border: 1px solid var(--jx-border);
   border-radius: var(--jx-radius);
-  padding: 12px 14px;
+  padding: 14px 16px;
   background: rgba(4, 15, 21, 0.66);
   color: var(--jx-text);
-  font: inherit;
+  font-size: 16px;
+  font-family: inherit;
   transition: border-color 0.2s ease;
 }
 
@@ -221,10 +222,11 @@ label span {
 .login-btn {
   border: none;
   border-radius: var(--jx-radius);
-  padding: 13px 16px;
+  padding: 15px 16px;
   background: var(--jx-primary);
   color: var(--jx-primary-ink);
-  font: inherit;
+  font-size: 16px;
+  font-family: inherit;
   font-weight: 600;
   letter-spacing: 0.02em;
   cursor: pointer;

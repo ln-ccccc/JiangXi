@@ -143,20 +143,40 @@ export default {
 .login-title {
   margin: 0;
   color: var(--jx-text);
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 600;
 }
 
 .login-subtitle {
-  margin: 9px 0 26px;
+  margin: 10px 0 28px;
   color: var(--jx-text-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
+}
+
+/* 表单整体放大：输入框 46px 高、正文 16px，与卡片玻璃比例协调 */
+.login-card :deep(.el-form-item__label) {
+  font-size: 14px;
+  color: var(--jx-text-muted);
+  line-height: 1.6;
+}
+
+.login-card :deep(.el-input__inner) {
+  height: 46px;
+  font-size: 16px;
+  color: var(--jx-text);
+}
+
+.login-card :deep(.el-input__suffix) {
+  font-size: 17px;
 }
 
 .submit-btn {
   width: 100%;
-  margin-top: 8px;
+  height: 46px;
+  margin-top: 10px;
+  font-size: 16px;
+  letter-spacing: 0.02em;
 }
 
 .error-text {
