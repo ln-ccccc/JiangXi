@@ -51,7 +51,7 @@
     </el-dialog>
     <ImgShow
       :img-arr="seg.imgArr"
-      @delete-item="deleteHistoryItem"
+      @delete-item="seg.deleteHistoryItem"
     />
     </section>
   </template>

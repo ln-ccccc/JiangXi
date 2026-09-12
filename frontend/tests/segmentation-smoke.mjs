@@ -105,8 +105,26 @@ async function main() {
     '空年份应提示填写年份'
   );
 
+  // —— T4 结果删除接线：点「删除该组」应弹出确认框（取消，不破坏真实数据）——
+  const deleteButtons = page.locator('.result-delete');
+  const deleteCount = await deleteButtons.count();
+  if (deleteCount > 0) {
+    await deleteButtons.first().click();
+    const confirmBox = page.locator('.el-message-box');
+    await confirmBox.waitFor({ state: 'visible', timeout: 5000 });
+    assert.match(
+      await confirmBox.innerText(),
+      /删除/,
+      '点击删除该组应弹出确认框'
+    );
+    await page.locator('.el-message-box__btns button').first().click(); // 取消
+    await confirmBox.waitFor({ state: 'hidden', timeout: 5000 });
+  }
+
   await browser.close();
-  console.log('SMOKE PASS: 渲染/文件选择/年份校验/导航 全部通过');
+  console.log(
+    `SMOKE PASS: 渲染/文件选择(真实路径)/年份校验/导航/删除接线${deleteCount ? '' : '(历史为空,跳过)'} 全部通过`
+  );
 }
 
 main().catch((err) => {
