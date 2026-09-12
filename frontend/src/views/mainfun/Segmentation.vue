@@ -29,8 +29,8 @@
     >
       <el-col :span="24">
         <el-card class="workflow-sheet">
-    <SourcePanel />
-    <ParamsPanel />
+    <SourcePanel ref="sourcePanel" />
+    <ParamsPanel ref="paramsPanel" />
     <RunPanel />
       </el-card>
       </el-col>
@@ -162,8 +162,10 @@ export default {
       this.fileList = [];
       this.analysisRunState = "idle";
       this.analysisRunMessage = "请先选择 tif / tiff 影像。";
-      if (this.$refs.folderInput) this.$refs.folderInput.value = "";
-      if (this.$refs.fileInput) this.$refs.fileInput.value = "";
+      const folderInput = this.getSourceInput("folderInput");
+      const fileInput = this.getSourceInput("fileInput");
+      if (folderInput) folderInput.value = "";
+      if (fileInput) fileInput.value = "";
       this.$message.success("清除成功");
     },
     notvisible() {
@@ -171,11 +173,22 @@ export default {
       this.fileList = [];
       this.analysisRunState = "idle";
       this.analysisRunMessage = "请先选择 tif / tiff 影像。";
-      if (this.$refs.folderInput) this.$refs.folderInput.value = "";
-      if (this.$refs.fileInput) this.$refs.fileInput.value = "";
+      const folderInput = this.getSourceInput("folderInput");
+      const fileInput = this.getSourceInput("fileInput");
+      if (folderInput) folderInput.value = "";
+      if (fileInput) fileInput.value = "";
     },
     getMore() {
       return this.getUploadImg("地物分类");
+    },
+    // 拆分后文件 input 在 SourcePanel、编辑复选框在 ParamsPanel，父组件经子组件取 ref
+    getSourceInput(kind) {
+      const panel = this.$refs.sourcePanel;
+      return panel && panel.$refs ? panel.$refs[kind] : null;
+    },
+    getCutCheckbox() {
+      const panel = this.$refs.paramsPanel;
+      return panel && panel.$refs ? panel.$refs.cut : null;
     },
     deleteHistoryItem(item) {
       this.$confirm("删除该条历史？", "提示", {
@@ -202,15 +215,17 @@ export default {
       }).catch(() => {});
     },
     fileClick() {
-      if (this.$refs.folderInput) {
-        this.$refs.folderInput.value = "";
-        this.$refs.folderInput.click();
+      const folderInput = this.getSourceInput("folderInput");
+      if (folderInput) {
+        folderInput.value = "";
+        folderInput.click();
       }
     },
     openFilePicker() {
-      if (this.$refs.fileInput) {
-        this.$refs.fileInput.value = "";
-        this.$refs.fileInput.click();
+      const fileInput = this.getSourceInput("fileInput");
+      if (fileInput) {
+        fileInput.value = "";
+        fileInput.click();
       }
     },
     isValidTiff(fileLike) {
@@ -247,13 +262,14 @@ export default {
     },
     setPreviewFile(fileLike) {
       const file = fileLike?.raw || fileLike?.file || fileLike;
-      this.cutVisible = !!this.$refs.cut?.checked;
+      this.cutVisible = !!this.getCutCheckbox()?.checked;
       this.canUpload = true;
       this.fileimg = window.URL.createObjectURL(file);
     },
     disableCutForBatchUpload() {
-      if (this.$refs.cut?.checked) {
-        this.$refs.cut.checked = false;
+      const cutCheckbox = this.getCutCheckbox();
+      if (cutCheckbox?.checked) {
+        cutCheckbox.checked = false;
         this.cutVisible = false;
         this.isNotCut = true;
         this.$message.warning("整文件夹/批量上传不支持上传时编辑，已自动关闭编辑模式");
@@ -365,7 +381,7 @@ export default {
       });
     },
     select() {
-      this.isNotCut = this.$refs.cut.checked;
+      this.isNotCut = !!this.getCutCheckbox()?.checked;
     },
   },
 };

@@ -80,10 +80,14 @@ async function main() {
   const runButton = page.getByRole('button', { name: '开始地物分类' });
   assert.ok(await runButton.isDisabled(), '未选影像时执行按钮应禁用');
 
-  // —— T2 选择文件：注入 2 个 tif ——
-  await page
-    .locator('input[type="file"]:not([webkitdirectory])')
-    .setInputFiles([dummyTif('smoke-a.tif'), dummyTif('smoke-b.tif')]);
+  // —— T2 选择文件：走真实用户路径（点按钮 → filechooser 事件）——
+  // 教训 2026-09-12：setInputFiles 直连 input 会绕过按钮点击路径，
+  // 曾放过「按钮点击无效」的回归（refs 在组件拆分后失联）
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByRole('button', { name: '选择文件' }).click(),
+  ]);
+  await chooser.setFiles([dummyTif('smoke-a.tif'), dummyTif('smoke-b.tif')]);
   await page.waitForSelector('.selected-files__title');
   assert.match(
     await page.locator('.selected-files__title').innerText(),
