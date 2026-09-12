@@ -69,6 +69,9 @@ const makeBarOption = (panel) => ({
   backgroundColor: 'transparent',
   tooltip: {
     trigger: 'axis',
+    // confine: 侧栏图表宽度有限，tooltip 必须限制在图表容器内，
+    // 否则跟随鼠标溢出到面板外/压住相邻条目标签（悬浮框遮挡缺陷）
+    confine: true,
     backgroundColor: 'rgba(9, 23, 34, 0.96)',
     borderColor: 'rgba(112, 160, 151, 0.3)',
     borderWidth: 1,
@@ -105,7 +108,16 @@ const makeBarOption = (panel) => ({
     data: panel.data.map((item) => item.name),
     axisLine: { show: false },
     axisTick: { show: false },
-    axisLabel: { color: '#a2b8b3', fontSize: 11, margin: 10, width: 96, overflow: 'truncate' },
+    // 长类目名换行展示（break）而非截断：截断会迫使读者悬停读 tooltip，
+    // 而 tooltip 又容易遮挡相邻内容；直接可读是更好的信息设计
+    axisLabel: {
+      color: '#a2b8b3',
+      fontSize: 11,
+      margin: 10,
+      width: 96,
+      overflow: 'break',
+      lineHeight: 14,
+    },
   },
   series: [
     {
