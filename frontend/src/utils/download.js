@@ -28,6 +28,8 @@ function downloadimgWithWords(index, src, funtype) {
       ele.click();
       // 移除a标签
       ele.remove();
+      // 下载已触发，释放 object URL
+      window.URL.revokeObjectURL(url);
     });
 }
 function getImgArrayBuffer(url) {
@@ -43,6 +45,10 @@ function getImgArrayBuffer(url) {
       } else {
         reject(this.status);
       }
+    };
+    // 网络层失败（断网/CORS/无法连接）时必须 reject，否则 Promise 永挂、loading 永不关闭
+    xmlhttp.onerror = function () {
+      reject(new Error("网络错误"));
     };
     xmlhttp.send();
   });
