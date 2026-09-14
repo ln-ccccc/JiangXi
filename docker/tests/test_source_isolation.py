@@ -168,3 +168,15 @@ class JiangxiSourceIsolationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShellScriptLineEndingTests(unittest.TestCase):
+    """容器内 shell 脚本必须 LF：CRLF 使 shebang 变 'bash\r' 直接 127（2026-09-14 实证）。"""
+
+    def test_shell_scripts_have_no_crlf(self):
+        root = Path(__file__).resolve().parents[2]
+        for name in ["docker/standalone/healthcheck.sh", "docker/entrypoint.sh",
+                     "docker/start-backend.sh", "docker/start-frontend.sh",
+                     "docker/start-miner-api.sh", "docker/start-miner-web.sh"]:
+            raw = (root / name).read_bytes()
+            self.assertNotIn(b"\r\n", raw, f"{name} 含 CRLF 行尾，容器内将无法执行")
