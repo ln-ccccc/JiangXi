@@ -282,6 +282,26 @@
   语义化端点；修复状态码/错误语义类 bug 后全量 grep 消费方。
 - **何时可省**：与响应语义、脚本执行无关的纯库函数改动。
 
+### T25. Windows junction 与递归删除穿透（行业检索词：reparse point traversal；symlink-aware cleanup）
+- **针对的失效**：给临时 git worktree 用 NTFS junction（`New-Item -ItemType Junction`）
+  共享主工作树 `node_modules` 后，任何**穿透型递归删除**（`git worktree remove`、
+  `Remove-Item -Recurse`）都会沿 junction 把**目标目录内容整体删掉**——链接不是
+  挡板而是通道。2026-09-15 复审修复夜两次发生：`git worktree remove` 清理
+  `.worktrees/recheck-*` 时把主树 miner/frontend 的 node_modules 全部删空。
+- **为什么有效**：失效发生在"工作区管理"而非任何被测代码里，单测/构建门全绿也
+  拦不住；且第一次删除后 junction 指向空目录，后续构建失败表象（模块缺失）与
+  根因（链接穿透）相距很远。防线：清理 worktree 前**先枚举 reparse point 并只删
+  链接本身**（`cmd /c rmdir <link>` 只摘链接不碰目标），再执行 worktree remove；
+  给子代理的任务书里明确禁止其自行 remove worktree。
+- **本项目实证**（2026-09-15）：两次删空、两次 `npm ci` 恢复；第二次的诱因是
+  bash 双引号吞掉 PowerShell 的 `$_` 变量导致 junction 摘除命令静默变成语法错误、
+  `git worktree remove` 照常执行——**跨 shell 拼接命令时先跑只读枚举确认输出**，
+  不能假设中间步骤成功。
+- **执行要点**：摘链接用 `cmd /c rmdir`（勿用 Remove-Item -Recurse）；枚举用
+  `Get-ChildItem -Recurse -Attributes ReparsePoint`；PowerShell 命令经 bash 传递时
+  `$_` 必须转义或改用逐条显式路径；并发 `npm ci` 重建期间不要经 junction 跑构建。
+- **何时可省**：不使用 junction/符号链接共享依赖目录的仓库。
+
 ---
 
 ## 五、失效案例速查表
@@ -301,6 +321,7 @@
 | 容器首启 SyntaxError / 契约测试镜像内才红（2026-09-14） | 宿主验证全绿、镜像跑挂 | 宿主/镜像解释器与文件双漂移 | T22、T19 |
 | prehandle=2 真实推理"文件不存在"（2026-09-14） | 切瓦片打不开预处理产物 | 跨进程共享 work_dir，子进程启动 rmtree 吞掉写入方文件 | T23、T2 |
 | 404 修复后 healthcheck unhealthy ×2（2026-09-14） | 容器判死/127 退出码 | 探测点依赖「404 吞成 200」旧 bug + CRLF 杀 shebang | T24、T22 |
+| 主树 node_modules 两度被删空（2026-09-15） | worktree 清理后构建模块全缺 | junction 被递归删除穿透（含跨 shell 变量转义失效变体） | T25 |
 
 ---
 
