@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -87,58 +88,99 @@ def run_kml_roi_inference(
     runtime = resolve_inference_device(device)
 
     with tempfile.TemporaryDirectory(prefix="kml-roi-infer-") as work_dir:
-        # prehandle/denoise 只影响推理输入：在本次推理的独立临时目录里产出预处理
-        # 后的两期 tif，作为切瓦片输入；原文件与输出目录结构均不受影响
-        old_tif_path, new_tif_path = preprocess_inference_inputs(
-            old_tif_path=old_tif_path,
-            new_tif_path=new_tif_path,
-            base_dir=Path(work_dir) / "preprocess",
-            prehandle=prehandle,
-            denoise=denoise,
-        )
-        cmd = [
-            os.getenv("PYTHON_EXE") or sys.executable,
-            str(script_path),
-            "--old_tif",
-            str(old_tif_path),
-            "--new_tif",
-            str(new_tif_path),
-            "--kml",
-            str(kml_path),
-            "--output_root",
-            str(output_root),
-            "--device",
-            runtime["effective_device"],
-            "--manifest",
-            str(manifest_path),
-        ]
-
-        if year:
-            cmd.extend(["--year", str(year)])
-        else:
-            if old_year:
-                cmd.extend(["--old_year", str(old_year)])
-            if new_year:
-                cmd.extend(["--new_year", str(new_year)])
-        if int(limit or 0) > 0:
-            cmd.extend(["--limit", str(int(limit))])
-
-        cmd.extend(["--work_dir", work_dir])
-        try:
-            run_res = subprocess.run(
-                cmd,
-                cwd=str(backend_root),
-                capture_output=True,
-                text=True,
-                timeout=3600,
+        # prehandle/denoise 只影响推理输入，产物必须放在 work_dir 之外的独立临时目录：
+        # 子进程 pipeline.py 启动时会 rmtree(work_dir) 清空工作目录（防上一轮残留），
+        # 写在 work_dir 内的预处理产物会被删掉，导致切瓦片时 "No such file or directory"
+        preprocess_dir = None
+        if int(prehandle or 0) or int(denoise or 0):
+            preprocess_dir = tempfile.mkdtemp(prefix="kml-roi-preprocess-")
+            old_tif_path, new_tif_path = preprocess_inference_inputs(
+                old_tif_path=old_tif_path,
+                new_tif_path=new_tif_path,
+                base_dir=Path(preprocess_dir),
+                prehandle=prehandle,
+                denoise=denoise,
             )
-        except Exception as e:
-            raise RuntimeError(f"执行失败: {str(e)}") from e
+        try:
+            result = _run_inference_subprocess(
+                old_tif_path=old_tif_path,
+                new_tif_path=new_tif_path,
+                kml_path=kml_path,
+                output_root=output_root,
+                manifest_path=manifest_path,
+                runtime=runtime,
+                year=year,
+                old_year=old_year,
+                new_year=new_year,
+                limit=limit,
+                work_dir=work_dir,
+                script_path=script_path,
+                backend_root=backend_root,
+            )
+        finally:
+            if preprocess_dir:
+                shutil.rmtree(preprocess_dir, ignore_errors=True)
+        result["kml_update"] = kml_update
+        return result
 
-        if run_res.returncode != 0:
-            err = (run_res.stderr or run_res.stdout or "").strip()
-            raise RuntimeError(f"执行失败: {err[:500]}")
 
-        result = _parse_last_json(run_res.stdout or "")
-    result["kml_update"] = kml_update
-    return result
+def _run_inference_subprocess(
+    *,
+    old_tif_path,
+    new_tif_path,
+    kml_path,
+    output_root,
+    manifest_path,
+    runtime,
+    year,
+    old_year,
+    new_year,
+    limit,
+    work_dir,
+    script_path,
+    backend_root,
+):
+    cmd = [
+        os.getenv("PYTHON_EXE") or sys.executable,
+        str(script_path),
+        "--old_tif",
+        str(old_tif_path),
+        "--new_tif",
+        str(new_tif_path),
+        "--kml",
+        str(kml_path),
+        "--output_root",
+        str(output_root),
+        "--device",
+        runtime["effective_device"],
+        "--manifest",
+        str(manifest_path),
+    ]
+
+    if year:
+        cmd.extend(["--year", str(year)])
+    else:
+        if old_year:
+            cmd.extend(["--old_year", str(old_year)])
+        if new_year:
+            cmd.extend(["--new_year", str(new_year)])
+    if int(limit or 0) > 0:
+        cmd.extend(["--limit", str(int(limit))])
+
+    cmd.extend(["--work_dir", work_dir])
+    try:
+        run_res = subprocess.run(
+            cmd,
+            cwd=str(backend_root),
+            capture_output=True,
+            text=True,
+            timeout=3600,
+        )
+    except Exception as e:
+        raise RuntimeError(f"执行失败: {str(e)}") from e
+
+    if run_res.returncode != 0:
+        err = (run_res.stderr or run_res.stdout or "").strip()
+        raise RuntimeError(f"执行失败: {err[:500]}")
+
+    return _parse_last_json(run_res.stdout or "")

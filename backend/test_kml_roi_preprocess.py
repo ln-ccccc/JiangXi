@@ -192,11 +192,14 @@ class ServicePreprocessWiringTests(unittest.TestCase):
         new_input = self._cmd_value(command, "--new_tif")
         self.assertNotEqual(old_input, self.old_tif)
         self.assertNotEqual(new_input, self.new_tif)
-        # 产物位于本次推理的独立临时目录的 preprocess 子目录下（已被临时目录清理）
-        self.assertIn("preprocess", old_input.parts)
-        self.assertIn("preprocess", new_input.parts)
-        self.assertTrue(old_input.parents[2].name.startswith("kml-roi-infer-"))
-        self.assertTrue(new_input.parents[2].name.startswith("kml-roi-infer-"))
+        # 产物位于独立于 work_dir 的预处理临时目录（kml-roi-preprocess-*）。
+        # 子进程 pipeline.py 启动时会 rmtree(work_dir) 清空工作目录防残留，
+        # 预处理产物若写在 work_dir 内会被吞掉（2026-09-14 真实推理暴露）。
+        work_dir = self._cmd_value(command, "--work_dir")
+        self.assertTrue(old_input.parents[1].name.startswith("kml-roi-preprocess-"))
+        self.assertTrue(new_input.parents[1].name.startswith("kml-roi-preprocess-"))
+        self.assertFalse(old_input.is_relative_to(work_dir))
+        self.assertFalse(new_input.is_relative_to(work_dir))
         # 原文件绝对不动
         self.assertEqual(_file_sha256(self.old_tif), old_digest)
         self.assertEqual(_file_sha256(self.new_tif), new_digest)
