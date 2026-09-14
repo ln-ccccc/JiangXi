@@ -25,10 +25,11 @@ migrate = Migrate(app, db)
 
 if __name__ == '__main__':
     config = load_runtime_config()
+    debug_mode = bool(config.get("debug", False))
     write_legacy_frontend_env(config)
     app.run(
         host=config["host"]["backend"],
         port=config["port"]["backend"],
-        debug=bool(config.get("debug", False)),
-        use_reloader=bool(config.get("debug", False)),
+        debug=debug_mode,
+        use_reloader=debug_mode,
     )
