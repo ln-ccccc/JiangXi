@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { readFile, readdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
 import { parseEcologyWorkbookRows } from '../services/ecologySeries.js';
 
@@ -59,4 +61,36 @@ test('推理并发防护：后端 busy 退出码以 409 透出，生态面板迟
   // 生态面板请求序号守卫：快速连点图斑时旧响应不得覆盖新图斑数据
   assert.match(useMineData, /ecologyProfileRequestId/u);
   assert.match(useMineData, /requestId !== ecologyProfileRequestId/u);
+});
+
+test('spectral_live 死链不回潮且 xlsx 基线链路保留（复审批次 D2）', async () => {
+  // /api/analysis/spectral_live 后端从未实现，live overlay 每次请求必然 404 且被静默吞掉；
+  // 链路已删除，miner 源码（不含测试目录自身）不得再引用，防止死链回潮。
+  const minerRoot = fileURLToPath(new URL('..', import.meta.url));
+  const skipDirs = new Set(['node_modules', 'test', 'dist', 'public', 'data', 'uploads']);
+  const collectSourceFiles = async (dir) => {
+    const files = [];
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!skipDirs.has(entry.name)) files.push(...(await collectSourceFiles(fullPath)));
+      } else if (/\.(js|mjs|vue)$/.test(entry.name)) {
+        files.push(fullPath);
+      }
+    }
+    return files;
+  };
+
+  for (const file of await collectSourceFiles(minerRoot)) {
+    const text = await readFile(file, 'utf8');
+    assert.ok(
+      !/spectral_live|fetchSpectralLive/.test(text),
+      `${path.relative(minerRoot, file)} 不应引用已删除的 spectral_live 死端点`
+    );
+  }
+
+  // xlsx 基线链路不得被误删：仍请求 /api/mines/indices 并写入 mineIndices。
+  const useMineData = await read('../src/composables/useMineData.js');
+  assert.match(useMineData, /api\/mines\/indices\?tbbh=/u);
+  assert.match(useMineData, /mineIndices\.value\s*=\s*res\.data/u);
 });

@@ -181,62 +181,7 @@ export function useMineData() {
       const res = await axios.get(
         apiUrl(`/api/mines/indices?tbbh=${encodeURIComponent(normalizedTbbh)}`)
       );
-      const merged = res.data || {};
-
-      try {
-        const liveRes = await axios.get(
-          apiUrl(`/api/geoview/spectral_live/${encodeURIComponent(normalizedTbbh)}`)
-        );
-        const live = (liveRes.data && liveRes.data.data && liveRes.data.data.indices) || {};
-        ['ndvi', 'ndbi', 'ndwi', 'ndsi'].forEach((key) => {
-          if (!Array.isArray(live[key]) || live[key].length === 0) return;
-          const base = merged[key] && Array.isArray(merged[key].data) ? [...merged[key].data] : [];
-          const yearToItem = new Map(
-            base.map((item) => [Number(item.year), { ...item, source: item.source || 'xlsx' }])
-          );
-          live[key].forEach((item) => {
-            const y = Number(item.year);
-            const v = Number(item.value);
-            if (Number.isFinite(y) && Number.isFinite(v)) {
-              yearToItem.set(y, {
-                year: y,
-                value: v,
-                source: 'live',
-                computed_at: item.computed_at || null,
-              });
-            }
-          });
-          const data = Array.from(yearToItem.values()).sort((a, b) => a.year - b.year);
-          const values = data.map((d) => Number(d.value)).filter((v) => Number.isFinite(v));
-          const mean = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-          let trend = 0;
-          if (data.length >= 2) {
-            const n = data.length;
-            const years = data.map((d) => Number(d.year));
-            const vals = data.map((d) => Number(d.value));
-            const sumX = years.reduce((a, b) => a + b, 0);
-            const sumY = vals.reduce((a, b) => a + b, 0);
-            const sumXY = years.reduce((acc, x, i) => acc + x * vals[i], 0);
-            const sumXX = years.reduce((acc, x) => acc + x * x, 0);
-            const denom = n * sumXX - sumX * sumX;
-            trend = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
-          }
-          merged[key] = {
-            ...(merged[key] || {}),
-            data,
-            mean: Number(mean.toFixed(3)),
-            trend: Number(trend.toFixed(5)),
-            mk_trend: trend > 0.0005 ? 'upward' : trend < -0.0005 ? 'downward' : 'stable',
-            available: true,
-            reason: null,
-            message: '',
-          };
-        });
-      } catch (_) {
-        // live overlay 不可用时保留 miner 基线数据。
-      }
-
-      mineIndices.value = merged;
+      mineIndices.value = res.data || {};
     } catch (e) {
       console.warn('No indices data for TBBH:', normalizedTbbh);
       mineIndices.value = {
