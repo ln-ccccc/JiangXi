@@ -126,16 +126,27 @@ miner 恢复推理工作台/趋势报告入口）+ P1×9（svg 上传剔除、sp
 SECRET_KEY standalone 强制、错误键对齐、static-server 畸形 URL 400、execFile
 90min 超时、preHandle FormData、undefined.png、recovery_tendency_level）+ 稳定性
 P2（entrypoint wait 兜底、HEALTHCHECK start-period=300s/timeout=30s、env URL
-校验、GPU 构建期 mmcv nms 验证、批量推理 chunk 流式加载、fetch 超时、Leaflet/
-监听器清理、光谱页会话心跳）+ 新功能：kml_roi 推理管线接入 prehandle/denoise
-预处理（默认 0 行为零变化）。验收记录：容器内 140 单测 OK、资产 348/348 PASS、
-推理 001 双跑 + 002 混合形态 completed（cuda:0 暖跑 0.5-0.6s）、prehandle=2/
-组合/非法值全场景通过、冒烟 T1-T5（含 CLAHE 受控勾选）PASS、NODE_ENV 三进程
-正确（Express production、两个 dev server 钉 development）。运行参数与 §4 命令
-一致，env 文件仍用 `D:\项目\JiangXi\jx_env_gpu_20260909.env`（该文件含
-ADMIN_PASSWORD/SECRET_KEY，满足新的启动强制校验）。回退副本：旧容器
-`geoview-jiangxi-gpu-20260910` 已停止保留；代码级回退用 `ui-legacy-20260910` 或
-切回 main。协作者 CPU 镜像 `cpu-20260914-fixes` 同步重建中/待打包。
+校验、GPU 构建期 mmcv nms 验证、批量推理 chunk 流式加载（驻留 2GB→chunk 级）、
+fetch 超时、Leaflet/监听器清理、光谱页会话心跳）+ 新功能：kml_roi 推理管线接入
+prehandle/denoise 预处理（默认 0 行为零变化）。
+**同夜独立复审追加修复**（见 docs/code-review-20260914-independent-recheck.md）：
+上传路径三态归一（相对前缀/服务 URL/受控绝对路径均放行、越界 400——曾误判主链路
+断裂，实为相对路径形态一直可用，归一化为鲁棒性增强）、/static 上传目录鉴权（免登录
+旁路实测坐实已封）、全局错误处理器（HTTPException 直通恢复 404 语义、不再回显
+异常原文）、miner KML 上传返回裸文件名（上传→提交链路接通）、BFF 透传
+kml_update/inference_runtime。healthcheck 探测改 /api/auth/session（原根路径
+探测依赖 404 吞 200 旧 bug，见 T24）。
+验收记录：容器内 145 单测 OK、资产 348/348 PASS、推理 001 双跑 + 002 混合形态
+completed（cuda:0 暖跑 0.5-0.6s）、prehandle=2/组合/非法值全场景通过、/static
+免登录 401、未知路由 404、KML 上传链路（裸名回填→受控根解析→fid 校验）、冒烟
+T1-T5（含 CLAHE 受控勾选）PASS、NODE_ENV 三进程正确（Express production、两个
+dev server 钉 development）。运行参数与 §4 命令一致，env 文件仍用
+`D:\项目\JiangXi\jx_env_gpu_20260909.env`（该文件含 ADMIN_PASSWORD/SECRET_KEY，
+满足新的启动强制校验）。回退副本：旧容器 `geoview-jiangxi-gpu-20260910` 已停止
+保留；代码级回退用 `ui-legacy-20260910` 或切回 main。协作者 CPU 镜像
+`cpu-20260914-fixes` 已同步重建。遗留（复审 P2/P3 未修项见复审报告第六节排期建议）：
+GPU worker 读超时、长推理 unhealthy 标记、推理并发锁、同 fid 多 Placemark、
+spectral_live 死端点、platform-repair 分支决断。
 
 注意：两期对比影像（`/app/backend/bianhua_2years/`，甲方 189 个 tif）位于
 容器可写层，**重建容器即丢失**；需从宿主机 `D:\项目\jiangxi_data\影像文件\`
