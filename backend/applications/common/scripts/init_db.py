@@ -66,15 +66,24 @@ def execute_fromfile(filename):
 
     sqlcommamds = sqlfile.split(';')
 
+    failures = []
     for command in sqlcommamds:
+        if not command.strip():
+            continue
         try:
             cursor.execute(command)
             db.commit()
 
         except Exception as msg:
-
             db.rollback()
+            failures.append((command.strip()[:80], str(msg)))
     db.close()
+    if failures:
+        # 静默吞掉建表错误会让初始化"看起来成功"实际缺表，排障无从下手；
+        # 逐条打印后在汇总处抛错，阻断带病启动。
+        for snippet, err in failures:
+            print('建表语句执行失败: %s -> %s' % (snippet, err))
+        raise RuntimeError('init_db.sql 有 %d 条语句执行失败，初始化中止' % len(failures))
 
 
 def init_db():

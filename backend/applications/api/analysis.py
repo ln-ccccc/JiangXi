@@ -29,6 +29,14 @@ upload_path_prefix = "static/upload/"
 upload_url_prefix = "/_uploads/photos/"
 
 
+def _safe_int(value, default):
+    """分页等数值查询参数容错：非数字/空值回退默认值，不进全局异常处理器。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _asset_manifest_path():
     return Path(
         os.getenv("JIANGXI_ASSET_MANIFEST_PATH")
@@ -213,8 +221,8 @@ def show_result(analysis_type):
     if not hasattr(type_utils, analysis_type):
         return fail_api("当前类型暂未开放")
 
-    page = int(request.args.get('page', 1) or 1)
-    limit = int(request.args.get('limit', 10) or 10)
+    page = _safe_int(request.args.get('page'), 1)
+    limit = _safe_int(request.args.get('limit'), 10)
     query = Analysis.query.filter_by(type=getattr(type_utils, analysis_type)).order_by(desc(Analysis.create_time))
 
     pagination = query.paginate(page=page, per_page=limit, error_out=False)
@@ -252,8 +260,12 @@ def semantic_segmentation_api():
             device=resolve_inference_device()["effective_device"],
         )
         return success_api()
+    except ValueError as e:
+        # 业务校验消息保持回显
+        return fail_api(str(e))
     except Exception as e:
-        return fail_api(f"推理失败: {str(e)}")
+        current_app.logger.error("推理失败: %s", e, exc_info=True)
+        return fail_api("推理失败，请稍后重试或查看服务端日志")
 
 @analysis_api.post('/image_pre')
 def image_pre_api():
@@ -339,8 +351,12 @@ def spectral_indices_api():
         if warnings:
             return success_api(msg="计算完成，未同步部分Miner指数", data=result)
         return success_api(data=result)
+    except ValueError as e:
+        # interface 层业务校验消息（如"不支持的指数类型"）保持回显
+        return fail_api(str(e))
     except Exception as e:
-        return fail_api(f"计算失败: {str(e)}")
+        current_app.logger.error("光谱指数计算失败: %s", e, exc_info=True)
+        return fail_api("计算失败，请稍后重试或查看服务端日志")
 
 
 @analysis_api.post('/kml_roi_inference')
@@ -408,7 +424,8 @@ def kml_roi_inference_api():
     except PathValidationError as exc:
         return fail_api(str(exc)), 400
     except Exception as e:
-        return fail_api(str(e))
+        current_app.logger.error("图斑推理失败: %s", e, exc_info=True)
+        return fail_api("推理失败，请稍后重试或查看服务端日志")
 
 
 @analysis_api.get('/kml_roi_output/<tbbh>/<filename>')
@@ -431,8 +448,8 @@ def kml_roi_output_file(tbbh, filename):
 
 @analysis_api.get('/kml_roi_history')
 def kml_roi_history_list():
-    page = int(request.args.get('page', 1) or 1)
-    limit = int(request.args.get('limit', 20) or 20)
+    page = _safe_int(request.args.get('page'), 1)
+    limit = _safe_int(request.args.get('limit'), 20)
     page = max(1, page)
     limit = max(1, min(100, limit))
 
