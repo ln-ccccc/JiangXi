@@ -60,14 +60,15 @@ test("工作流保持江西同步链路并使用容器设备配置", () => {
 });
 
 test("没有 tif 或 tiff 时两个执行按钮都明确禁用", () => {
+  // [^"]* 允许运行中守卫追加在空列表判断之后（复审批次 C4）
   assert.match(
     runPanel,
-    /<el-button[^>]*:disabled="seg\.fileList\.length\s*===\s*0"[^>]*>/s,
+    /<el-button[^>]*:disabled="seg\.fileList\.length\s*===\s*0[^"]*"[^>]*>/s,
     "地物分类执行按钮在 RunPanel，拆分后仍需禁用语义",
   );
   assert.match(
     spectral,
-    /<el-button[^>]*:disabled="fileList\.length\s*===\s*0"[^>]*>/s,
+    /<el-button[^>]*:disabled="fileList\.length\s*===\s*0[^"]*"[^>]*>/s,
   );
   for (const source of workflowPages) {
     assert.match(source, /请先选择 tif \/ tiff 影像/);
