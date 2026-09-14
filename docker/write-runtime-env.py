@@ -102,7 +102,9 @@ def main():
         f'VITE_GEOVIEW_URL="{sanitize_env_value(geoview_url)}"',
         f"VITE_MINER_API_BASE_URL={sanitize_env_value(miner_api_base_url)}",
         f"VITE_MINER_MAP_PROVIDER={sanitize_env_value(os.environ.get('MINER_MAP_PROVIDER', 'gaode'))}",
-        f'VITE_TDT_KEY="{sanitize_env_value(os.environ.get('MINER_TDT_KEY', ''))}"',
+        # f-string 定界与内部字符串引号不可同为单引号：镜像内 MMSeg310 是 Python 3.10，
+        # 嵌套同类引号 SyntaxError（宿主机 3.12+ 才放行，宿主验证不可代替容器验证）
+        f'VITE_TDT_KEY="{sanitize_env_value(os.environ.get("MINER_TDT_KEY", ""))}"',
         f"VITE_MINER_LOCAL_TILE_URL={sanitize_env_value(local_tile_url)}",
         f"VITE_MINER_LOCAL_TMS={sanitize_env_value(os.environ.get('MINER_LOCAL_TMS', '0'))}",
         f"VITE_MINER_LOCAL_MAX_NATIVE_ZOOM={sanitize_env_value(local_max_native_zoom)}",
