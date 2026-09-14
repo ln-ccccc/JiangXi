@@ -17,6 +17,9 @@
 - 甲方两期影像 189 个 tif（体积与授权原因未打包；如需推理测试请向项目负责人索取，
   `docker cp <目录>/. 容器名:/app/backend/bianhua_2years/`）
 - 数据卷（首次启动自动创建，SQLite 数据落在容器卷内）
+- 注意：`/app/backend/bianhua_2years/`（两期影像）与 `/app/miner/uploads/kml/`
+  （推理工作台上传的 KML）都在容器可写层而非数据卷——**容器重建即丢失**，
+  重建后需重新 docker cp 影像；已上传 KML 丢失不影响功能（重新上传即可）。
 
 ## Mac 部署步骤
 

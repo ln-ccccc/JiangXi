@@ -8,7 +8,7 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>KML 文件路径（服务器路径）</label>
+            <label>KML 文件（受控目录内文件名）</label>
             <input
               v-model="formData.kmlPath"
               placeholder="受控目录内文件名，如 new_mine.kml（可选）"

@@ -312,6 +312,13 @@ const handleInferenceSubmit = async (formData) => {
       focusByTbbh(result.written_tbbh_list[0]);
     } else if (kmlChangedCount > 0) {
       showInferenceModal.value = false;
+    } else {
+      // 零写入不再静默：给出明确反馈并保留弹窗供修改重试（复审 B2）
+      const failedCount = Array.isArray(result?.failed_tiles) ? result.failed_tiles.length : 0;
+      inferenceError.value =
+        failedCount > 0
+          ? `推理完成但 ${failedCount} 个瓦片失败，未写入结果，请检查影像与模型日志后重试`
+          : '推理完成，但未匹配到任何图斑（KML 与影像无交集或 TBBH 不在资产清单内）';
     }
   } catch (_) {
     // 错误文案通过 useMineData 暴露给弹窗
