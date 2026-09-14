@@ -11,6 +11,8 @@ const read = (...segments) =>
 
 const segmentation = read("src", "views", "mainfun", "Segmentation.vue");
 const spectral = read("src", "views", "mainfun", "SpectralIndices.vue");
+// 组件拆分后执行按钮/运行状态标记随 RunPanel 下沉，断言需指向实际所在文件
+const runPanel = read("src", "views", "mainfun", "segmentation", "RunPanel.vue");
 const imageShow = read("src", "components", "ImgShow.vue");
 const tabInfo = read("src", "components", "Tabinfor.vue");
 const bottomInfo = read("src", "components", "Bottominfor.vue");
@@ -44,8 +46,8 @@ test("两类分析页都呈现江西同步四步工作流", () => {
 
 test("工作流保持江西同步链路并使用容器设备配置", () => {
   assert.match(
-    segmentation,
-    /upload\('地物分类','semantic_segmentation'\)/,
+    runPanel,
+    /seg\.upload\('地物分类','semantic_segmentation'\)/,
   );
   assert.match(spectral, /@click="startCompute"/);
   assert.match(spectral, /this\.createSrc\(formData\)\.then/);
@@ -56,19 +58,23 @@ test("工作流保持江西同步链路并使用容器设备配置", () => {
 });
 
 test("没有 tif 或 tiff 时两个执行按钮都明确禁用", () => {
+  assert.match(
+    runPanel,
+    /<el-button[^>]*:disabled="seg\.fileList\.length\s*===\s*0"[^>]*>/s,
+    "地物分类执行按钮在 RunPanel，拆分后仍需禁用语义",
+  );
+  assert.match(
+    spectral,
+    /<el-button[^>]*:disabled="fileList\.length\s*===\s*0"[^>]*>/s,
+  );
   for (const source of workflowPages) {
-    assert.match(
-      source,
-      /<el-button[^>]*:disabled="(?:!fileList\.length|fileList\.length\s*===\s*0)"[^>]*>/s,
-    );
     assert.match(source, /请先选择 tif \/ tiff 影像/);
   }
 });
 
 test("页面暴露等待、失败和部分成功的可感知状态", () => {
-  for (const source of workflowPages) {
-    assert.match(source, /aria-live="polite"/);
-  }
+  assert.match(runPanel, /aria-live="polite"/);
+  assert.match(spectral, /aria-live="polite"/);
   assert.match(spectral, /data-state="idle"/);
   assert.match(spectral, /data-state="error"/);
   assert.match(spectral, /data-state="partial"/);
@@ -86,7 +92,11 @@ test("页面暴露等待、失败和部分成功的可感知状态", () => {
 test("地物分类渲染真实运行状态而不是静态状态说明", () => {
   assert.match(segmentation, /analysisRunState:\s*"idle"/);
   assert.match(segmentation, /analysisRunMessage:\s*"请先选择 tif \/ tiff 影像。"/);
-  assert.match(segmentation, /<p\s+:data-state="analysisRunState">\s*\{\{ analysisRunMessage \}\}\s*<\/p>/s);
+  assert.match(
+    runPanel,
+    /<p\s+:data-state="seg\.analysisRunState">\s*\{\{ seg\.analysisRunMessage \}\}\s*<\/p>/s,
+    "运行状态标记拆分后在 RunPanel，仍需绑定真实状态",
+  );
   assert.doesNotMatch(segmentation, /<span data-state="(?:partial|error)">/);
   assert.match(segmentation, /this\.analysisRunState\s*=\s*"ready"/);
   assert.match(segmentation, /this\.analysisRunState\s*=\s*"error"/);
@@ -126,6 +136,22 @@ test("地物分类工具链按真实 Promise 分支更新 running、partial、su
   assert.match(
     uploadUtility,
     /if \(this\.analysisRunState === 'running'\)[\s\S]*setAnalysisRunState\(/,
+  );
+});
+
+test("kmlRoiInfer 载荷携带预处理状态（与后端契约冻结：prehandle / denoise）", () => {
+  const payloadStart = uploadUtility.indexOf("await kmlRoiInfer({");
+  assert.ok(payloadStart >= 0, "必须经 kmlRoiInfer 发起地物分类推理");
+  const payloadSource = uploadUtility.slice(payloadStart, payloadStart + 600);
+  assert.match(
+    payloadSource,
+    /prehandle:\s*this\.uploadSrc\.prehandle/,
+    "载荷必须回传 uploadSrc.prehandle（值域 0/2/4）",
+  );
+  assert.match(
+    payloadSource,
+    /denoise:\s*this\.uploadSrc\.denoise/,
+    "载荷必须回传 uploadSrc.denoise（值域 0/3/5）",
   );
 });
 

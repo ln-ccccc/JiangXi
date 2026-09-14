@@ -41,11 +41,11 @@
             <p>图像增强：</p>
             <p>
               <label class="prehandle-label container">
+                <!-- 受控复选框：勾选态由 seg.uploadSrc.prehandle 驱动，不再走 ref -->
                 <input
-                  ref="clahe"
                   type="checkbox"
-
-                  @change="seg.selectClahe(4)"
+                  :checked="seg.uploadSrc.prehandle === 2"
+                  @change="seg.selectClahe('地物分类', $event)"
                 >
                 <span class="checkmark" />
                 <span class="go-bold label-words">CLAHE</span>
@@ -54,10 +54,9 @@
             <p>
               <label class="prehandle-label container">
                 <input
-                  ref="sharpen"
                   type="checkbox"
-
-                  @change="seg.selectSharpen(4)"
+                  :checked="seg.uploadSrc.prehandle === 4"
+                  @change="seg.selectSharpen('地物分类', $event)"
                 >
                 <span class="checkmark" />
                 <span class="go-bold label-words">锐化</span>
@@ -75,9 +74,8 @@
             <p>
               <label class="prehandle-label container">
                 <input
-                  ref="smooth"
                   type="checkbox"
-
+                  :checked="seg.uploadSrc.denoise === 3"
                   @change="seg.selectSmooth()"
                 >
                 <span class="checkmark" />
@@ -85,9 +83,8 @@
               </label>
               <label class="prehandle-label container">
                 <input
-                  ref="filter"
                   type="checkbox"
-
+                  :checked="seg.uploadSrc.denoise === 5"
                   @change="seg.selectFilter()"
                 >
                 <span class="checkmark" />

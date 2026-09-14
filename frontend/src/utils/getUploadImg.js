@@ -127,7 +127,10 @@ function upload(type, funUrl) {
               old_tif_path: tifPath,
               new_tif_path: tifPath,
               year: roiYear,
-              device: JIANGXI_INFERENCE_DEVICE
+              device: JIANGXI_INFERENCE_DEVICE,
+              // 契约冻结：后端按这两个状态值执行预处理（0/2/4 与 0/3/5）
+              prehandle: this.uploadSrc.prehandle,
+              denoise: this.uploadSrc.denoise
             });
             settledResults.push({ status: 'fulfilled', value });
           } catch (reason) {
