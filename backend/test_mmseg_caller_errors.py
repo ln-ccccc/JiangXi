@@ -71,6 +71,43 @@ class TestMmsegCallerErrors(unittest.TestCase):
                     device="cuda:0",
                 )
 
+    def _call_with_results(self, results):
+        with patch.object(
+            mmseg_inference_caller,
+            "_run_mmseg_inference",
+            return_value={"status": "completed", "results": results},
+        ):
+            return mmseg_inference_caller.call_mmseg_inference(
+                model_id="cc-ln/CUGRS",
+                data_path="/input",
+                out_dir="/output",
+                names=["a.tif"],
+                device="cpu",
+            )
+
+    def test_tile_error_key_propagates_into_runtime_error(self):
+        # 生产者 mmseg_segmentation.py 失败时写 "error" 键
+        with self.assertRaisesRegex(RuntimeError, "GPU OOM while tiling"):
+            self._call_with_results(
+                [{"name": "pred_a.png", "status": "error", "error": "GPU OOM while tiling"}]
+            )
+
+    def test_tile_error_falls_back_to_message_then_default(self):
+        with self.assertRaisesRegex(RuntimeError, "legacy message"):
+            self._call_with_results(
+                [{"name": "pred_a.png", "status": "error", "message": "legacy message"}]
+            )
+        with self.assertRaisesRegex(RuntimeError, "Unknown error"):
+            self._call_with_results(
+                [{"name": "pred_a.png", "status": "error"}]
+            )
+
+    def test_success_tiles_still_return_urls(self):
+        temps = self._call_with_results(
+            [{"name": "pred_a.png", "status": "success"}]
+        )
+        self.assertEqual(temps, [mmseg_inference_caller.generate_url + "pred_a.png"])
+
 
 if __name__ == "__main__":
     unittest.main()

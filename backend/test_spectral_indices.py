@@ -323,6 +323,7 @@ class TestSpectralIndicesAPI(unittest.TestCase):
         tif = self._make_constant_geo_tif("ndvi_poly")
         tmp = tempfile.mkdtemp()
         self.temp_dirs.append(tmp)
+        self.app.config["KML_ROI_KML_ROOT"] = tmp
         tbbh = "ZJ3607232021018001"
         kml_path = os.path.join(tmp, "mine.kml")
         with open(kml_path, "w", encoding="utf-8") as f:
@@ -339,7 +340,7 @@ class TestSpectralIndicesAPI(unittest.TestCase):
                 "list": [up_url + tif],
                 "index_type": "NDVI",
                 "band_map": {"nir": 4, "red": 3},
-                "kml_path": kml_path,
+                "kml_path": "mine.kml",
                 "tbbh": tbbh,
             }
         )
@@ -353,6 +354,62 @@ class TestSpectralIndicesAPI(unittest.TestCase):
         self.assertAlmostEqual(meta["mean"], 0.5)
         self.assertEqual(meta["map_fid_stats"][0]["map_fid"], 23)
         self.assertEqual(meta["map_fid_stats"][0]["pixel_count"], 16)
+
+
+    def test_malicious_kml_path_rejected_with_400(self):
+        tmp = tempfile.mkdtemp()
+        self.temp_dirs.append(tmp)
+        self.app.config["KML_ROI_KML_ROOT"] = tmp
+        for malicious in ("/etc/passwd", "../escape.kml", "%2e%2e%2f", "sub/dir/escape.kml"):
+            with self.subTest(kml_path=malicious):
+                status, _body = self._post_spectral(
+                    {
+                        "list": ["spec.tif"],
+                        "index_type": "NDVI",
+                        "kml_path": malicious,
+                    }
+                )
+                self.assertEqual(status, 400)
+
+    def test_dict_item_absolute_or_traversal_tiff_path_rejected(self):
+        tmp = tempfile.mkdtemp()
+        self.temp_dirs.append(tmp)
+        self.app.config["KML_ROI_INPUT_ROOT"] = tmp
+        for malicious in (
+            "/etc/passwd",
+            "/abs/secret/evil.tif",
+            "../escape.tif",
+            "%2e%2e%2fevil.tif",
+            "D:\\evil\\escape.tif",
+        ):
+            with self.subTest(raw_tiff_path=malicious):
+                status, _body = self._post_spectral(
+                    {
+                        "list": [{"src": "/_uploads/photos/x.png", "raw_tiff_path": malicious}],
+                        "index_type": "NDVI",
+                    }
+                )
+                self.assertEqual(status, 400)
+
+    def test_dict_item_upload_relative_url_still_works(self):
+        tif = self._make_tif(4, "dictflow")
+        status, body = self._post_spectral(
+            {
+                "list": [
+                    {
+                        "src": up_url + tif,
+                        "preview_src": up_url + tif,
+                        "raw_tiff_path": "static/upload/" + tif,
+                    }
+                ],
+                "index_type": "NDVI",
+                "band_map": {"nir": 4, "red": 3},
+            }
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["code"], 0)
+        self.assertTrue(body["data"]["urls"])
+        self._record_result_files(body["data"])
 
 
 if __name__ == "__main__":

@@ -225,6 +225,25 @@ class TestNewFeatures(unittest.TestCase):
             shutil.rmtree(input_root, ignore_errors=True)
             shutil.rmtree(kml_root, ignore_errors=True)
 
+    def test_svg_upload_is_rejected_by_whitelist(self):
+        # SVG 可携带脚本且被内联渲染，属于 XSS 载体，必须从上传白名单剔除
+        from applications.extensions.flask_uploads import IMAGES, UploadNotAllowed
+        from applications.extensions.init_upload import IMAGES_WITH_TIFF, photos
+        from applications.extensions.flask_uploads import TestingFileStorage
+
+        self.assertNotIn("svg", IMAGES)
+        self.assertNotIn("svg", IMAGES_WITH_TIFF)
+        # setUp 已压入 app context，photos 的配置来自 current_app
+        self.assertFalse(photos.extension_allowed("svg"))
+        for allowed in ("jpg", "jpeg", "png", "gif", "bmp", "webp", "tif", "tiff"):
+            self.assertTrue(photos.extension_allowed(allowed), allowed)
+        with self.assertRaises(UploadNotAllowed):
+            photos.save(TestingFileStorage(filename="evil.svg"))
+        # 上传残留清理（正常情况下 save 已被拒绝，不会落盘）
+        leftover = Path(self.app.config["UPLOADED_PHOTOS_DEST"]) / "evil.svg"
+        if leftover.exists():
+            leftover.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()
