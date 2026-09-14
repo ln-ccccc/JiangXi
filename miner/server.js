@@ -7,7 +7,6 @@ import dotenv from 'dotenv';
 import { promisify } from 'util';
 import { execFile as execFileCb, spawnSync } from 'child_process';
 import xlsx from 'xlsx';
-import geoviewRoutes from './routes/geoview.js';
 import { createProjectRoutes } from './routes/projects.js';
 import { authBackend } from './services/authBackend.js';
 import { relayBackendResponse, requireMinerAuth } from './services/authProxy.js';
@@ -52,7 +51,6 @@ let kmlInferenceActive = false;
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 const authGuard = requireMinerAuth({ sessionApi: authBackend.session });
-app.use('/api/geoview', authGuard, geoviewRoutes);
 
 // 认证后端不可达/超时等异常统一 502 JSON；格式与 authProxy.requireMinerAuth 的失败响应对齐，
 // 服务端 console.error 留痕，但不把异常细节回显给客户端。
