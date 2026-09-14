@@ -36,7 +36,9 @@ with urlopen(sys.argv[1], timeout=2) as response:
 PY
 }
 
-http_get "http://127.0.0.1:${BACKEND_PORT}/" >/dev/null
+# backend 根路径无路由（404 语义修复后不再被吞成 200）——探测会话端点：
+# 未登录也返回 200 JSON，是 backend 存活的真实信号
+http_get "http://127.0.0.1:${BACKEND_PORT}/api/auth/session" >/dev/null
 http_get "http://127.0.0.1:${FRONTEND_PORT}/" >/dev/null
 http_get "http://127.0.0.1:${MINER_FRONTEND_PORT}/" >/dev/null
 

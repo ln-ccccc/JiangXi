@@ -78,7 +78,7 @@ services:
       - backend-static:/app/backend/static
       - hf-cache:/root/.cache/huggingface
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5008/ >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5008/api/auth/session >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5
