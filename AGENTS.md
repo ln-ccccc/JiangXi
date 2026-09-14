@@ -118,6 +118,25 @@ ghcr 标签 `20260910-ui` 已备）包含全部 main 修复与新 UI（分页、
 + jx_env_cpu_20260910.env + MAC-RUNGUIDE.md）。旧 `cpu-20260908` 可在协作者
 确认新版可用后删除。除非用户明确确认，不删除 CPU 镜像或运行数据卷。
 
+2026-09-14 起现行已验收实例：`geoview-jiangxi-gpu-20260914`，镜像
+`geoview-jiangxi:jiangxi-gpu-20260914-fixes`（stable 标签 `jiangxi-gpu` 已同步）。
+本镜像为**代码审查修复版**（全面审查报告见 docs/code-review-20260914.md，修复分支
+`fix/code-review-20260914` 待建 PR 合 main）：P0×2（解译平台预处理复选框受控化、
+miner 恢复推理工作台/趋势报告入口）+ P1×9（svg 上传剔除、spectral 受控根、
+SECRET_KEY standalone 强制、错误键对齐、static-server 畸形 URL 400、execFile
+90min 超时、preHandle FormData、undefined.png、recovery_tendency_level）+ 稳定性
+P2（entrypoint wait 兜底、HEALTHCHECK start-period=300s/timeout=30s、env URL
+校验、GPU 构建期 mmcv nms 验证、批量推理 chunk 流式加载、fetch 超时、Leaflet/
+监听器清理、光谱页会话心跳）+ 新功能：kml_roi 推理管线接入 prehandle/denoise
+预处理（默认 0 行为零变化）。验收记录：容器内 140 单测 OK、资产 348/348 PASS、
+推理 001 双跑 + 002 混合形态 completed（cuda:0 暖跑 0.5-0.6s）、prehandle=2/
+组合/非法值全场景通过、冒烟 T1-T5（含 CLAHE 受控勾选）PASS、NODE_ENV 三进程
+正确（Express production、两个 dev server 钉 development）。运行参数与 §4 命令
+一致，env 文件仍用 `D:\项目\JiangXi\jx_env_gpu_20260909.env`（该文件含
+ADMIN_PASSWORD/SECRET_KEY，满足新的启动强制校验）。回退副本：旧容器
+`geoview-jiangxi-gpu-20260910` 已停止保留；代码级回退用 `ui-legacy-20260910` 或
+切回 main。协作者 CPU 镜像 `cpu-20260914-fixes` 同步重建中/待打包。
+
 注意：两期对比影像（`/app/backend/bianhua_2years/`，甲方 189 个 tif）位于
 容器可写层，**重建容器即丢失**；需从宿主机 `D:\项目\jiangxi_data\影像文件\`
 重新 `docker cp` 放入（`docker cp "D:\项目\jiangxi_data\影像文件\." 容器名:/app/backend/bianhua_2years/`）。
@@ -205,3 +224,13 @@ Set-Location ..
   防黑屏的层级钳制必须用地图级 `setMaxZoom/setMinZoom`；③ `minNativeZoom` 让低
   层级复用所设层级瓦片降采样（配 map minZoom=7），是"缩小影像不消失"的关键，
   而图层 `minZoom` 会在低层级直接隐藏整层，二者不可混用。
+- 宿主验证 ≠ 镜像验证（2026-09-14 三连教训，详见 testing_playbook T22）：① f-string
+  嵌套同类引号宿主 Python 3.14 编译通过、镜像 3.10 SyntaxError——语法级检查也必须
+  用镜像解释器；② 挂载式单测是混合环境（宿主 backend + 镜像其它文件），契约测试读
+  镜像内 Dockerfile 时测到的是旧内容；③ 改 docker/ 下被测试引用的文件后，权威门 =
+  重建镜像 → 容器内全套重跑。
+- 跨进程共享临时目录先查清理契约（2026-09-14，T23）：kml_roi 子进程 pipeline 启动
+  即 `rmtree(work_dir)`（防残留双保险），Flask 进程写在该目录下的预处理产物被吞，
+  fake 子进程的单测拦不住（fake 掉子进程就 fake 掉了它的清理行为）。规则：跨进程
+  数据放各自前缀的独立临时目录，只传路径引用；对"别人也会用"的目录，写入前先 grep
+  全部读写方与清理逻辑。
