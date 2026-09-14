@@ -18,6 +18,8 @@ const tabInfo = read("src", "components", "Tabinfor.vue");
 const bottomInfo = read("src", "components", "Bottominfor.vue");
 const theme = read("src", "assets", "css", "theme-dark.css");
 const uploadUtility = read("src", "utils", "getUploadImg.js");
+const authRedirect = read("src", "utils", "authRedirect.js");
+const loginView = read("src", "views", "Login.vue");
 
 const workflowPages = [segmentation, spectral];
 const workflowSource = workflowPages.join("\n");
@@ -186,6 +188,21 @@ test("地物分类图例对服务端结果类型可达", () => {
   for (const label of ["草地", "林地", "建筑", "道路", "裸地", "水体"]) {
     assert.match(imageShow, new RegExp(label));
   }
+});
+
+test("会话过期跳转携带 hash 路由且登录页消费 reason", () => {
+  // 路由是 hash 模式：redirect 必须取自 location.hash，跳转目标是 /#/login，
+  // 否则 query 无人消费（历史缺陷：redirect 恒为 "/"、reason 丢失）。
+  assert.match(authRedirect, /window\.location\.hash/);
+  assert.match(authRedirect, /params\.set\("redirect",\s*hashRoute\)/);
+  assert.match(authRedirect, /params\.set\("reason",\s*reason\)/);
+  assert.match(authRedirect, /#\/login\?\$\{params\.toString\(\)\}/);
+
+  // 登录页必须把 reason 呈现为可见文案，而不是无声吞掉
+  assert.match(loginView, /\$route\?\.query\?\.reason/);
+  assert.match(loginView, /登录已过期，请重新登录/);
+  assert.match(loginView, /v-if="sessionNotice"/);
+  assert.match(loginView, /this\.\$router\.replace\(this\.\$route\.query\.redirect \|\| "\/segmentation"\)/);
 });
 
 test("分析工作流在三档窄屏和 reduced-motion 下保持可用", () => {
