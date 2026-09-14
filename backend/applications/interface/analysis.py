@@ -82,10 +82,22 @@ def _resolve_spectral_input(item, data_path):
         display_url = item
 
     candidate = raw_path or display_url
-    if candidate and os.path.exists(str(candidate)):
-        return str(candidate), os.path.basename(str(candidate)), display_url
-
-    img_name = img_url_handle(str(candidate))
+    text = str(candidate or "")
+    # 纵深收口（API 层归一化的第二道防线）：读取路径一律收敛到受控 data_path 下的
+    # basename。任何含分隔符（含 URL 编码解码后）的输入不得经 os.path.exists 直通
+    # 读取服务器任意文件；display_url 仅作展示原样保留。
+    from urllib.parse import unquote as _unquote
+    decoded = _unquote(text.replace("\\", "/"))
+    if decoded and ("/" in decoded or "%" in text):
+        safe_name = decoded.rsplit("/", 1)[-1]
+        if not safe_name or safe_name in (".", ".."):
+            safe_name = ""
+        if not safe_name:
+            raise ValueError("影像路径不合法")
+        return os.path.join(data_path, safe_name), safe_name, display_url
+    if text and os.path.exists(text):
+        return text, os.path.basename(text), display_url
+    img_name = img_url_handle(text)
     return os.path.join(data_path, img_name), img_name, display_url
 
 

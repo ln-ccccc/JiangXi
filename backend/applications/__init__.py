@@ -42,6 +42,34 @@ def create_app(config_name=None):
 
     system_api(app)
 
+    from flask import request
+    from werkzeug.exceptions import HTTPException
+
+    from applications.auth.guard import ensure_logged_in
+
+    @app.before_request
+    def protect_static_uploads():
+        # 上传/生成目录位于 Flask 默认 static 目录下（static/upload 与 static/upload/res），
+        # 蓝图级鉴权不覆盖 /static/<path>，会形成 /_uploads 登录门的免登录旁路（实测坐实）。
+        if request.path.startswith('/static/'):
+            unauthorized = ensure_logged_in()
+            if unauthorized is not None:
+                return unauthorized
+
+    @app.errorhandler(Exception)
+    def error_handler(e):
+        # Flask 2.2 MRO 下 Exception handler 会吞掉 HTTPException（404/401 全变 200），
+        # 必须先放行；非 HTTP 异常只回通用文案——str(e) 常含服务器绝对路径与子进程
+        # stderr，回显属信息泄露，细节进服务端日志（debug 模式追加打印堆栈）。
+        if isinstance(e, HTTPException):
+            return e
+        if app.debug:
+            import traceback
+            traceback.print_exc()
+        app.logger.error("unhandled exception: %s", e, exc_info=True)
+        from applications.common.utils.http import fail_api
+        return fail_api("后端出现异常，请稍后重试")
+
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config['JSON_AS_ASCII'] = False
     CORS(

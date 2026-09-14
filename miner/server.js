@@ -1092,7 +1092,11 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       failed_tiles: parsed?.failed_tiles || [],
       stage_durations: parsed?.stage_durations || null,
       total_seconds: parsed?.total_seconds ?? null,
-      runtime: parsed?.runtime || null,
+      // 后端键为 inference_runtime（pipeline.py），旧名 runtime 保留兼容
+      runtime: parsed?.inference_runtime || parsed?.runtime || null,
+      // 透传 KML 增量更新结果：MapDashboard 依赖 kml_update.updated/inserted
+      // 决定纯 KML 更新型推理是否关弹窗，缺失会导致弹窗永不自动关闭
+      kml_update: parsed?.kml_update || null,
       stderr_tail: String(stderr || '')
         .split('\n')
         .slice(-8)

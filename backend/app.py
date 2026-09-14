@@ -1,15 +1,15 @@
-import traceback
-
 from flask import session
 from flask_migrate import Migrate
 
 from applications import create_app
-from applications.common.utils.http import fail_api
 from applications.extensions import db
 from runtime_frontend_env import load_runtime_config, write_legacy_frontend_env
 
-debug_mode = False
 app = create_app()
+
+# /static 上传目录鉴权与全局错误处理（HTTPException 直通、debug 打印堆栈、
+# 生产只回通用文案不回显异常原文）注册在 create_app 工厂
+# （applications/__init__.py），对所有配置环境与测试环境一致生效。
 
 
 @app.before_request
@@ -21,22 +21,14 @@ def before():
         session.modified = True
 
 
-@app.errorhandler(Exception)
-def error_handler(e):
-    if debug_mode:
-        traceback.print_exc()
-    return fail_api("后端出现异常：{}".format(str(e)))
-
-
 migrate = Migrate(app, db)
 
 if __name__ == '__main__':
     config = load_runtime_config()
-    debug_mode = bool(config.get("debug", False))
     write_legacy_frontend_env(config)
     app.run(
         host=config["host"]["backend"],
         port=config["port"]["backend"],
-        debug=debug_mode,
-        use_reloader=debug_mode,
+        debug=bool(config.get("debug", False)),
+        use_reloader=bool(config.get("debug", False)),
     )

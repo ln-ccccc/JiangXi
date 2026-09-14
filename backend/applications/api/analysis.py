@@ -26,6 +26,7 @@ miner_change_output_root = Path(
     os.getenv("MINER_CHANGE_OUTPUT_ROOT") or repo_root / "miner" / "change_matrix_outputs"
 ).expanduser().resolve()
 upload_path_prefix = "static/upload/"
+upload_url_prefix = "/_uploads/photos/"
 
 
 def _asset_manifest_path():
@@ -88,11 +89,29 @@ def _history_identity(map_fid_dir):
     return {"tbbh": tbbh, "map_fid": map_fid}
 
 
-def _normalize_uploaded_tiff_name(value):
+def _normalize_uploaded_tiff_name(value, input_root=None):
     text = str(value or "").strip().replace("\\", "/")
+    # 同一物理上传目录的三种受控形态：相对路径前缀、服务 URL 前缀、裸文件名
     if text.startswith(upload_path_prefix):
-        return text[len(upload_path_prefix):]
-    return text
+        text = text[len(upload_path_prefix):]
+    elif text.startswith(upload_url_prefix):
+        text = text[len(upload_url_prefix):]
+    if "/" not in text:
+        return text
+    # 含分隔符的值分两类：前端把上传响应的 raw_tiff_path（受控 upload 目录内的
+    # 绝对路径）原样回传提交推理/光谱计算——必须剥成 basename 放行，否则主链路
+    # 被 resolve_managed_file 的 basename 校验拒掉；越界路径（resolve 后不在受控根
+    # 内，如 /etc/x.tif、../x.tif）则明确拒绝。
+    if input_root is not None:
+        try:
+            resolved = Path(text).resolve()
+            resolved.relative_to(Path(input_root).resolve())
+            return resolved.name
+        except ValueError as exc:
+            raise PathValidationError(
+                "文件路径超出受控目录: {}".format(text)
+            ) from exc
+    return text.rsplit("/", 1)[-1]
 
 
 def _resolve_spectral_kml_path(kml_root, kml_path):
@@ -103,25 +122,41 @@ def _resolve_spectral_kml_path(kml_root, kml_path):
 
 
 def _normalize_spectral_tiff_items(img_list, input_root):
-    """归一 spectral 输入项里的 tif 路径。
+    """归一 spectral 输入项里的 tif 路径，覆盖 dict 项五个路径键与纯字符串项。
 
-    纯 basename（含剥掉 static/upload/ 前缀后为 basename 的上传相对 URL）保持原样，
-    由底层 _resolve_spectral_input 处理；含路径分隔符（绝对/相对路径）或 URL 编码
-    字符的值一律经 resolve_managed_file 收敛到受控 input_root 下，越界即 400。
+    前端真实形态是上传响应回传的服务器绝对路径（raw_tiff_path），先剥成 basename
+    （_normalize_uploaded_tiff_name）再判断；纯 basename 保持原样由底层处理，
+    含 URL 编码字符（%..）的一律经 resolve_managed_file 收敛到受控 input_root 下。
+    basename 化同时消解越界读取：../x.tif -> x.tif 只能命中受控根内文件。
     """
-    for item in img_list:
+    def _normalize_value(text):
+        stripped = _normalize_uploaded_tiff_name(text, input_root)
+        if "%" in stripped:
+            return str(resolve_managed_file(input_root, stripped, {".tif", ".tiff"}))
+        if Path(stripped).name == stripped:
+            return None  # 已是纯 basename，无需改写
+        return stripped
+
+    for index, item in enumerate(img_list):
+        if isinstance(item, str):
+            text = item.strip()
+            if not text:
+                continue
+            normalized = _normalize_value(text)
+            if normalized is not None:
+                img_list[index] = normalized
+            continue
         if not isinstance(item, dict):
             continue
-        for key in ("raw_tiff_path", "raw_tiff", "path"):
+        for key in ("raw_tiff_path", "raw_tiff", "path", "src", "preview_src"):
             if key not in item:
                 continue
             text = str(item.get(key) or "").strip()
             if not text:
                 continue
-            stripped = _normalize_uploaded_tiff_name(text)
-            if Path(stripped).name == stripped and "%" not in stripped:
-                continue
-            item[key] = str(resolve_managed_file(input_root, stripped, {".tif", ".tiff"}))
+            normalized = _normalize_value(text)
+            if normalized is not None:
+                item[key] = normalized
     return img_list
 
 
@@ -325,9 +360,11 @@ def kml_roi_inference_api():
         input_root = current_app.config["KML_ROI_INPUT_ROOT"]
         kml_root = current_app.config["KML_ROI_KML_ROOT"]
         default_kmz_name = Path(current_app.config["MINER_DEFAULT_KMZ_PATH"]).name
-        old_tif_name = _normalize_uploaded_tiff_name(req_json.get("old_tif_path"))
+        old_tif_name = _normalize_uploaded_tiff_name(
+            req_json.get("old_tif_path"), input_root=input_root
+        )
         new_tif_name = _normalize_uploaded_tiff_name(
-            req_json.get("new_tif_path") or old_tif_name
+            req_json.get("new_tif_path") or old_tif_name, input_root=input_root
         )
         old_tif_path = resolve_managed_file(input_root, old_tif_name, {".tif", ".tiff"})
         new_tif_path = resolve_managed_file(

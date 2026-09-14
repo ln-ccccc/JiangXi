@@ -412,5 +412,52 @@ class TestSpectralIndicesAPI(unittest.TestCase):
         self._record_result_files(body["data"])
 
 
+    def test_dict_item_absolute_path_within_upload_root_still_works(self):
+        """前端真实形态回归：上传响应回传的 raw_tiff_path 是受控 upload 目录内的
+        服务器绝对路径，必须剥成 basename 放行——直接交给 resolve_managed_file 会
+        因 basename 校验被拒，打断上传→推理/光谱计算主链路（2026-09-14 实测发现）。
+        """
+        tif = self._make_tif(4, "abspath")
+        input_root = self.app.config["KML_ROI_INPUT_ROOT"]
+        absolute_path = os.path.abspath(os.path.join(input_root, tif))
+        self.assertTrue(os.path.isabs(absolute_path))
+        # 把文件放到受控根绝对路径下，模拟运维把 UPLOADED_PHOTOS_DEST 配成
+        # 绝对路径时前端回传的真实形态
+        placed = os.path.join(absolute_path)
+        if not os.path.exists(placed):
+            import shutil as _shutil
+            os.makedirs(input_root, exist_ok=True)
+            _shutil.copyfile(os.path.join(up_dir, tif), placed)
+            self.created_upload_files.append(placed)
+        status, body = self._post_spectral(
+            {
+                "list": [{"raw_tiff_path": absolute_path}],
+                "index_type": "NDVI",
+                "band_map": {"nir": 4, "red": 3},
+            }
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["code"], 0)
+
+    def test_string_list_item_out_of_root_path_rejected(self):
+        for malicious in ("/etc/passwd.tif", "../escape.tif", "D:/evil/x.tif"):
+            with self.subTest(path=malicious):
+                status, _body = self._post_spectral(
+                    {"list": [malicious], "index_type": "NDVI"}
+                )
+                self.assertEqual(status, 400)
+
+    def test_dict_src_and_preview_src_keys_out_of_root_rejected(self):
+        for key in ("src", "preview_src"):
+            with self.subTest(key=key):
+                status, _body = self._post_spectral(
+                    {
+                        "list": [{key: "/etc/secret.tif", "raw_tiff_path": "/etc/secret.tif"}],
+                        "index_type": "NDVI",
+                    }
+                )
+                self.assertEqual(status, 400)
+
+
 if __name__ == "__main__":
     unittest.main()
