@@ -55,7 +55,11 @@ COPY --from=jiangxi-runtime-compat /app/miner/node_modules/@esbuild/linux-x64 /t
 COPY --from=jiangxi-gpu-compat /opt/venv/lib/python3.10/site-packages/mmcv /tmp/jiangxi-gpu-mmcv
 COPY --from=jiangxi-gpu-compat /opt/venv/lib/python3.10/site-packages/mmcv-2.1.0.dist-info /tmp/mmcv-2.1.0.dist-info
 
+# 旧基础镜像层残留（git 不跟踪、当前启动路径无引用）：7 月遗留的推理 worker
+# 入口与 applications/inference 旧包会随基础层进入运行镜像，COPY 不会覆盖清除
 RUN rm -rf -- /app/backend/model/mmseg_config /app/backend/model/custom_models \
+    /app/backend/run_inference_worker.py /app/backend/applications/inference \
+    /app/docker/start-inference-worker.sh /app/docker/start-analysis-worker-gpu.sh \
     && test -f /app/backend/model/jiangxi/config.py \
     && test -f /app/backend/model/jiangxi/model.pth \
     && test -f /app/backend/model/jiangxi/metadata.json \
@@ -125,6 +129,12 @@ RUN /bin/bash -lc 'source /opt/conda/etc/profile.d/conda.sh && conda activate MM
     python -c "import os, torch; device=os.environ[\"JIANGXI_INFERENCE_DEVICE\"]; assert device == \"cpu\" or torch.version.cuda, \"GPU image requires CUDA-enabled PyTorch\"; print(\"torch runtime: \" + torch.__version__ + \" / CUDA \" + str(torch.version.cuda))" && \
     python -c "import flask, openpyxl, rasterio, torch, mmseg, mmcv, mmdet; print(\"python runtime dependencies passed\")" && \
     (python -c "import geopandas" || python -c "from osgeo import ogr")'
+
+# 构建暂存收尾：npm 离线缓存与 /tmp 原生依赖、GPU mmcv 暂存只服务构建期，
+# 不烘进运行镜像；必须放在所有使用它们的 RUN 之后，否则构建失败
+RUN rm -rf -- /app/miner/.npm-cache /app/frontend/.npm-cache \
+    /tmp/jiangxi-rollup-native /tmp/jiangxi-esbuild-native \
+    /tmp/jiangxi-gpu-mmcv /tmp/mmcv-2.1.0.dist-info
 
 RUN test -x /opt/node20/bin/node \
     && test -x /opt/node20/bin/npm \

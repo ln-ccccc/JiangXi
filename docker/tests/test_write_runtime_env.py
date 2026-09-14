@@ -1,5 +1,6 @@
 """Runtime environment regression tests."""
 
+import ast
 import importlib.util
 import os
 import re
@@ -39,6 +40,15 @@ def run_main_with_environment(environment):
     ), patch.object(runtime_env, "write_text", side_effect=capture):
         runtime_env.main()
     return outputs
+
+
+class RuntimeSourceCompatibilityTests(unittest.TestCase):
+    def test_source_parses_under_python_3_10_grammar(self):
+        # 2026-09-14 教训（testing_playbook T22）：f-string 嵌套同类引号在宿主
+        # Python 3.12+/3.14 编译通过、镜像内 3.10 直接 SyntaxError。语法级检查
+        # 必须按 3.10 文法执行——feature_version 让高版本宿主解释器也拒绝该回归。
+        source = MODULE_PATH.read_text(encoding="utf-8")
+        ast.parse(source, feature_version=(3, 10))
 
 
 class RuntimePublicUrlTests(unittest.TestCase):
