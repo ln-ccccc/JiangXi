@@ -175,6 +175,38 @@ spectral_live 死端点、platform-repair 分支决断。
 GPU 镜像重建必须使用本节原样参数（JIANGXI_BASE_IMAGE=jiangxi-analysis-worker:gpu），
 换用其他 base 会复现 §7 的 GLIBC_2.32 worker 崩溃。
 
+### 4.1 镜像谱系与独立性（2026-09-15 调查结论）
+
+- **CPU 链含云南层（历史包袱，功能独立）**：`jiangxi-runtime:current`（39d4bef82816，
+  32.2GB，38 层）的最底 30 层即 `yunnan-runtime:current`（= 消失标签
+  `geoview-runtime:split-clean`，含云南 backend 约 8.23GB 死重层）；全部
+  `geoview-jiangxi:cpu-*` 交付镜像均继承这 30 层。该共享仅为磁盘/分发死重，
+  江西代码、模型与运行配置不依赖云南内容（防护测试 `docker/tests/test_source_isolation.py`
+  与 `test_compose_isolation.py` 持续在位）。
+- **GPU 链已独立**：`jiangxi-inference-worker:gpu` → `jiangxi-analysis-worker:gpu` →
+  `geoview-jiangxi:jiangxi-gpu*` 交付链与 `yunnan-runtime:current` 实测仅共享 2 个
+  最底层公共基础层（nvidia/cuda 血统），不携带云南业务层。
+- **四个基础镜像的可重建状态**：
+  1. `jiangxi-runtime:current`：无 Dockerfile（谱系起点 `geoview-runtime:split-clean`
+     标签已消失），不可从源码重建；等价 squash 底座见下。
+  2. `jiangxi-runtime:gpu`（7843a6208ccb，35.6GB）：git 全历史无构建定义，不可重建。
+  3. `jiangxi-inference-worker:gpu`（0d2b4e8093ba）：构建定义已归档
+     `docker/archive/Dockerfile.jiangxi-inference-gpu`；但其上游
+     `geoview-inference-worker:current` 已不在本地镜像库，当前无法原样重建。
+  4. `jiangxi-analysis-worker:gpu`（71f55653f308）：构建定义已归档
+     `docker/archive/Dockerfile.jiangxi-analysis-worker-gpu`（配套入口脚本
+     `start-analysis-worker-gpu.sh` 一并归档）。
+  归档文件均带来源说明（`.worktrees/jiangxi-platform-repair`，fix/jiangxi-platform-repair
+  @698134e）。
+- **后续重建 CPU 底座的方向**：以 `docker export`/`docker import` squash 掉云南 30 层
+  死重（2026-09-15 已产出验证基线 `jiangxi-runtime:squashed-20260915`，
+  b64b90e5305c，单层 16.5GB，原 38 层 32.2GB；验收镜像
+  `geoview-jiangxi:cpu-20260915-decoupled`，fbfb5d651b06，20 层 21GB，原 57 层 34.1GB；
+  与 `yunnan-runtime:current` 的内容层交集为 0——唯一重合的 digest 是 Dockerfile
+  ENV 步骤产生的 0 字节通用空层，任何镜像都含它；镜像内 167 单测全绿、
+  资产校验 348 PASS）；
+  替换现役底座属跨交付变更，须用户确认后另行推进，替换前旧底座与新底座并存。
+
 ## 5. 必跑验证
 
 后端单测必须在**与镜像一致的解释器**里跑（2026-09-09 教训：宿主机三个 Python
