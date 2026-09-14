@@ -2,7 +2,6 @@ import axios from "axios";
 
 import global from "@/global";
 import { ElMessage } from "element-plus";
-import { hideFullScreenLoading } from "@/utils/loading";
 import { redirectToLegacyLogin } from "@/utils/authRedirect";
 
 export function requestfile(config) {
@@ -31,7 +30,6 @@ export function requestfile(config) {
         return Promise.reject(new Error(response.data.msg || "登录已失效"));
       }
       if (response.data.code !== 0) {
-        hideFullScreenLoading("#load");
         ElMessage.error(response.data.msg);
         return Promise.reject(new Error(response.data.msg || "请求失败"));
       }

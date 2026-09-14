@@ -5,7 +5,7 @@
                 <span class="workflow-panel__index data-label">03 / RUN</span>
                 <h2 class="atlas-title">执行分析</h2>
               </div>
-              <p>使用江西固定 CPU 配置同步分析；页面会等待本批次完成后再刷新成果。</p>
+              <p>使用江西固定 {{ seg.inferenceDevice }} 配置同步分析；页面会等待本批次完成后再刷新成果。</p>
             </header>
           <div class="handle-button execution-action">
             <el-button

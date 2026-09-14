@@ -224,6 +224,8 @@
 import { createSrc, imgUpload } from "@/api/upload";
 import { getUploadImg } from "@/utils/getUploadImg";
 import { historyDeleteOne } from "@/api/history";
+import { legacySession } from "@/api/auth";
+import { redirectToLegacyLogin } from "@/utils/authRedirect";
 import Tabinfor from "@/components/Tabinfor";
 import Bottominfor from "@/components/Bottominfor";
 import ImgShow from "@/components/ImgShow";
@@ -254,11 +256,24 @@ export default {
         red: 3,
         green: 2,
         swir: 5
-      }
+      },
+      sessionRefreshTimer: null
     };
   },
   created() {
     this.getUploadImg("光谱指数计算");
+    // 与 Segmentation 保持一致：打开期间定期心跳，会话失效则回登录页
+    this.sessionRefreshTimer = window.setInterval(() => {
+      legacySession().then((res) => {
+        if (!res?.data?.data?.authenticated) redirectToLegacyLogin("expired");
+      }).catch(() => { });
+    }, 10 * 60 * 1000);
+  },
+  beforeUnmount() {
+    if (this.sessionRefreshTimer !== null) {
+      window.clearInterval(this.sessionRefreshTimer);
+      this.sessionRefreshTimer = null;
+    }
   },
   methods: {
     createSrc,

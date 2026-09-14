@@ -1,7 +1,8 @@
 // 解译平台「地物分类」GUI 冒烟测试——Segmentation.vue 组件拆分的安全网。
-// 覆盖：工作流渲染 / 文件选择注入 / 年份校验 / 执行按钮状态机 / 全局导航。
+// 覆盖：工作流渲染 / 文件选择注入 / 预处理复选框受控化 / 年份校验 / 执行按钮状态机 / 全局导航。
 // 上传→推理的请求契约由 tests/upload-contract.test.mjs 在 Node 层覆盖。
-// 运行：npm run smoke（需 4174/5178 容器在运行）
+// 运行：npm run smoke（默认 4174/5178 容器在运行；
+//      起本地 dev server 时用 SMOKE_BASE_URL=http://127.0.0.1:<dev端口> 覆盖）
 import { createRequire } from 'node:module';
 // playwright 安装在仓库外的测试基建目录（不进 package.json，离线镜像构建不受影响）
 const require = createRequire(import.meta.url);
@@ -23,7 +24,10 @@ const { chromium } = loadPlaywright();
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const MINER_ORIGIN = process.env.SMOKE_MINER_ORIGIN || 'http://127.0.0.1:4174';
+// SMOKE_BASE_URL：页面入口（miner 容器或本地 dev server）；SMOKE_MINER_ORIGIN 为旧别名
+const MINER_ORIGIN = process.env.SMOKE_BASE_URL
+  || process.env.SMOKE_MINER_ORIGIN
+  || 'http://127.0.0.1:4174';
 const BACKEND_ORIGIN = process.env.SMOKE_BACKEND_ORIGIN || 'http://127.0.0.1:5178';
 const ENV_FILE = process.env.JX_ENV_FILE || 'D:/项目/JiangXi/jx_env_gpu_20260909.env';
 
@@ -49,6 +53,9 @@ async function main() {
   const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
+  // 收集整场冒烟期间的未捕获页面异常（T5 的核心断言之一）
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error));
 
   // —— 登录（共享 jiangxi_session）——
   await page.goto(`${MINER_ORIGIN}/#/login`);
@@ -96,6 +103,34 @@ async function main() {
   );
   assert.ok(await runButton.isEnabled(), '选择影像后执行按钮应可用');
 
+  // —— T5 预处理复选框受控化：真实点击 CLAHE，勾选不再抛错且预览状态生效 ——
+  // 教训同 T2：必须走真实点击（label → 原生 checkbox → @change），
+  // 组件拆分后曾因 $refs 失联导致勾选即 TypeError
+  const claheInput = page
+    .locator('label.prehandle-label', { hasText: 'CLAHE' })
+    .locator('input[type="checkbox"]');
+  await page
+    .locator('label.prehandle-label', { hasText: 'CLAHE' })
+    .locator('span.label-words')
+    .click();
+  await page.waitForSelector('#sub-title');
+  assert.ok(await claheInput.isChecked(), 'CLAHE 勾选后应保持选中（状态受控）');
+  assert.match(
+    await page.locator('#sub-title').innerText(),
+    /CLAHE处理结果预览/,
+    'RunPanel 应按 uploadSrc.prehandle===2 渲染预览区'
+  );
+  const runStateAfterClahe = await page.locator('.run-status p').getAttribute('data-state');
+  assert.notEqual(runStateAfterClahe, 'error', '勾选 CLAHE 不应把执行状态打成 error');
+  // 再点一次取消：受控状态应同步回 0，预览区随 v-if 消失
+  await page
+    .locator('label.prehandle-label', { hasText: 'CLAHE' })
+    .locator('span.label-words')
+    .click();
+  await page.locator('#sub-title').waitFor({ state: 'detached', timeout: 5000 });
+  assert.ok(!(await claheInput.isChecked()), '取消 CLAHE 后复选框应回弹为未选中');
+  assert.equal(pageErrors.length, 0, '预处理勾选/取消全程不应出现页面异常');
+
   // —— T3 年份校验：空年份直接报错，不发请求 ——
   await runButton.click();
   await page.waitForSelector('.run-status p[data-state="error"]');
@@ -123,7 +158,7 @@ async function main() {
 
   await browser.close();
   console.log(
-    `SMOKE PASS: 渲染/文件选择(真实路径)/年份校验/导航/删除接线${deleteCount ? '' : '(历史为空,跳过)'} 全部通过`
+    `SMOKE PASS: 渲染/文件选择(真实路径)/CLAHE受控勾选/年份校验/导航/删除接线${deleteCount ? '' : '(历史为空,跳过)'} 全部通过`
   );
 }
 

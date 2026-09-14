@@ -12,7 +12,7 @@
         <div class="workflow-badges" aria-label="运行配置">
           <span>江西</span>
           <span>同步分析</span>
-          <span>CPU</span>
+          <span>{{ inferenceDevice }}</span>
         </div>
       </template>
     </Tabinfor>
@@ -137,6 +137,10 @@ export default {
     if (this.sessionRefreshTimer !== null) {
       window.clearInterval(this.sessionRefreshTimer);
       this.sessionRefreshTimer = null;
+    }
+    if (this.fileimg) {
+      window.URL.revokeObjectURL(this.fileimg);
+      this.fileimg = "";
     }
   },
   methods: {
@@ -264,6 +268,12 @@ export default {
       const file = fileLike?.raw || fileLike?.file || fileLike;
       this.cutVisible = !!this.getCutCheckbox()?.checked;
       this.canUpload = true;
+      // MyVueCropper 依赖 file.name 生成裁剪产物文件名，缺失会得到 undefined.png
+      this.file = file;
+      // 释放上一张预览的 object URL，避免反复选图累积泄漏
+      if (this.fileimg) {
+        window.URL.revokeObjectURL(this.fileimg);
+      }
       this.fileimg = window.URL.createObjectURL(file);
     },
     disableCutForBatchUpload() {
