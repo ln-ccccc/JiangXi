@@ -173,7 +173,7 @@
             <el-button
               type="primary"
               class="btn-animate btn-animate__shiny"
-              :disabled="fileList.length === 0"
+              :disabled="fileList.length === 0 || runState === 'running'"
               @click="startCompute"
             >
               开始计算 {{ indexType }}
@@ -437,6 +437,10 @@ export default {
       }).catch(() => {});
     },
     startCompute() {
+      if (this.runState === "running") {
+        this.$message.warning("当前已有计算任务在执行，请等待完成。");
+        return;
+      }
       if (!this.fileList.length) {
         this.runState = "error";
         this.runMessage = "请先选择 tif / tiff 影像。";

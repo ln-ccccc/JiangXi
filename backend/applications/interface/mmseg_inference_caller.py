@@ -266,6 +266,34 @@ def _request_worker_inference(
     return response
 
 
+def _run_subprocess_with_cleanup(cmd, *, timeout, cwd, env):
+    """subprocess.run 的孤儿安全版本。
+
+    任何退出路径（超时、上游异常、BFF 超时 SIGTERM 引发的 SystemExit）都会在
+    finally 里杀掉直接子进程——mmseg_segmentation.py 是单进程末端，杀掉即无孤儿，
+    不再出现"父进程被 kill 后孙进程继续占 CPU/GPU"的情况。
+    """
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=cwd,
+        env=env,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    finally:
+        # 单一收口：超时/上游异常/SystemExit（BFF SIGTERM）任何路径都杀掉并回收子进程
+        if proc.poll() is None:
+            proc.kill()
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            pass
+    return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+
+
 def _run_mmseg_inference(
     model_id: str,
     data_path: str,
@@ -278,13 +306,16 @@ def _run_mmseg_inference(
         return []
 
     if _worker_enabled():
+        # 整批单请求：超时按瓦片数缩放，避免全量运行（数百瓦片、冷启动/慢 IO）
+        # 触顶默认 1200s 后客户端报失败、worker 却把结果算完落盘的状态不一致
+        worker_timeout = max(float(timeout), 3.0 * len(names))
         return _request_worker_inference(
             model_id=model_id,
             data_path=data_path,
             out_dir=out_dir,
             names=names,
             device=device,
-            timeout=timeout,
+            timeout=worker_timeout,
         )
 
     runtime = resolve_inference_device(device)
@@ -318,10 +349,8 @@ def _run_mmseg_inference(
     )
     print(f"[MMSeg-Caller] python={' '.join(_resolve_mmseg_python())}", file=sys.stderr)
 
-    result = subprocess.run(
+    result = _run_subprocess_with_cleanup(
         cmd,
-        capture_output=True,
-        text=True,
         timeout=timeout,
         cwd=_curr_dir,
         env=_build_mmseg_env(),

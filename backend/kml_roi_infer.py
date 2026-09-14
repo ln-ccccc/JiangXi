@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -12,6 +13,39 @@ from pathlib import Path
 from applications.region_source import resolve_default_jiangxi_kmz
 from applications.kml_roi.pipeline import run_kml_roi_pipeline
 from applications.interface.inference_device import resolve_inference_device
+
+BUSY_EXIT_CODE = 3
+BUSY_MESSAGE = "已有一个图斑推理任务正在执行，请等待完成后再提交"
+
+
+def _request_shutdown(signum, _frame):
+    # SIGTERM 默认直接终止不走 finally，孙进程（mmseg_segmentation.py）会孤儿化
+    # 继续占用 GPU；转成 SystemExit 让调用方的 finally 清理链生效
+    raise SystemExit(128 + signum)
+
+
+def _acquire_run_lock(output_root: Path):
+    """跨进程推理互斥锁。
+
+    Flask subprocess 与 miner BFF execFile 两条链最终都运行本脚本，
+    在此统一串行化，防止并发推理交叉写共享 output_root/<fid>/。
+    fcntl 不可用（Windows 开发机）时跳过互斥。
+    """
+    try:
+        import fcntl
+    except ImportError:
+        print("[kml-roi-infer] fcntl 不可用，跳过跨进程推理锁（仅限开发环境）", file=sys.stderr)
+        return None
+    lock_path = output_root / ".kml_roi_infer.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(lock_path, "w")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        print(json.dumps({"status": "busy", "error": BUSY_MESSAGE}, ensure_ascii=False))
+        raise SystemExit(BUSY_EXIT_CODE)
+    return handle
 
 
 def main() -> int:
@@ -57,11 +91,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    signal.signal(signal.SIGTERM, _request_shutdown)
     old_tif = Path(args.old_tif).expanduser().resolve()
     new_tif = Path(args.new_tif).expanduser().resolve()
     kml_path = Path(args.kml).expanduser().resolve()
     output_root = Path(args.output_root).expanduser().resolve()
     work_dir = Path(args.work_dir).expanduser().resolve()
+    # 进程存活期间持锁；GPU 串行语义 + 防并发交叉写共享产物目录
+    run_lock = _acquire_run_lock(output_root)
     if not args.manifest:
         raise RuntimeError("江西推理必须提供资产 manifest，禁止直接使用历史 FID")
     manifest_path = Path(args.manifest).expanduser().resolve()

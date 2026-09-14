@@ -203,3 +203,13 @@ test("工作流样式只使用江西令牌且页脚不再跳转外部站点", ()
   assert.match(bottomInfo, /江西省矿山生态修复智能监测平台/);
   assert.doesNotMatch(bottomInfo, /github|https?:\/\//i);
 });
+
+test("执行入口带运行中重入守卫，防止上传阶段并发重复提交推理", () => {
+  // 上传阶段走 requestfile 无全屏锁，按钮可再次点击 → 并发两组推理子进程
+  // 交叉写共享产物目录（复审批次 C4）
+  assert.match(uploadUtility, /analysisRunState === 'running'/);
+  assert.match(uploadUtility, /reason: 'busy'/);
+  assert.match(runPanel, /seg\.analysisRunState === 'running'/);
+  assert.match(spectral, /runState === "running"/);
+  assert.match(spectral, /:disabled="fileList\.length === 0 \|\| runState === 'running'"/);
+});

@@ -423,6 +423,9 @@ def kml_roi_inference_api():
         return success_api(data=data)
     except PathValidationError as exc:
         return fail_api(str(exc)), 400
+    except ValueError as exc:
+        # 业务消息透出（如跨进程推理锁占用时 kml_roi_infer 返回的「已有任务在执行」）
+        return fail_api(str(exc)), 400
     except Exception as e:
         current_app.logger.error("图斑推理失败: %s", e, exc_info=True)
         return fail_api("推理失败，请稍后重试或查看服务端日志")

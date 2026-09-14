@@ -11,7 +11,7 @@
             <el-button
               type="primary"
               class="btn-animate btn-animate__shiny"
-              :disabled="seg.fileList.length === 0"
+              :disabled="seg.fileList.length === 0 || seg.analysisRunState === 'running'"
               @click="seg.upload('地物分类','semantic_segmentation')"
             >
               开始地物分类

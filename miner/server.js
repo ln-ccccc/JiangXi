@@ -1107,6 +1107,14 @@ app.post('/api/inference/kml-roi', async (req, res) => {
     if (err instanceof ManagedPathError) {
       return res.status(400).json({ error: err.message });
     }
+    // 后端跨进程推理锁占用（kml_roi_infer.py 退出码 3，stdout 输出 status=busy）；
+    // try 块内的 const stdout 在 catch 不可见，execFile 错误对象自带 stdout
+    const busyPayload = parseJsonFromStdout(err?.stdout);
+    if (busyPayload?.status === 'busy') {
+      return res.status(409).json({
+        error: busyPayload.error || '已有一个图斑推理任务正在执行，请等待完成后再提交',
+      });
+    }
     const message = err?.message || String(err);
     const status = /device 仅支持|CUDA 不可用|江西项目仅支持 CPU/.test(message) ? 400 : 500;
     return res.status(status).json({

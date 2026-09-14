@@ -270,7 +270,11 @@ export function useMineData() {
     }
   };
 
+  // 生态面板请求序号：快速连点图斑 A→B 时丢弃 A 的迟到响应，避免头部与面板数据错配
+  let ecologyProfileRequestId = 0;
+
   const fetchEcologyProfile = async (tbbh) => {
+    const requestId = ++ecologyProfileRequestId;
     ecologyProfileLoading.value = true;
     ecologyProfileError.value = '';
     mineEcologyProfile.value = buildEmptyEcologyProfile();
@@ -280,15 +284,19 @@ export function useMineData() {
       const response = await axios.get(
         apiUrl(`/api/mines/ecology-profile?tbbh=${encodeURIComponent(normalizedTbbh)}`)
       );
+      if (requestId !== ecologyProfileRequestId) return;
       mineEcologyProfile.value = {
         ...buildEmptyEcologyProfile(),
         ...(response.data || {}),
       };
     } catch (error) {
+      if (requestId !== ecologyProfileRequestId) return;
       const message = error?.response?.data?.error || error.message || '生态诊断资料加载失败';
       ecologyProfileError.value = message;
     } finally {
-      ecologyProfileLoading.value = false;
+      if (requestId === ecologyProfileRequestId) {
+        ecologyProfileLoading.value = false;
+      }
     }
   };
 

@@ -46,3 +46,17 @@ test('生态诊断面板 predictionItems 键集与服务端 PREDICTION_FIELDS �
 
   assert.deepEqual([...new Set(panelKeys)].sort(), [...backendKeys].sort());
 });
+
+test('推理并发防护：后端 busy 退出码以 409 透出，生态面板迟到响应丢弃（复审批次 C）', async () => {
+  const server = await read('../server.js');
+  const useMineData = await read('../src/composables/useMineData.js');
+
+  // kml_roi_infer.py 跨进程推理锁占用（stdout status=busy，退出码 3）→ BFF 409 而非 500
+  assert.match(server, /busyPayload\?\.status === 'busy'/u);
+  assert.match(server, /res\.status\(409\)/u);
+  assert.match(server, /已有一个图斑推理任务正在执行/u);
+
+  // 生态面板请求序号守卫：快速连点图斑时旧响应不得覆盖新图斑数据
+  assert.match(useMineData, /ecologyProfileRequestId/u);
+  assert.match(useMineData, /requestId !== ecologyProfileRequestId/u);
+});

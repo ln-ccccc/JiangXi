@@ -63,6 +63,12 @@ function setAnalysisRunState(context, state, message) {
 }
 
 function upload(type, funUrl) {
+  // 运行中重入守卫：上传阶段走 requestfile 无全屏锁，可再次点击按钮，
+  // 会并发起两组推理子进程并交叉写共享产物目录
+  if (this.analysisRunState === 'running') {
+    this.$message.warning('当前已有分析任务在执行，请等待完成。');
+    return Promise.resolve({ status: 'error', reason: 'busy' });
+  }
   if (this.fileList.length === 0) {
     setAnalysisRunState(this, 'error', '请先选择 tif / tiff 影像。');
     this.$message.error("请上传图片！");

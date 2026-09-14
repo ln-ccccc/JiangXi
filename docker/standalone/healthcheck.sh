@@ -71,7 +71,9 @@ if health.get("manifest_sha256") != digest:
 PY
 
 if is_gpu_inference_device; then
-  "${PYTHON_BIN}" /app/backend/applications/interface/mmseg_worker.py \
+  # ping 超时放宽到 10s：worker 串行设计下长推理期间 ping 需排队，2s 会误报不可用
+  JIANGXI_MMSEG_WORKER_PING_TIMEOUT="${JIANGXI_MMSEG_WORKER_PING_TIMEOUT:-10}" \
+    "${PYTHON_BIN}" /app/backend/applications/interface/mmseg_worker.py \
     --socket "${JIANGXI_MMSEG_WORKER_SOCKET:-/tmp/jiangxi-mmseg-worker.sock}" \
     --ping \
     --expect-device "${JIANGXI_INFERENCE_DEVICE:-cuda:0}" >/dev/null

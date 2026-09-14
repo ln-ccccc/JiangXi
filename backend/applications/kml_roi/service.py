@@ -179,6 +179,9 @@ def _run_inference_subprocess(
     except Exception as e:
         raise RuntimeError(f"执行失败: {str(e)}") from e
 
+    if run_res.returncode == 3:
+        # kml_roi_infer.py 的跨进程推理锁占用退出码：转成业务异常向上透出可读信息
+        raise ValueError("已有一个图斑推理任务正在执行，请等待完成后再提交")
     if run_res.returncode != 0:
         err = (run_res.stderr or run_res.stdout or "").strip()
         raise RuntimeError(f"执行失败: {err[:500]}")
