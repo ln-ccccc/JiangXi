@@ -1,11 +1,14 @@
 import os
 import re
+import sys
 from pathlib import Path
 
 import yaml
 
 
 CONFIG_PATH = Path(os.environ.get("CONFIG_PATH", "/app/config.yaml"))
+
+DEFAULT_LOCAL_TILE_URL = "/tiles/{z}/{x}/{y}.png"
 
 # 公网 URL 校验：非空值必须是 http(s) 绝对地址且不含任何空白字符
 #（\S+ 天然拒绝内嵌换行/空格，防止坏值注入额外 env 行），否则回退默认
@@ -28,16 +31,22 @@ def sanitize_env_value(value: str) -> str:
     return re.sub(r"[\r\n]", "", value or "")
 
 
-def resolve_public_url(raw: str, fallback: str) -> str:
+def resolve_public_url(raw: str, fallback: str, name: str = "") -> str:
     """非空公网 URL 必须过 http(s) 校验；坏值（含换行、非 http、损坏串）回退默认。
 
     留空语义保持不变（entrypoint 的 :- 默认值已在上游处理，显式空表示用户要空）。
+    坏值回退不打断启动（自愈），但必须写 stderr 留痕，避免静默吞掉配置错误。
     """
     value = (raw or "").strip()
     if not value:
         return ""
     if URL_PATTERN.fullmatch(value):
         return value
+    if name:
+        print(
+            f"[write-runtime-env] rejected invalid {name}={value!r}, falling back to {fallback!r}",
+            file=sys.stderr,
+        )
     return fallback
 
 
@@ -53,10 +62,12 @@ def main():
     backend_url = resolve_public_url(
         os.environ.get("VUE_APP_BACKEND_URL", ""),
         fallback=f"http://{backend_host}:{backend_port}",
+        name="VUE_APP_BACKEND_URL",
     )
     miner_url = resolve_public_url(
         os.environ.get("VUE_APP_MINER_URL", ""),
         fallback="",
+        name="VUE_APP_MINER_URL",
     )
     inference_device = os.environ.get("JIANGXI_INFERENCE_DEVICE", "cpu").strip().lower() or "cpu"
     # 本地瓦片模板严格校验：只接受标准 XYZ 形态（/tiles/{z}/{x}/{y}.png，层级字母可换），
@@ -65,7 +76,12 @@ def main():
     if re.fullmatch(r"/tiles/\{[a-z0-9]+\}/\{[a-z0-9]+\}/\{[a-z0-9]+\}\.png", local_tile_url_raw):
         local_tile_url = local_tile_url_raw
     else:
-        local_tile_url = "/tiles/{z}/{x}/{y}.png"
+        if local_tile_url_raw:
+            print(
+                f"[write-runtime-env] rejected invalid MINER_LOCAL_TILE_URL={local_tile_url_raw!r}, falling back to {DEFAULT_LOCAL_TILE_URL!r}",
+                file=sys.stderr,
+            )
+        local_tile_url = DEFAULT_LOCAL_TILE_URL
 
     write_text(
         "/app/frontend/.env",
@@ -85,6 +101,7 @@ def main():
     geoview_url = resolve_public_url(
         os.environ.get("VITE_GEOVIEW_URL", ""),
         fallback="",
+        name="VITE_GEOVIEW_URL",
     )
     miner_api_base_url = os.environ.get("VITE_MINER_API_BASE_URL", "")
     local_max_native_zoom = (
