@@ -375,7 +375,11 @@ def call_mmseg_inference(
         if res.get("status") == "success":
             temps.append(generate_url + res["name"])
         else:
-            raise RuntimeError(f"Processing failed for {name}: {res.get('message', 'Unknown error')}")
+            # 生产者 mmseg_segmentation.py 写的键是 "error"，旧字段 "message" 仅作兜底
+            raise RuntimeError(
+                f"Processing failed for {name}: "
+                f"{res.get('error') or res.get('message') or 'Unknown error'}"
+            )
     return temps
 
 

@@ -24,5 +24,55 @@ class AppFactoryIsolationTestCase(unittest.TestCase):
                 os.environ["SQLITE_PATH"] = old_path
 
 
+    def test_standalone_mode_without_secret_key_raises(self):
+        old_standalone = os.environ.get("STANDALONE_MODE")
+        old_secret = os.environ.get("SECRET_KEY")
+        try:
+            os.environ["STANDALONE_MODE"] = "1"
+            os.environ.pop("SECRET_KEY", None)
+            with self.assertRaises(RuntimeError) as ctx:
+                create_app("testing")
+            self.assertIn("SECRET_KEY", str(ctx.exception))
+        finally:
+            if old_standalone is None:
+                os.environ.pop("STANDALONE_MODE", None)
+            else:
+                os.environ["STANDALONE_MODE"] = old_standalone
+            if old_secret is not None:
+                os.environ["SECRET_KEY"] = old_secret
+
+    def test_standalone_mode_with_secret_key_bootstraps(self):
+        old_standalone = os.environ.get("STANDALONE_MODE")
+        old_secret = os.environ.get("SECRET_KEY")
+        try:
+            os.environ["STANDALONE_MODE"] = "1"
+            os.environ["SECRET_KEY"] = "unit-test-only-not-a-real-secret"
+            app = create_app("testing")
+            self.assertIsNotNone(app)
+        finally:
+            if old_standalone is None:
+                os.environ.pop("STANDALONE_MODE", None)
+            else:
+                os.environ["STANDALONE_MODE"] = old_standalone
+            if old_secret is None:
+                os.environ.pop("SECRET_KEY", None)
+            else:
+                os.environ["SECRET_KEY"] = old_secret
+
+    def test_non_standalone_without_secret_key_still_bootstraps(self):
+        old_standalone = os.environ.get("STANDALONE_MODE")
+        old_secret = os.environ.get("SECRET_KEY")
+        try:
+            os.environ.pop("STANDALONE_MODE", None)
+            os.environ.pop("SECRET_KEY", None)
+            app = create_app("testing")
+            self.assertIsNotNone(app)
+        finally:
+            if old_standalone is not None:
+                os.environ["STANDALONE_MODE"] = old_standalone
+            if old_secret is not None:
+                os.environ["SECRET_KEY"] = old_secret
+
+
 if __name__ == "__main__":
     unittest.main()

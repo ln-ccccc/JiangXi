@@ -30,8 +30,8 @@ def create_app(config_name=None):
         app.config['DB_BACKEND'] = (os.getenv('DB_BACKEND') or app.config.get('DB_BACKEND') or 'mysql').strip().lower()
         app.config['SQLITE_PATH'] = os.getenv('SQLITE_PATH') or app.config.get('SQLITE_PATH') or '/app/runtime_data/jiangxi.sqlite3'
         app.config['SQLALCHEMY_DATABASE_URI'] = _build_database_uri()
-    if config_name == 'production' and not os.getenv('SECRET_KEY'):
-        raise RuntimeError('SECRET_KEY is required in production')
+    if (config_name == 'production' or os.getenv('STANDALONE_MODE') == '1') and not os.getenv('SECRET_KEY'):
+        raise RuntimeError('SECRET_KEY 未配置：生产环境或 STANDALONE_MODE=1 时必须显式设置 SECRET_KEY 环境变量')
     init_plugs(app)
 
     with app.app_context():

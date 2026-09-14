@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from applications.kml_roi.kml_merge import merge_kml_increment
+from applications.kml_roi.preprocess import preprocess_inference_inputs
 from applications.region_source import resolve_default_jiangxi_kmz
 from applications.interface.inference_device import resolve_inference_device
 
@@ -39,6 +40,8 @@ def run_kml_roi_inference(
     old_year: str = "",
     new_year: str = "",
     manifest_path: Optional[str] = None,
+    prehandle: int = 0,
+    denoise: int = 0,
 ) -> dict:
     if not old_tif_path:
         raise ValueError("缺少 old_tif_path")
@@ -48,6 +51,9 @@ def run_kml_roi_inference(
         raise FileNotFoundError(f"old_tif_path 不存在: {old_tif_path}")
     if not new_tif_path or not os.path.exists(new_tif_path):
         raise FileNotFoundError(f"new_tif_path 不存在: {new_tif_path}")
+
+    prehandle = int(prehandle or 0)
+    denoise = int(denoise or 0)
 
     backend_root = Path(__file__).resolve().parents[2]
     repo_root = backend_root.parent
@@ -79,34 +85,44 @@ def run_kml_roi_inference(
         raise FileNotFoundError(f"江西资产 manifest 不存在: {manifest_path}")
 
     runtime = resolve_inference_device(device)
-    cmd = [
-        os.getenv("PYTHON_EXE") or sys.executable,
-        str(script_path),
-        "--old_tif",
-        str(old_tif_path),
-        "--new_tif",
-        str(new_tif_path),
-        "--kml",
-        str(kml_path),
-        "--output_root",
-        str(output_root),
-        "--device",
-        runtime["effective_device"],
-        "--manifest",
-        str(manifest_path),
-    ]
-
-    if year:
-        cmd.extend(["--year", str(year)])
-    else:
-        if old_year:
-            cmd.extend(["--old_year", str(old_year)])
-        if new_year:
-            cmd.extend(["--new_year", str(new_year)])
-    if int(limit or 0) > 0:
-        cmd.extend(["--limit", str(int(limit))])
 
     with tempfile.TemporaryDirectory(prefix="kml-roi-infer-") as work_dir:
+        # prehandle/denoise 只影响推理输入：在本次推理的独立临时目录里产出预处理
+        # 后的两期 tif，作为切瓦片输入；原文件与输出目录结构均不受影响
+        old_tif_path, new_tif_path = preprocess_inference_inputs(
+            old_tif_path=old_tif_path,
+            new_tif_path=new_tif_path,
+            base_dir=Path(work_dir) / "preprocess",
+            prehandle=prehandle,
+            denoise=denoise,
+        )
+        cmd = [
+            os.getenv("PYTHON_EXE") or sys.executable,
+            str(script_path),
+            "--old_tif",
+            str(old_tif_path),
+            "--new_tif",
+            str(new_tif_path),
+            "--kml",
+            str(kml_path),
+            "--output_root",
+            str(output_root),
+            "--device",
+            runtime["effective_device"],
+            "--manifest",
+            str(manifest_path),
+        ]
+
+        if year:
+            cmd.extend(["--year", str(year)])
+        else:
+            if old_year:
+                cmd.extend(["--old_year", str(old_year)])
+            if new_year:
+                cmd.extend(["--new_year", str(new_year)])
+        if int(limit or 0) > 0:
+            cmd.extend(["--limit", str(int(limit))])
+
         cmd.extend(["--work_dir", work_dir])
         try:
             run_res = subprocess.run(

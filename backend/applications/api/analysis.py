@@ -95,6 +95,36 @@ def _normalize_uploaded_tiff_name(value):
     return text
 
 
+def _resolve_spectral_kml_path(kml_root, kml_path):
+    """非空 kml_path 一律收敛到受控 kml_root 下的 .kml/.kmz 文件。"""
+    if not kml_path or not str(kml_path).strip():
+        return kml_path
+    return str(resolve_managed_file(kml_root, str(kml_path).strip(), {".kml", ".kmz"}))
+
+
+def _normalize_spectral_tiff_items(img_list, input_root):
+    """归一 spectral 输入项里的 tif 路径。
+
+    纯 basename（含剥掉 static/upload/ 前缀后为 basename 的上传相对 URL）保持原样，
+    由底层 _resolve_spectral_input 处理；含路径分隔符（绝对/相对路径）或 URL 编码
+    字符的值一律经 resolve_managed_file 收敛到受控 input_root 下，越界即 400。
+    """
+    for item in img_list:
+        if not isinstance(item, dict):
+            continue
+        for key in ("raw_tiff_path", "raw_tiff", "path"):
+            if key not in item:
+                continue
+            text = str(item.get(key) or "").strip()
+            if not text:
+                continue
+            stripped = _normalize_uploaded_tiff_name(text)
+            if Path(stripped).name == stripped and "%" not in stripped:
+                continue
+            item[key] = str(resolve_managed_file(input_root, stripped, {".tif", ".tiff"}))
+    return img_list
+
+
 @analysis_api.before_request
 def require_analysis_auth():
     return ensure_logged_in()
@@ -229,6 +259,15 @@ def spectral_indices_api():
     map_fid = _tbbh_to_map_fid(tbbh)
     if map_fid is None:
         return fail_api(f"TBBH 不存在: {tbbh}"), 404
+    try:
+        kml_path = _resolve_spectral_kml_path(
+            current_app.config["KML_ROI_KML_ROOT"], kml_path
+        )
+        img_list = _normalize_spectral_tiff_items(
+            img_list, current_app.config["KML_ROI_INPUT_ROOT"]
+        )
+    except PathValidationError as exc:
+        return fail_api(str(exc)), 400
     # 计算核心使用小写键（nir/red/green/swir），这里统一标准化避免前端大小写差异导致映射失效
     normalized_band_map = {str(k).lower(): v for k, v in (band_map or {}).items()}
 
@@ -272,6 +311,14 @@ def spectral_indices_api():
 @analysis_api.post('/kml_roi_inference')
 def kml_roi_inference_api():
     req_json = request.json or {}
+    # 契约：prehandle ∈ {0,2,4}（无/CLAHE/锐化），denoise ∈ {0,3,5}（无/中值/高斯），默认 0 行为不变
+    try:
+        prehandle = int(req_json.get("prehandle", 0) or 0)
+        denoise = int(req_json.get("denoise", 0) or 0)
+    except (TypeError, ValueError):
+        return fail_api("prehandle/denoise 必须为整数"), 400
+    if prehandle not in (0, fun_type_2, fun_type_4) or denoise not in (0, fun_type_3, fun_type_5):
+        return fail_api("prehandle/denoise 参数异常"), 400
     try:
         if req_json.get("output_root"):
             raise PathValidationError("不支持自定义输出目录")
@@ -306,6 +353,8 @@ def kml_roi_inference_api():
             old_year=req_json.get('old_year') or '',
             new_year=req_json.get('new_year') or '',
             manifest_path=str(_asset_manifest_path()),
+            prehandle=prehandle,
+            denoise=denoise,
         )
         if data.get("status") == "failed":
             errors = data.get("tile_errors") or {}
