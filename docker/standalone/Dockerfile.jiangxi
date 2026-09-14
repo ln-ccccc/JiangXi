@@ -38,6 +38,10 @@ ENV STANDALONE_MODE=1 \
 
 ENV PATH=/opt/node20/bin:${PATH}
 
+# Express（miner/server.js）生产模式：默认错误页不再回显堆栈；
+# entrypoint 内的两个 dev server（vue serve / vite）单独钉回 development
+ENV NODE_ENV=production
+
 COPY backend /app/backend
 COPY frontend /app/frontend
 COPY miner /app/miner
@@ -108,6 +112,7 @@ RUN /bin/bash -lc 'source /opt/conda/etc/profile.d/conda.sh && conda activate MM
         /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv-*.dist-info; \
       cp -a /tmp/jiangxi-gpu-mmcv /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv; \
       cp -a /tmp/mmcv-2.1.0.dist-info /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv-2.1.0.dist-info; \
+      python -c "from mmcv.ops import nms; print(\"GPU mmcv ops (_ext) load verified\")"; \
     fi; \
     mmdet_init="$(python -c "import importlib.util; print(importlib.util.find_spec(\"mmdet\").origin)")" && \
     test -f "${mmdet_init}" && \
@@ -131,6 +136,6 @@ EXPOSE 3000 4000 5008
 
 VOLUME ["/app/runtime_data"]
 
-HEALTHCHECK --interval=30s --timeout=15s --retries=5 CMD ["/app/docker/standalone/healthcheck.sh"]
+HEALTHCHECK --interval=30s --timeout=30s --start-period=300s --retries=5 CMD ["/app/docker/standalone/healthcheck.sh"]
 
 ENTRYPOINT ["/app/docker/standalone/start-jiangxi-standalone.sh"]

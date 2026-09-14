@@ -62,7 +62,16 @@ http.createServer((request, response) => {
     return;
   }
 
-  const requestPath = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
+  // 畸形 URL（如 /%E0%A4%A）会让 new URL/decodeURIComponent 抛 URIError，
+  // 直接杀死 4173/4174 的主进程；这里必须就地兜底为 400，保住进程
+  let requestPath;
+  try {
+    requestPath = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
+  } catch (error) {
+    response.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
+    response.end('Bad Request');
+    return;
+  }
   const safePath = path.normalize(requestPath).replace(/^(\.\.[/\\])+/, '');
   let filePath = path.join(root, safePath);
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {

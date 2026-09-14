@@ -28,7 +28,8 @@ http_get() {
 import sys
 from urllib.request import urlopen
 
-with urlopen(sys.argv[1], timeout=5) as response:
+# timeout=2：http_get 串行 4 次，最坏 4x5s=20s 会吃穿 HEALTHCHECK 预算
+with urlopen(sys.argv[1], timeout=2) as response:
     if response.status < 200 or response.status >= 300:
         raise SystemExit(f"HTTP status {response.status}")
     sys.stdout.write(response.read().decode("utf-8"))
