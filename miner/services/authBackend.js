@@ -8,6 +8,7 @@ export async function requestBackendAuth(method, path, { body, cookie } = {}) {
       ...(cookie ? { cookie } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(15000),
   });
 
   const text = await response.text();

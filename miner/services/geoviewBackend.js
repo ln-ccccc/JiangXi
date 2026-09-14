@@ -5,7 +5,9 @@ const geoviewBackendUrl = (process.env.GEOVIEW_BACKEND_URL || 'http://localhost:
 
 export async function fetchSpectralLive(fidRaw) {
   const fid = encodeURIComponent(fidRaw || '');
-  const upstream = await fetch(`${geoviewBackendUrl}/api/analysis/spectral_live/${fid}`);
+  const upstream = await fetch(`${geoviewBackendUrl}/api/analysis/spectral_live/${fid}`, {
+    signal: AbortSignal.timeout(15000),
+  });
   const text = await upstream.text();
   return {
     status: upstream.status,

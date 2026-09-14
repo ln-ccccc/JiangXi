@@ -11,6 +11,8 @@
       :username="username"
       @logout="emit('logout')"
       @open-workspace="emit('open-workspace')"
+      @open-inference="showInferenceModal = true"
+      @open-trend-report="showTrendReportModal = true"
     />
 
     <main class="main-container">
@@ -79,7 +81,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import 'leaflet/dist/leaflet.css';
 
 import TheHeader from './TheHeader.vue';
@@ -330,15 +332,21 @@ const handleExportTrendReport = async (filters = {}) => {
   }
 };
 
+const handleWindowResize = () => {
+  mapContainerRef.value?.invalidateSize?.();
+};
+
 onMounted(() => {
   ensureDataLoaded().then(() => {
     if (props.focusTbbh) focusByTbbh(props.focusTbbh);
   });
   fetchRealtimeEnvironmentAt(JIANGXI_FALLBACK_CENTER[0], JIANGXI_FALLBACK_CENTER[1]);
 
-  window.addEventListener('resize', () => {
-    mapContainerRef.value?.invalidateSize?.();
-  });
+  window.addEventListener('resize', handleWindowResize);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleWindowResize);
 });
 
 watch(

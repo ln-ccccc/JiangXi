@@ -681,6 +681,14 @@ onMounted(() => {
 
 onUnmounted(() => {
   resizeObserver?.disconnect();
+  // Leaflet 实例持有 DOM 引用与全局事件监听，必须显式销毁
+  map.value?.remove();
+  map.value = null;
+  // 瓦片裁剪 SVG defs 挂在 document.body 上（见 ensureTileClipDefsSvg），随组件卸载移除
+  if (basemapClipDefsSvg) {
+    document.body.removeChild(basemapClipDefsSvg);
+    basemapClipDefsSvg = null;
+  }
 });
 
 defineExpose({

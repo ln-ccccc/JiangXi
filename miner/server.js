@@ -54,16 +54,35 @@ app.use(express.json({ limit: '20mb' }));
 const authGuard = requireMinerAuth({ sessionApi: authBackend.session });
 app.use('/api/geoview', authGuard, geoviewRoutes);
 
+// 认证后端不可达/超时等异常统一 502 JSON；格式与 authProxy.requireMinerAuth 的失败响应对齐，
+// 服务端 console.error 留痕，但不把异常细节回显给客户端。
+const AUTH_GATEWAY_ERROR = { success: false, code: 1, msg: '认证服务暂时不可用，请稍后重试' };
+
 app.post('/api/auth/login', async (req, res) => {
-  relayBackendResponse(res, await authBackend.login(req.body || {}));
+  try {
+    relayBackendResponse(res, await authBackend.login(req.body || {}));
+  } catch (error) {
+    console.error('[auth] login 网关请求失败:', error?.message || error);
+    res.status(502).json(AUTH_GATEWAY_ERROR);
+  }
 });
 
 app.get('/api/auth/session', async (req, res) => {
-  relayBackendResponse(res, await authBackend.session(req.headers.cookie || ''));
+  try {
+    relayBackendResponse(res, await authBackend.session(req.headers.cookie || ''));
+  } catch (error) {
+    console.error('[auth] session 网关请求失败:', error?.message || error);
+    res.status(502).json(AUTH_GATEWAY_ERROR);
+  }
 });
 
 app.post('/api/auth/logout', async (req, res) => {
-  relayBackendResponse(res, await authBackend.logout(req.headers.cookie || ''));
+  try {
+    relayBackendResponse(res, await authBackend.logout(req.headers.cookie || ''));
+  } catch (error) {
+    console.error('[auth] logout 网关请求失败:', error?.message || error);
+    res.status(502).json(AUTH_GATEWAY_ERROR);
+  }
 });
 
 app.use('/api/projects', authGuard, createProjectRoutes({ getMinesData: () => minesData }));
@@ -1001,6 +1020,9 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       {
         cwd: backendRoot,
         maxBuffer: 20 * 1024 * 1024,
+        // 90 分钟 > 后端同步接口 3600s 上限；超时 kill 后 reject 走 catch，finally 复位 kmlInferenceActive
+        timeout: 90 * 60 * 1000,
+        killSignal: 'SIGTERM',
       }
     );
 
