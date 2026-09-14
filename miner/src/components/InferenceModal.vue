@@ -11,7 +11,7 @@
             <label>KML 文件路径（服务器路径）</label>
             <input
               v-model="formData.kmlPath"
-              placeholder="例如: /app/backend/data/new_mine.kml（可选）"
+              placeholder="受控目录内文件名，如 new_mine.kml（可选）"
               class="form-input"
             />
             <small class="tip">提供 KML 时将自动提取多边形并计算指数；留空则处理默认 KML。</small>
@@ -38,7 +38,7 @@
             <label>基准影像路径（Old TIF）</label>
             <input
               v-model="formData.oldTifPath"
-              placeholder="例如: /app/backend/bianhua_2years/mine_TEST.tif"
+              placeholder="受控目录内文件名，如 mine_TEST.tif"
               class="form-input"
             />
           </div>
@@ -111,8 +111,8 @@ const emit = defineEmits(['close', 'submit']);
 
 const formData = reactive({
   kmlPath: '',
-  oldTifPath: '/app/backend/bianhua_2years/mine_TEST.tif',
-  newTifPath: '/app/backend/bianhua_2years/mine_TEST.tif',
+  oldTifPath: 'mine_TEST.tif',
+  newTifPath: 'mine_TEST.tif',
   singleYear: '',
   oldYear: '',
   newYear: '',

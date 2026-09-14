@@ -15,6 +15,7 @@ async function requestJson(method, path, { query, body, cookie } = {}) {
       ...(cookie ? { cookie } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(15000),
   });
   const text = await response.text();
   let parsed;

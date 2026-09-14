@@ -11,6 +11,7 @@ export default [
     files: ['**/*.{js,vue}'],
     languageOptions: {
       globals: {
+        AbortSignal: 'readonly',
         Buffer: 'readonly',
         alert: 'readonly',
         Blob: 'readonly',
