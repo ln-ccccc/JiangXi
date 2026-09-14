@@ -311,6 +311,14 @@ def spectral_indices_api():
 @analysis_api.post('/kml_roi_inference')
 def kml_roi_inference_api():
     req_json = request.json or {}
+    # 契约：prehandle ∈ {0,2,4}（无/CLAHE/锐化），denoise ∈ {0,3,5}（无/中值/高斯），默认 0 行为不变
+    try:
+        prehandle = int(req_json.get("prehandle", 0) or 0)
+        denoise = int(req_json.get("denoise", 0) or 0)
+    except (TypeError, ValueError):
+        return fail_api("prehandle/denoise 必须为整数"), 400
+    if prehandle not in (0, fun_type_2, fun_type_4) or denoise not in (0, fun_type_3, fun_type_5):
+        return fail_api("prehandle/denoise 参数异常"), 400
     try:
         if req_json.get("output_root"):
             raise PathValidationError("不支持自定义输出目录")
@@ -345,6 +353,8 @@ def kml_roi_inference_api():
             old_year=req_json.get('old_year') or '',
             new_year=req_json.get('new_year') or '',
             manifest_path=str(_asset_manifest_path()),
+            prehandle=prehandle,
+            denoise=denoise,
         )
         if data.get("status") == "failed":
             errors = data.get("tile_errors") or {}
