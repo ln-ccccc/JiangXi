@@ -144,7 +144,28 @@ dev server 钉 development）。运行参数与 §4 命令一致，env 文件仍
 `D:\项目\JiangXi\jx_env_gpu_20260909.env`（该文件含 ADMIN_PASSWORD/SECRET_KEY，
 满足新的启动强制校验）。回退副本：旧容器 `geoview-jiangxi-gpu-20260910` 已停止
 保留；代码级回退用 `ui-legacy-20260910` 或切回 main。协作者 CPU 镜像
-`cpu-20260914-fixes` 已同步重建。遗留（复审 P2/P3 未修项见复审报告第六节排期建议）：
+`cpu-20260914-fixes` 已同步重建。
+
+2026-09-15 复审修复批次 A–F 收尾版：镜像 `geoview-jiangxi:jiangxi-gpu-20260915-recheck`
+（stable 标签 `jiangxi-gpu` 未动，待确认后指向）。六批内容：A 后端泛化异常不回显
+（31 处收敛+日志）、init_db 吞错显式抛出、分页/空 body 容错；B miner 零结果明确
+提示（no_features 不再静默）、15 处 502 固定文案、上传→提交贯通测试；C GPU worker
+infer 线程化+锁（长推理期间 ping 即时应答，不再被 HEALTHCHECK 误判 unhealthy）、
+哑连接读超时、kml_roi_infer 跨进程 flock（busy 退出码 3→BFF 409）、subprocess
+Popen+finally kill 根治孤儿进程、整批超时按瓦片数缩放、前端运行中重入守卫、生态
+面板竞态 token；D spectral_live 死链删除（守护测试防回潮）；E 镜像清理（陈旧
+run_inference_worker/applications/inference 剔除、npm cache/tmp 暂存清理、
+.dockerignore 补 .worktrees 等、py3.10 ast 守卫、env 回退告警、compose 健康检查
+python 化+start_period）；F 同 fid 多 Placemark 三处合并不丢图斑（_v2 变体）、
+index_sync 文件锁、会话过期 reason 经 hash 路由透传。验收：镜像内 167 单测 OK、
+资产 348 PASS、001 真实推理连续双跑 completed（cuda:0 冷 7.2s/暖 3.5s，§5.1 重复
+执行）、未知路由 404、/static 与 /_uploads 401、KML 上传裸名→提交接通（真实
+Placemark 无交集时优雅返回 no_features）、miner/前端服务 200。运行容器
+`geoview-jiangxi-gpu-recheck`（卷 jiangxi-runtime-gpu-recheck-20260915）；
+`geoview-jiangxi-gpu-20260914` 已停止保留为回退。宿主工作树两度因 junction
+穿透删空 node_modules（npm ci 恢复，见 T25）。遗留仅剩：platform-repair 分支
+决断、readme-screenshots 合并、全面 HTTP 状态码迁移评估、HEALTHCHECK interval/
+SHA-256 短路实测调优。遗留（复审 P2/P3 未修项见复审报告第六节排期建议）：
 GPU worker 读超时、长推理 unhealthy 标记、推理并发锁、同 fid 多 Placemark、
 spectral_live 死端点、platform-repair 分支决断。
 
