@@ -206,6 +206,16 @@ GPU 镜像重建必须使用本节原样参数（JIANGXI_BASE_IMAGE=jiangxi-anal
   ENV 步骤产生的 0 字节通用空层，任何镜像都含它；镜像内 167 单测全绿、
   资产校验 348 PASS）；
   替换现役底座属跨交付变更，须用户确认后另行推进，替换前旧底座与新底座并存。
+- **测试/验证车辆区分规则（2026-09-15 起强制）**：江西侧的一切容器内验证只允许用
+  江西自己的镜像——CPU 侧用 `geoview-jiangxi:cpu-20260915-decoupled`（squash 底座，
+  主树代码卷挂载跑法同 §5，167 单测已在该镜像内复验全绿），GPU 侧用已验收的
+  `jiangxi-gpu-20260915-recheck` / 运行容器 `geoview-jiangxi-gpu-recheck`；
+  **旧 `cpu-20260910-ui`/`cpu-20260914-fixes` 系底座为云南血统（底层即云南 runtime
+  30 层），只作历史回退，不再用作验证车辆**。云南侧验证一律用 `yunnan-runtime:current`
+  （跑法见云南仓库 docs/development-standard.md §7）。两项目镜像严禁混用。
+  血统透明说明：squash/解耦只消除了共享层存储，镜像内的 conda/venv 运行环境内容
+  仍源自七月隔离前的云南构建（GPU 链的 venv 亦混有该 conda 的包）；要做到环境级
+  完全独立，需以归档 Dockerfile+导出的环境清单从源码重建底座，属后续决策项。
 
 ## 5. 必跑验证
 
