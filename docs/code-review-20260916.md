@@ -68,6 +68,7 @@
 14. **miner 启动链子进程无超时**：`services/jiangxiGeoJsonSource.js` 的 geopandas execFile 与 powershell spawnSync、`server.js:161-181` 的 commandExists/pythonRunnable 均无 timeout，全部在 `initData()` → `app.listen` 之前；挂起则 miner 永不 bind。90min 超时修复只覆盖了推理 execFile 一处（同类未修实例模式）。
 15. **15s fetch 超时无差别套用**：`services/projectBackend.js:18`、`services/authBackend.js:11` 含导出/备份恢复等慢操作，超 15s 用户看到 502 而后端任务实际成功，可能重复提交。
 16. **小项**：`miner/package.json:19` `import:ndvi` 死链（scripts/ 目录从未存在）；`docker/entrypoint.sh:208` 向 miner 传死环境变量 GEOVIEW_BACKEND_URL（geoviewBackend.js 已删）；`frontend/test/download.contract.test.mjs` 不在任何 npm script 永不运行；`frontend/tests/segmentation-smoke.mjs:3` 注释引用从未存在的 upload-contract.test.mjs。
+    **【2026-09-16 修复期更正】** GEOVIEW_BACKEND_URL 一条系**误报**：该键是 `miner/services/authBackend.js:1` 与 `projectBackend.js:1` 的活依赖（作为 miner→Flask 后端 base URL，geoviewBackend.js 时代的历史误名），compose 形态下 compose:117 是唯一正确取值来源，删除会导致登录/项目转发全部打空。已恢复 entrypoint 原行（commit 0241a21）并在 `test_compose_isolation.py` 断言旁补防误删注释（7f05ab0）；跨辖区正名 MINER_BACKEND_BASE_URL 记为后续决策项。教训：宣布一个环境变量已死前，必须 grep **变量名本身**，而不是只 grep 旧消费者文件名——本报告 P2-15 自己把这两个文件当活代码，却没发现它们消费该变量，自相矛盾。
 17. **GPU 链解押前置债**：`Dockerfile.jiangxi:55-56,113-119` GPU 分支 mmcv 2.1.0 vs fork/底座护栏 min 2.2.0（`dinov3_swinV1/mmseg/__init__.py:10`、`Dockerfile.jiangxi-runtime:95-96`）——构建门会响亮失败（非静默带病），属悬置 GPU 链的决策项，解押时二选一对齐。
 
 ---
