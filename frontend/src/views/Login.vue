@@ -58,15 +58,23 @@ export default {
       },
     };
   },
-  created() {
-    // 会话过期跳转携带 reason（/#/login?reason=expired&redirect=...），
-    // 这里是它的唯一消费者：给出明确文案而不是让用户面对无解释的登录页。
-    const reason = String(this.$route?.query?.reason || "").trim();
-    if (reason === "expired") {
-      this.sessionNotice = "登录已过期，请重新登录";
-    } else if (reason) {
-      this.sessionNotice = "登录状态已失效，请重新登录";
-    }
+  watch: {
+    // reason 必须响应式消费：已在登录页时迟到的 401 会经 redirectToLegacyLogin
+    // 重写 query（/#/login → /#/login?reason=expired&redirect=...），组件
+    // 不会重建，只在 created 读一次会丢失提示（immediate 兼顾首跳场景）。
+    "$route.query.reason": {
+      immediate: true,
+      handler(reason) {
+        const value = String(reason || "").trim();
+        if (value === "expired") {
+          this.sessionNotice = "登录已过期，请重新登录";
+        } else if (value) {
+          this.sessionNotice = "登录状态已失效，请重新登录";
+        } else {
+          this.sessionNotice = "";
+        }
+      },
+    },
   },
   methods: {
     async submitLogin() {

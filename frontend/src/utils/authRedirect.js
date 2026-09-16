@@ -12,9 +12,15 @@ export function redirectToLegacyLogin(reason = "") {
   if (typeof window === "undefined") return;
 
   const hashRoute = currentHashRoute();
+  const [pathname = "", search = ""] = hashRoute.split("?");
 
-  const params = new URLSearchParams();
-  if (hashRoute && !hashRoute.startsWith("/login")) {
+  // 已在 /#/login 时迟到的 401 再次跳转必须合并既有 query（保留 redirect
+  // 等参数，只叠加/刷新 reason），不能从零重建参数表把 redirect 覆盖丢失。
+  const params = pathname.startsWith("/login")
+    ? new URLSearchParams(search)
+    : new URLSearchParams();
+
+  if (hashRoute && !pathname.startsWith("/login")) {
     params.set("redirect", hashRoute);
   }
   if (reason) {

@@ -149,6 +149,7 @@ function upload(type, funUrl) {
         let failedCount = 0;
         let failedRequestCount = 0;
         const errorMessages = [];
+        const backendMessages = [];
         settledResults.forEach((settled) => {
           if (settled.status === 'rejected') {
             failedRequestCount += 1;
@@ -159,6 +160,12 @@ function upload(type, funUrl) {
           }
           const resp = settled.value;
           const payload = resp?.data?.data || {};
+          // no_features 语义透传：后端对该状态返回 success_api 且携带 message
+          // （如 "No usable polygons in KML"），必须拼进失败提示，
+          // 让用户能区分「KML 无可用图斑」与推理异常
+          if (payload.message) {
+            backendMessages.push(String(payload.message));
+          }
           const failedTiles = payload.failed_tiles || [];
           if (Array.isArray(failedTiles) && failedTiles.length > 0) {
             failedCount += failedTiles.length;
@@ -179,7 +186,9 @@ function upload(type, funUrl) {
             const beforeUrl = `${global.BASEURL}api/analysis/kml_roi_output/${identityPath}/${mapFid}+${roiYear}_src.png`;
             flashCards.push({
               id: seq++,
-              record_id: `${tbbh}|${mapFid}|${name}`,
+              // 契约冻结：record_id 为 2 段式 `${tbbh}|${name}`，与后端
+              // /api/analysis/kml_roi_history/item 删除接口的 split("|", 1) 对齐
+              record_id: `${tbbh}|${name}`,
               type: '地物分类',
               before_img: beforeUrl,
               after_img: afterUrl,
@@ -203,7 +212,10 @@ function upload(type, funUrl) {
             this.$message.success("Flash 推理完成");
           }
         } else {
-          const detail = errorMessages[0] ? `：${errorMessages[0].slice(0, 120)}` : "";
+          // 后端语义 message（no_features）优先于切片错误，帮用户区分
+          // 「KML 无可用图斑」与推理异常
+          const detailSource = backendMessages[0] || errorMessages[0];
+          const detail = detailSource ? `：${String(detailSource).slice(0, 120)}` : "";
           const failureMessage = `Flash 推理失败，未生成任何结果${detail}`;
           this.$message.error(failureMessage);
           setAnalysisRunState(this, 'error', failureMessage);

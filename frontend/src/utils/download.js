@@ -30,6 +30,14 @@ function downloadimgWithWords(index, src, funtype) {
       ele.remove();
       // 下载已触发，释放 object URL
       window.URL.revokeObjectURL(url);
+    })
+    .catch((err) => {
+      // 失败必须可见：此前整条 fetch 链无 catch，断网/404 时静默 unhandled
+      // rejection，用户点了下载毫无反馈（本函数经 ImgShow 以组件方法调用，
+      // this 为组件实例；兜底 ?. 防止脱离实例调用时二次抛错）
+      this?.$message?.error?.(
+        `下载失败！${err?.message ? `（${String(err.message).slice(0, 80)}）` : ""}`
+      );
     });
 }
 function getImgArrayBuffer(url) {
