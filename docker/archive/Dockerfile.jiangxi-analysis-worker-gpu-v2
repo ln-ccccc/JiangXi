@@ -1,0 +1,197 @@
+# =============================================================================
+# JiangXi GPU analysis worker v2 —— 自包含重建定义（2026-09-16 编写，未构建）
+#
+# 【目的】重建 GPU 交付链的中间层：jiangxi-inference-worker(v2) → 本镜像 →
+# geoview-jiangxi:jiangxi-gpu*（standalone 构建以本镜像为 JIANGXI_BASE_IMAGE 与
+# JIANGXI_GPU_COMPAT_IMAGE）。上游依赖全部参数化：
+#   - ARG JIANGXI_INFERENCE_IMAGE：v2 推理底座（Dockerfile.jiangxi-inference-gpu-v2
+#     的构建产物），默认 tag jiangxi-inference-worker:gpu-v2；
+#   - ARG JIANGXI_REBUILT_RUNTIME_IMAGE：从源码重建的 CPU 底座
+#     jiangxi-runtime:rebuilt-20260915（并行批次产出），替代归档 v1 里的
+#     jiangxi-runtime:current（含云南 30 层死重的七月旧底座）。
+# 重建手册、验收门与风险清单见同目录 README-rebuild-gpu.md。
+#
+# 【相比归档 v1（Dockerfile.jiangxi-analysis-worker-gpu，产物 71f55653f308）的差异】
+# 1. 上游 FROM jiangxi-inference-worker:gpu 换为 ARG 参数化的 v2 推理底座。
+#    v1 的传递依赖 geoview-inference-worker:current 已消失，v1 整链不可重建；
+#    v2 底座可从第三方公共镜像 nvidia/cuda:12.8.0-devel-ubuntu22.04 直接重建。
+# 2. 包搬运阶段的来源从 jiangxi-runtime:current（云南血统）换成
+#    jiangxi-runtime:rebuilt-20260915（源码重建版），搬运意图与 v1 完全一致：
+#    从 conda MMSeg310 环境拷 10 个站点包目录进 /opt/venv（flask_cors、
+#    flask_migrate、flask_marshmallow、marshmallow、marshmallow_sqlalchemy、
+#    alembic、mako、openpyxl、skimage、sqlparse）。与 v1 相同，只拷包目录、
+#    不拷 dist-info（importlib.metadata 看不见它们，但 import 可用——2026-09-16
+#    在 v1 现役镜像实测确认该行为，v2 刻意保持一致，避免行为漂移）。
+# 3. 修补逻辑（mmcv 版本号 sed、mmengine PYTHON_ROOT_DIR sed）与 v1 逐字相同，
+#    见下方对应注释；v2 额外增加了修补后的断言验证。
+# 4. v2 底座自带江西模型源码树（/app/backend/model/jiangxi/dinov3_swinV1），
+#    因此本镜像构建期可以（且必须）用 vendored mmseg 做 import 验证——这是
+#    对 v1 的增强：v1 只拷了 model.pth，venv 里 import mmseg 会落到
+#    site-packages 1.2.2 并触发版本断言失败（2026-09-16 实测）。
+#
+# 【AGENTS §7 关键约束（重建时不得省略任何一条）】
+# a. mmcv 的 _ext 原生扩展绝不可跨基础镜像复制：把现役镜像的 mmcv .so 拷进
+#    jiangxi-runtime:gpu 会触发 GLIBC_2.32 崩溃。本镜像的 mmcv _ext 与 venv 的
+#    glibc/CUDA/torch 栈同源（都来自 v2 推理底座的同一构建），无跨镜像搬运。
+# b. 只认包名不算数：必须 `from mmcv.ops import nms` 且至少一次真实 CUDA 推理
+#    才算验收（构建期做前者，--gpus all 真实推理见 README 验收门）。
+#    jiangxi-runtime:gpu 原始 mmcv 2.2.0 _ext 与 Torch ABI 不兼容的前科即由此
+#    发现路径暴露。
+# c. 最终可用组合（2026-09-08 结论）＝ analysis-worker 的 glibc/系统层 +
+#    runtime 侧的 MMSeg310 conda 环境 + analysis-worker 的 mmcv 原生扩展。
+#    本 Dockerfile 产出的正是其中"系统层 + mmcv 扩展"这一环。
+#
+# 【为什么必须保留 mmcv 2.1.0 → 2.2.0 的版本号 sed】
+# venv 里真实可用的 mmcv 二进制是 2.1.0（对 torch 2.7.0+cu128 ABI 匹配），
+# 但江西 vendored mmseg 1.1.2（backend/model/jiangxi/dinov3_swinV1/mmseg/
+# __init__.py）的导入断言要求 MMCV >= 2.2.0 且 < 2.3.0（MMCV_MIN='2.2.0'，
+# MMCV_MAX='2.3.0'）——这就是归档 v1 注释所说的 "source tree's mmcv>=2.2
+# guard" 的实体。把 mmcv 的 version.py 报告值改为 2.2.0 是让 vendored mmseg
+# 接受该二进制的最小手段；mmdet 3.3.0 对 mmcv<2.2.0 的上限修补则由现役
+# docker/standalone/Dockerfile.jiangxi 负责（sed 成 2.3.0，契约测试
+# docker/tests/test_source_isolation.py 钉死该行为）。
+# 副作用（如实记录）：sed 后 venv 内 site-packages 的 mmseg 1.2.2（上限 2.2.0
+# 不含）导入会断言失败；v1 因此在验收命令里不 import mmseg。v2 因 vendored 树
+# 在 PYTHONPATH 上优先，import mmseg 落到 vendored 1.1.2（2.2.0<=2.2.0<2.3.0
+# 通过），可以在构建期验证。
+#
+# 【对下游 standalone 构建的契约（不可破坏）】现役 docker/standalone/
+# Dockerfile.jiangxi 按字面路径拷贝本镜像的
+# /opt/venv/lib/python3.10/site-packages/mmcv 与 mmcv-2.1.0.dist-info，
+# backend/test_jiangxi_gpu_contract.py 断言这两个路径存在。因此本镜像必须：
+# venv 是 python3.10、mmcv 以 2.1.0 dist-info 落盘、version.py 报告 2.2.0。
+# 若未来想改用真实 mmcv 2.2.0（openmmlab cu128/torch2.7 预编译 wheel），必须
+# 同步修改 standalone Dockerfile 与两个契约测试，属独立变更，不得在本文件顺手做。
+#
+# 【入口说明】ENTRYPOINT 沿用归档 v1 的 start-analysis-worker-gpu.sh（本目录
+# 已归档副本）。如实记录：该脚本 exec 的 /app/backend/analysis_worker.py 与
+# 其依赖的 MySQL 等待逻辑均已从现行代码剔除（复审 E 批清理；GPU standalone
+# 按约定走 SQLite），本镜像的默认入口只保留 v1 语义，真正被消费的方式是作为
+# standalone GPU 构建的基础镜像（standalone 自带 ENTRYPOINT 并会剔除本脚本）。
+# HEALTHCHECK 因此按 /proc/1/cmdline 形态检查 analysis_worker.py——仅当独立
+# 运行 worker 入口被复活时才有意义（v1 继承的是检查 run_inference_worker.py
+# 的错配探针，v2 修正为与本镜像入口一致的目标名）。
+# =============================================================================
+# syntax=docker/dockerfile:1
+
+# v2 推理底座（先构建 Dockerfile.jiangxi-inference-gpu-v2 并打上此 tag）。
+ARG JIANGXI_INFERENCE_IMAGE=jiangxi-inference-worker:gpu-v2
+# 从源码重建的 CPU 底座（并行批次产出；包搬运阶段只读，不会反向写入）。
+ARG JIANGXI_REBUILT_RUNTIME_IMAGE=jiangxi-runtime:rebuilt-20260915
+
+FROM ${JIANGXI_REBUILT_RUNTIME_IMAGE} AS rebuilt-runtime
+
+FROM ${JIANGXI_INFERENCE_IMAGE}
+
+USER root
+
+ENV PATH=/opt/venv/bin:${PATH} \
+    PYTHONPATH=/app/backend/model/jiangxi/dinov3_swinV1:/app/backend \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    ANALYSIS_WORKER_NAME=gpu-inference
+
+# v1 对齐：从重建 CPU 底座的 conda MMSeg310 拷出队列/导出用小包（仅包目录，
+# 无 dist-info；来源镜像缺任一目录时 COPY 直接失败，即为前置检查）。
+# 假定重建底座保持 /opt/conda/envs/MMSeg310/lib/python3.10/site-packages 布局
+# （与现役 CPU/GPU 底座一致）；构建前可用 README 第 3 节的 preflight 命令确认。
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/flask_cors \
+    /opt/venv/lib/python3.10/site-packages/flask_cors
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/flask_migrate \
+    /opt/venv/lib/python3.10/site-packages/flask_migrate
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/flask_marshmallow \
+    /opt/venv/lib/python3.10/site-packages/flask_marshmallow
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/marshmallow \
+    /opt/venv/lib/python3.10/site-packages/marshmallow
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/marshmallow_sqlalchemy \
+    /opt/venv/lib/python3.10/site-packages/marshmallow_sqlalchemy
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/alembic \
+    /opt/venv/lib/python3.10/site-packages/alembic
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mako \
+    /opt/venv/lib/python3.10/site-packages/mako
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/openpyxl \
+    /opt/venv/lib/python3.10/site-packages/openpyxl
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/skimage \
+    /opt/venv/lib/python3.10/site-packages/skimage
+COPY --from=rebuilt-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/sqlparse \
+    /opt/venv/lib/python3.10/site-packages/sqlparse
+
+# 与 v1 逐字相同的 mmcv 版本号修补（理由见文件头）：真实二进制 2.1.0、
+# dist-info 保持 mmcv-2.1.0（standalone 契约按名拷贝），version.py 报告 2.2.0
+# 以满足 vendored mmseg 的 MMCV>=2.2.0 导入断言。
+RUN sed -i "s/__version__ = '2.1.0'/__version__ = '2.2.0'/" \
+    /opt/venv/lib/python3.10/site-packages/mmcv/version.py \
+    && python -c "import mmcv; assert mmcv.__version__ == '2.2.0', mmcv.__version__" \
+    && test -d /opt/venv/lib/python3.10/site-packages/mmcv-2.1.0.dist-info
+
+# 与 v1 逐字相同的 mmengine 修补：MMEngine 用 sys.executable 前缀判断标准库
+# 归属，venv 位于 /opt/venv 而标准库在 /usr/lib，会把 ``import os`` 误判为
+# 懒加载第三方导入；改为显式 /usr 根（v2 底座同为 Ubuntu 22.04 系统 python3.10
+# + /opt/venv 布局，该问题原样存在）。相比 v1 增加修补后断言，防止 sed
+# 因上游行变更而静默失效。
+RUN sed -i "s#PYTHON_ROOT_DIR = osp.dirname(osp.dirname(sys.executable))#PYTHON_ROOT_DIR = '/usr'#" \
+    /opt/venv/lib/python3.10/site-packages/mmengine/config/utils.py \
+    && grep -q "PYTHON_ROOT_DIR = '/usr'" \
+       /opt/venv/lib/python3.10/site-packages/mmengine/config/utils.py
+
+# v1 对齐：入口脚本采用本目录的归档副本（主树 docker/ 下已无此文件）；
+# wait-for-mysql.py 是其运行依赖，从主树 docker/ 一并带入。
+COPY docker/archive/start-analysis-worker-gpu.sh /app/docker/start-analysis-worker-gpu.sh
+COPY docker/wait-for-mysql.py /app/docker/wait-for-mysql.py
+
+# 构建期验证（AGENTS §7 约束 b 的构建侧）：
+# 1. from mmcv.ops import nms —— 原生扩展真实加载，不是包名检查；
+# 2. torch CUDA 线断言 12.8（与底座钉死的 cu128 一致）；
+# 3. import mmseg 落到 vendored 1.1.2（PYTHONPATH 优先），验证 sed 后的
+#    mmcv 2.2.0 报告值能被江西 vendored 树接受（v1 做不到这一点）。
+# 注意：conda 拷入的 10 个包（openpyxl/skimage/flask_cors 等）在这里只验证
+# 目录落盘，不做 import 验证——它们的传递依赖（et_xmlfile、scipy、networkx
+# 等）只存在于最终交付镜像的 conda 环境，venv 里本来就不完整，v1 同样如此。
+# 这些包的完整可用性由链级验收门（最终镜像容器内单测）覆盖。
+# 真实 CUDA 推理验证（--gpus all）属于 README 验收门，无法在构建期完成。
+RUN chmod 0755 /app/docker/start-analysis-worker-gpu.sh \
+    && test -d /opt/venv/lib/python3.10/site-packages/flask_cors \
+    && test -d /opt/venv/lib/python3.10/site-packages/openpyxl \
+    && test -d /opt/venv/lib/python3.10/site-packages/skimage \
+    && python - <<'PY'
+import importlib.metadata as metadata
+import sys
+
+import torch
+
+assert torch.version.cuda == "12.8", torch.version.cuda
+assert tuple(int(part) for part in metadata.version("mmcv").split(".")[:2]) >= (2, 1)
+
+import mmcv  # noqa: E402
+import mmengine  # noqa: E402
+import mmseg  # noqa: E402
+
+assert mmcv.__version__ == "2.2.0", mmcv.__version__
+assert mmseg.__file__.startswith("/app/backend/model/jiangxi/dinov3_swinV1"), mmseg.__file__
+assert mmseg.__version__ == "1.1.2", mmseg.__version__
+
+from mmcv.ops import nms  # noqa: E402,F401
+
+print(
+    "JiangXi CUDA worker v2:",
+    "python", sys.version.split()[0],
+    "/ torch", torch.__version__,
+    "/ cuda", torch.version.cuda,
+    "/ mmcv binary", metadata.version("mmcv"), "reporting", mmcv.__version__,
+    "/ mmengine", mmengine.__version__,
+    "/ vendored mmseg", mmseg.__version__,
+)
+PY
+
+# /proc/1/cmdline 形态的健康检查（对齐 v1 镜像继承的探针形态，目标改为本镜像
+# 入口实际 exec 的 analysis_worker.py；该入口当前无对应源码，见文件头说明）。
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD ["/opt/venv/bin/python", "-c", "from pathlib import Path; assert 'analysis_worker.py' in Path('/proc/1/cmdline').read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace')"]
+
+ENTRYPOINT ["/bin/bash", "/app/docker/start-analysis-worker-gpu.sh"]
+
+LABEL org.opencontainers.image.title="JiangXi GPU analysis worker (v2, self-contained)" \
+      io.jiangxi.python.version="3.10" \
+      io.jiangxi.torch.version="2.7.0+cu128" \
+      io.jiangxi.mmcv.version="2.1.0-binary-reporting-2.2.0" \
+      io.jiangxi.base-lineage="nvidia/cuda:12.8.0-devel-ubuntu22.04"
