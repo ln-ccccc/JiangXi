@@ -251,6 +251,39 @@ GPU 镜像重建必须使用本节原样参数（JIANGXI_BASE_IMAGE=jiangxi-anal
   血统透明说明（2026-09-15）中"环境级完全独立需从源码重建底座"一项就此闭环；
   GPU 链 venv 的同类重建仍属后续决策项。
 
+2026-09-16 第二轮全面审查与修复收尾（审查报告 docs/code-review-20260916.md，含
+P2-16 更正注记）：对 fix/code-review-20260914 @ 2f664bd 以来 41 个修复提交做
+回归审查 + 全项目扫描（4 路并行子代理 + 主控亲验），结论 0 P0 / 4 P1 / 15 P2；
+4 路修复代理（fix/r2-backend/frontend/miner/infra worktree 分支，文件所有权
+互斥 + 契约冻结）零冲突合入本分支。要点：
+- **P1×4 全修**：project.py 8 端点 ValueError 收口补齐；kml_update 死键按用户
+  裁决删除（miner 透传与前端死分支清零，防回潮测试在位）；py3.10 语法守卫改
+  真实 3.10 子进程编译（原 feature_version 假绿，PEP 701 后 3.12+ 宿主拦不住
+  f-string 嵌套同类引号）+ 守卫元测试；static-server 请求目标收口（绝对/协议
+  相对 URL 劫持 → 400，双层防护 + 真实子进程回归三例）。
+- **审查误报更正**：GEOVIEW_BACKEND_URL 并非死键（authBackend/projectBackend
+  以其为后端 base URL，compose:117 是唯一正确取值来源），entrypoint 恢复原行
+  （0241a21）并补防误删注释；跨辖区正名 MINER_BACKEND_BASE_URL 记为后续决策项。
+- **P2 全清**（排除项除外）：KML 合并挪入推理锁 + 原子写（锁 fd 经 --lock_fd
+  传子进程复用）、kml_roi 子进程孤儿收口、cleanup 保留集补 _vN 变体、预处理
+  尺寸阈值防护、record_id 冻结 2 段式（前端生产端 + 后端容错解析）、启动链
+  子进程超时、kml-roi 500 收敛固定文案、fetch 超时分级、CRLF 守卫移位+glob 化、
+  healthcheck 一致性守卫、主题校验基准表修正（test:ui 孤儿门恢复绿）等。
+- **验收（2026-09-16）**：miner 103 测试绿 + verify 全链、前端 build + 契约
+  测试 + smoke + test:ui 绿、docker 测试 53 绿；镜像 `geoview-jiangxi:jiangxi-
+  gpu-20260916-fixes`（stable 标签未动）。镜像内权威门：fresh 容器全量单测
+  191 OK（1 skip 为 Windows 降级用例）；battery 容器（--gpus + 种子卷
+  jiangxi-runtime-battery-20260916）资产 348 PASS、/static 匿名 401、未知路由
+  404、SSRF 绝对/协议相对 URL 均 400 且正常转发 200、001 对推理连续双跑
+  completed（cuda:0 冷 32.2s/暖 10.6s、零失败瓦片）、并发第二请求 409、
+  prehandle=2+denoise=5 组合 completed、cleanup _vN 保留集演练 PASS。
+  容器 `geoview-jiangxi-gpu-20260916-battery` 停止保留作验收载体。
+- 新教训入 testing_playbook T26–T30（修复声明对照、解释器实测守卫、EOL 门
+  分裂与 CR 计数假象、死键裁决取证、验证车辆形态匹配）。
+- 后续决策项：stable 标签指向与运行容器切换（用户验收后）；MINER_BACKEND_BASE_URL
+  正名；历史 CRLF blob 批量 renormalize（T28 排查，需先复核测量）；GPU 链
+  mmcv 2.1.0 vs 护栏 2.2.0 矛盾（随 GPU 链解押一并处理）。
+
 ## 5. 必跑验证
 
 后端单测必须在**与镜像一致的解释器**里跑（2026-09-09 教训：宿主机三个 Python
