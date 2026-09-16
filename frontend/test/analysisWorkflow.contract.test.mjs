@@ -44,7 +44,11 @@ test("两类分析页都呈现江西同步四步工作流", () => {
     assert.match(source, /同步分析/);
   }
   assert.match(segmentation, /VUE_APP_JIANGXI_INFERENCE_DEVICE/);
-  assert.match(spectral, />CPU</);
+  // 设备徽章必须随部署环境注入动态展示（曾硬编码 CPU 且被本断言锁死，
+  // GPU 部署下与 RunPanel 互相矛盾），两页与 getUploadImg 同源
+  assert.match(spectral, /VUE_APP_JIANGXI_INFERENCE_DEVICE/);
+  assert.match(spectral, /\{\{\s*inferenceDevice\s*\}\}/);
+  assert.doesNotMatch(spectral, />CPU</);
 });
 
 test("工作流保持江西同步链路并使用容器设备配置", () => {

@@ -12,7 +12,7 @@
         <div class="workflow-badges" aria-label="运行配置">
           <span>江西</span>
           <span>同步分析</span>
-          <span>CPU</span>
+          <span>{{ inferenceDevice }}</span>
         </div>
       </template>
     </Tabinfor>
@@ -257,7 +257,12 @@ export default {
         green: 2,
         swir: 5
       },
-      sessionRefreshTimer: null
+      sessionRefreshTimer: null,
+      // 设备徽章与 Segmentation/RunPanel 同源：随部署环境注入的推理设备展示，
+      // 不做自动回退（契约：无 auto、非法值由后端拒绝）
+      inferenceDevice: String(process.env.VUE_APP_JIANGXI_INFERENCE_DEVICE || 'cpu')
+        .trim()
+        .toLowerCase()
     };
   },
   created() {
