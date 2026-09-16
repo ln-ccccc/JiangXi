@@ -206,16 +206,46 @@ GPU 镜像重建必须使用本节原样参数（JIANGXI_BASE_IMAGE=jiangxi-anal
   ENV 步骤产生的 0 字节通用空层，任何镜像都含它；镜像内 167 单测全绿、
   资产校验 348 PASS）；
   替换现役底座属跨交付变更，须用户确认后另行推进，替换前旧底座与新底座并存。
-- **测试/验证车辆区分规则（2026-09-15 起强制）**：江西侧的一切容器内验证只允许用
-  江西自己的镜像——CPU 侧用 `geoview-jiangxi:cpu-20260915-decoupled`（squash 底座，
-  主树代码卷挂载跑法同 §5，167 单测已在该镜像内复验全绿），GPU 侧用已验收的
-  `jiangxi-gpu-20260915-recheck` / 运行容器 `geoview-jiangxi-gpu-recheck`；
-  **旧 `cpu-20260910-ui`/`cpu-20260914-fixes` 系底座为云南血统（底层即云南 runtime
-  30 层），只作历史回退，不再用作验证车辆**。云南侧验证一律用 `yunnan-runtime:current`
-  （跑法见云南仓库 docs/development-standard.md §7）。两项目镜像严禁混用。
-  血统透明说明：squash/解耦只消除了共享层存储，镜像内的 conda/venv 运行环境内容
-  仍源自七月隔离前的云南构建（GPU 链的 venv 亦混有该 conda 的包）；要做到环境级
-  完全独立，需以归档 Dockerfile+导出的环境清单从源码重建底座，属后续决策项。
+- **测试/验证车辆区分规则（2026-09-16 更新）**：江西侧的一切容器内验证只允许用
+  江西自己的镜像——CPU 侧用 `geoview-jiangxi:cpu-20260915-rebuilt`（从源码重建的
+  自有底座，见下方 2026-09-16 记录；主树代码卷挂载跑法同 §5，167 单测已在该镜像内
+  全绿），GPU 侧用已验收的 `jiangxi-gpu-20260915-recheck` / 运行容器
+  `geoview-jiangxi-gpu-recheck`；`cpu-20260915-decoupled`（squash 底座）降级为
+  二线回退；**旧 `cpu-20260910-ui`/`cpu-20260914-fixes` 系底座为云南血统（底层即
+  云南 runtime 30 层），只作历史回退，不再用作验证车辆**。云南侧验证一律用
+  `yunnan-runtime:current`（跑法见云南仓库 docs/development-standard.md §7）。
+  两项目镜像严禁混用。
+
+### 4.2 从源码重建的自有底座（2026-09-16 产出）
+
+- 已产出并验收（定义文件均已入库，构建手册 `docker/scripts/rebuild-runtime.md`，
+  含命令、耗时实测、实测坑与离线替代方案）：
+  1. `jiangxi-runtime:rebuilt-20260915`（80f79a74aec3，5.76GB，13 层）——
+     `docker/Dockerfile.jiangxi-runtime`：ubuntu:20.04 + Miniconda + MMSeg310
+     （清单 `docker/runtime-env/`，源自 squashed 底座 2026-09-15 导出）+ /opt/node20
+     （node v20.19.0 / npm 10.8.2）+ miner 两个 Linux 原生 npm 包
+     （@rollup/rollup-linux-x64-gnu、@esbuild/linux-x64，版本随 package-lock.json）。
+  2. `jiangxi-gpu-compat:shim`——`docker/Dockerfile.jiangxi-gpu-compat-shim`：
+     CPU 构建专用占位（Dockerfile.jiangxi 无条件 COPY 的 /opt/venv mmcv 两条路径），
+     严禁用于 GPU 构建。
+  3. `geoview-jiangxi:cpu-20260915-rebuilt`（3268bd170b13，14.7GB，28 层）——
+     Dockerfile.jiangxi 原样、三个 ARG 指向 rebuilt 底座 + shim。
+- 验收（全部真跑）：镜像内 167 单测 OK（卷挂载跑法同 §5）；资产校验
+  Excel/SHP/KMZ 348/348/348、交集 348、重复 0、PASS；行为探测未登录
+  /static/upload 401、未知路由 404；构建门含 `from mmcv.ops import nms` 与
+  node/npm 版本钉死。
+- 独立性：与 `yunnan-runtime:current` 的层交集仅 2 个内容中立层（ubuntu:20.04
+  官方层 + ENV 0 字节通用空层），与 `squashed-20260915` 交集 0；FS 抽查与镜像
+  ENV 均无云南残留（旧底座 ENV 携带的 MYSQL 凭据/大理 TIF 路径不再进入新底座）。
+- 环境 diff（vs squashed 底座）：conda 包集合与版本/构建串差异 0；pip 版本错配 0；
+  唯一形态差异：mmsegmentation 由指向已消失云南旧路径的 editable 安装变为 PyPI
+  正式安装（运行时生效的 mmseg 一直是 PYTHONPATH=JIANGXI_MMSEG_SOURCE_ROOT 指向的
+  dinov3_swinV1 fork 源码树，行为不变）；底座构建中对 mmseg/mmdet 的 mmcv 版本
+  护栏 sed 放宽与 Dockerfile.jiangxi 既有 mmdet 放宽同类。
+- 旧底座关系：`jiangxi-runtime:current` / `squashed-20260915` 及全部既有交付镜像
+  保留不动；以 rebuilt 底座替换现役交付链属跨交付变更，须用户确认后另行推进。
+  血统透明说明（2026-09-15）中"环境级完全独立需从源码重建底座"一项就此闭环；
+  GPU 链 venv 的同类重建仍属后续决策项。
 
 ## 5. 必跑验证
 

@@ -1,0 +1,88 @@
+# 江西平台 MMSeg310 pip 包清单（从源码重建底座用）
+# 来源：2026-09-15 自 jiangxi-runtime:squashed-20260915 (b64b90e5305c) 容器内
+#       `conda env export -n MMSeg310` 的 pip 段（等价于激活后 pip freeze 的 PyPI 可解析子集；
+#       原始 pip freeze 见 MMSeg310.pip-freeze.raw.txt）。
+# 清洗说明：
+#   - 原环境 mmsegmentation 1.1.2 为 editable 安装且指向已不存在的云南旧路径
+#     (/app/backend/model/mmseg_config/dinov3_swinV1)，此处归一为 PyPI 版本钉子；
+#     运行时真实生效的 mmseg 代码仍由 JIANGXI_MMSEG_SOURCE_ROOT(经 PYTHONPATH)指向的
+#     /app/backend/model/jiangxi/dinov3_swinV1 fork 源码树覆盖（与现行为一致）。
+#   - GDAL/packaging 由 conda 提供（原 freeze 中为 file:// 本地路径条目），不在本清单。
+# 专用索引（安装命令见 Dockerfile.jiangxi-runtime）：
+#   - torch==2.2.2+cpu / torchvision==0.17.2+cpu -> https://download.pytorch.org/whl/cpu
+#   - mmcv==2.2.0（含编译 ops 的 CPU 轮子）-> https://download.openmmlab.com/mmcv/dist/cpu/torch2.2/index.html
+addict==2.4.0
+affine==2.4.0
+alembic==1.18.4
+attrs==26.1.0
+certifi==2026.5.20
+cffi==2.0.0
+click==8.4.1
+click-plugins==1.1.1.2
+cligj==0.7.2
+contourpy==1.3.2
+cryptography==48.0.0
+cycler==0.12.1
+et-xmlfile==2.0.0
+filelock==3.29.0
+flask==2.2.2
+flask-cors==3.0.10
+flask-marshmallow==0.14.0
+flask-migrate==3.1.0
+flask-sqlalchemy==2.5.1
+fonttools==4.63.0
+fsspec==2026.4.0
+greenlet==3.5.1
+gunicorn==26.0.0
+imageio==2.37.3
+itsdangerous==2.2.0
+jinja2==3.1.6
+kiwisolver==1.5.0
+lazy-loader==0.5
+mako==1.3.12
+markdown-it-py==4.2.0
+markupsafe==3.0.3
+marshmallow==3.18.0
+marshmallow-sqlalchemy==0.28.1
+matplotlib==3.10.9
+mdurl==0.1.2
+mmcv==2.2.0
+mmdet==3.3.0
+mmengine==0.10.4
+mmsegmentation==1.1.2
+mpmath==1.3.0
+networkx==3.4.2
+numpy==1.26.4
+opencv-python==4.10.0.84
+openpyxl==3.1.5
+pillow==12.2.0
+platformdirs==4.10.0
+prettytable==3.17.0
+pycocotools==2.0.11
+pycparser==3.0
+pygments==2.20.0
+pymysql==1.2.0
+pyparsing==3.3.2
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.2
+pyyaml==6.0.3
+rasterio==1.4.4
+rich==15.0.0
+scikit-image==0.25.2
+scipy==1.15.3
+shapely==1.8.5.post1
+six==1.17.0
+sqlalchemy==1.4.46
+sqlparse==0.5.5
+sympy==1.14.0
+termcolor==3.3.0
+terminaltables==3.1.10
+tifffile==2025.5.10
+tomli==2.4.1
+torch==2.2.2+cpu
+torchvision==0.17.2+cpu
+tqdm==4.67.3
+typing-extensions==4.15.0
+wcwidth==0.7.0
+werkzeug==2.2.3
+yapf==0.43.0
