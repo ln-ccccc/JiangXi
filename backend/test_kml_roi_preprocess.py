@@ -149,7 +149,7 @@ class ServicePreprocessWiringTests(unittest.TestCase):
         kwargs.update(overrides)
         with patch.object(
             service, "resolve_default_jiangxi_kmz", return_value=self.kml_path
-        ), patch.object(service.subprocess, "run", side_effect=fake_run):
+        ), patch.object(service, "_run_subprocess_with_cleanup", side_effect=fake_run):
             service.run_kml_roi_inference(**kwargs)
         return commands
 
@@ -228,6 +228,49 @@ class ServicePreprocessWiringTests(unittest.TestCase):
         self.assertEqual(
             self._cmd_value(command, "--old_tif"), self._cmd_value(command, "--new_tif")
         )
+
+
+class PreprocessSizeGuardTests(unittest.TestCase):
+    """2026-09-16 审查 P2-5 回归：超阈值输入在整图读内存之前以 ValueError 拒绝。
+
+    预处理在 Flask 请求线程内经 read_tiff_as_rgb 整图读内存（两份全图副本 +
+    全尺寸 PNG 往返）。超 MAX_TIFF_SIZE_MB 的输入必须在触碰内存/磁盘前拒绝，
+    由端点 except ValueError 映射 400 明确报错。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="kml-roi-preprocess-size-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.tif = Path(self.tmp) / "small.tif"
+        self.tif.write_bytes(b"tiny tif bytes")
+        self.base_dir = Path(self.tmp) / "pre"
+
+    def test_oversized_input_rejected_before_memory_or_disk_touch(self):
+        # 阈值 patch 为 0 使小文件即超限（免造 500MB 真文件）：
+        # 断言 ValueError 报文明确，且未创建任何预处理目录（拒绝发生在最前）
+        with patch.object(preprocess_module, "MAX_TIFF_SIZE_MB", 0):
+            with self.assertRaises(ValueError) as ctx:
+                preprocess_module.preprocess_tif_for_inference(
+                    self.tif, self.base_dir, prehandle=2, denoise=3
+                )
+        self.assertIn("超过上限", str(ctx.exception))
+        self.assertIn("预处理输入影像过大", str(ctx.exception))
+        self.assertFalse(self.base_dir.exists())
+
+    def test_zero_steps_skip_size_check_entirely(self):
+        # prehandle=denoise=0 默认路径零行为变化：不检查尺寸、不触碰文件系统
+        with patch.object(preprocess_module, "MAX_TIFF_SIZE_MB", 0):
+            result = preprocess_module.preprocess_tif_for_inference(
+                self.tif, self.base_dir, prehandle=0, denoise=0
+            )
+        self.assertEqual(result, self.tif)
+        self.assertFalse(self.base_dir.exists())
+
+    def test_size_threshold_reuses_read_tiff_as_rgb_limit(self):
+        # 阈值沿用 read_tiff_as_rgb 的 MAX_TIFF_SIZE_MB（单一来源，无第二常量）
+        from applications.common.utils import tiff_processor
+
+        self.assertEqual(preprocess_module.MAX_TIFF_SIZE_MB, tiff_processor.MAX_TIFF_SIZE_MB)
 
 
 class KmlRoiPreprocessApiTests(unittest.TestCase):

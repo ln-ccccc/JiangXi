@@ -1,4 +1,5 @@
 import copy
+import os
 from pathlib import Path
 from typing import Dict, Optional
 from xml.etree import ElementTree as ET
@@ -101,7 +102,16 @@ def merge_kml_increment(base_kml: Path, incoming_kml: Path, output_kml: Optional
 
     save_path = output_kml or base_kml
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    base_tree.write(save_path, encoding="utf-8", xml_declaration=True)
+    # 先写同目录临时文件再 os.replace 原子落盘：直接 write 会让并发的
+    # 推理子进程（--kml 侧）读到半截 XML。临时文件与目标同目录保证
+    # os.replace 同卷原子；异常路径清理临时文件，不残留垃圾。
+    tmp_path = save_path.with_name(f".{save_path.name}.{os.getpid()}.tmp")
+    try:
+        base_tree.write(tmp_path, encoding="utf-8", xml_declaration=True)
+        os.replace(tmp_path, save_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
     return {
         "inserted": inserted,
         "updated": updated,

@@ -34,7 +34,7 @@ class KmlRoiServiceWorkdirTests(unittest.TestCase):
                 )
 
             with patch.object(service, "resolve_default_jiangxi_kmz", return_value=kml_path), \
-                    patch.object(service.subprocess, "run", side_effect=fake_run):
+                    patch.object(service, "_run_subprocess_with_cleanup", side_effect=fake_run):
                 service.run_kml_roi_inference(
                     old_tif_path=str(tif_path),
                     new_tif_path=str(tif_path),
