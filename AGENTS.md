@@ -233,7 +233,11 @@ GPU 镜像重建必须使用本节原样参数（JIANGXI_BASE_IMAGE=jiangxi-anal
 - 验收（全部真跑）：镜像内 167 单测 OK（卷挂载跑法同 §5）；资产校验
   Excel/SHP/KMZ 348/348/348、交集 348、重复 0、PASS；行为探测未登录
   /static/upload 401、未知路由 404；构建门含 `from mmcv.ops import nms` 与
-  node/npm 版本钉死。
+  node/npm 版本钉死。**真实 CPU 推理验收（2026-09-16 补跑，§5/§5.1）**：
+  镜像起容器（cpu 设备、jx_env_cpu_20260910.env），001 对 2011→2021
+  limit=1 连续双跑均 completed、written=1（ZJ3607232021017001）、device=cpu、
+  零失败瓦片，单图斑约 337-352s（CPU 直跑含每轮模型加载，符合基线量级）；
+  验收期间并实测推理互斥生效（并发第二请求立即 409「已有任务在执行」）。
 - 独立性：与 `yunnan-runtime:current` 的层交集仅 2 个内容中立层（ubuntu:20.04
   官方层 + ENV 0 字节通用空层），与 `squashed-20260915` 交集 0；FS 抽查与镜像
   ENV 均无云南残留（旧底座 ENV 携带的 MYSQL 凭据/大理 TIF 路径不再进入新底座）。
