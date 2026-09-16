@@ -15,7 +15,7 @@ from typing import Tuple
 import cv2
 import rasterio
 
-from applications.common.utils.tiff_processor import read_tiff_as_rgb
+from applications.common.utils.tiff_processor import MAX_TIFF_SIZE_MB, read_tiff_as_rgb
 from applications.interface.analysis import handle
 
 
@@ -35,6 +35,19 @@ def preprocess_tif_for_inference(
         return tif_path
 
     tif_path = Path(tif_path)
+
+    # 尺寸防护（2026-09-16 审查 P2-5 最小版）：预处理在 Flask 请求线程内经
+    # read_tiff_as_rgb 整图读内存（两份全图副本 + 全尺寸 PNG 往返），超阈值
+    # 输入直接以业务 ValueError 拒绝（端点映射 400 明确报错），不做子进程化。
+    # 检查必须发生在任何读内存/写盘动作之前；prehandle=denoise=0 的默认路径
+    # 在上方已短路返回，不受影响。阈值沿用 read_tiff_as_rgb 的 MAX_TIFF_SIZE_MB。
+    file_size_mb = tif_path.stat().st_size / (1024 * 1024)
+    if file_size_mb > MAX_TIFF_SIZE_MB:
+        raise ValueError(
+            f"预处理输入影像过大: {file_size_mb:.1f}MB 超过上限 {MAX_TIFF_SIZE_MB}MB，"
+            "请先裁剪或降采样后再启用预处理"
+        )
+
     base_dir.mkdir(parents=True, exist_ok=True)
 
     with rasterio.open(tif_path) as src:
