@@ -179,7 +179,9 @@ function upload(type, funUrl) {
             const beforeUrl = `${global.BASEURL}api/analysis/kml_roi_output/${identityPath}/${mapFid}+${roiYear}_src.png`;
             flashCards.push({
               id: seq++,
-              record_id: `${tbbh}|${mapFid}|${name}`,
+              // 契约冻结：record_id 为 2 段式 `${tbbh}|${name}`，与后端
+              // /api/analysis/kml_roi_history/item 删除接口的 split("|", 1) 对齐
+              record_id: `${tbbh}|${name}`,
               type: '地物分类',
               before_img: beforeUrl,
               after_img: afterUrl,
