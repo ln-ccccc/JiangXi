@@ -147,14 +147,7 @@ watch(
   (val) => {
     if (val) {
       const count = val.written_tbbh_list ? val.written_tbbh_list.length : 0;
-      const kmlUpdated = Number(val?.kml_update?.updated || 0);
-      const kmlInserted = Number(val?.kml_update?.inserted || 0);
-      const changedCount = kmlUpdated + kmlInserted;
-      if (changedCount > 0) {
-        successMsg.value = `任务完成：KML 已更新矿山信息（更新 ${kmlUpdated}，新增 ${kmlInserted}），并处理 ${count} 个解译结果。`;
-      } else {
-        successMsg.value = `解译完成：成功处理 ${count} 个矿山多边形并已更新光谱指数。`;
-      }
+      successMsg.value = `解译完成：成功处理 ${count} 个矿山多边形并已更新光谱指数。`;
     }
   }
 );
