@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from openpyxl import Workbook
 
@@ -441,6 +442,66 @@ class TestProjectAPI(unittest.TestCase):
         self.assertGreaterEqual(len(detail["mines"]), 1)
         self.assertGreaterEqual(len(detail["plots"]), 1)
         self.assertEqual(detail["plots"][0]["tbbh"], "SUBJECT-1")
+
+
+    def test_project_api_validation_error_passthrough(self):
+        # 2026-09-16 审查 P1-1 回归：8 个此前只有 except Exception 兜底的端点，
+        # 业务校验 ValueError 消息必须以 400 + 原文回显，
+        # 不得被吞成通用文案「项目操作失败，请稍后重试或联系管理员」。
+        self.login_as_admin()
+
+        # create：空项目名（service 层「项目名称不能为空」）
+        response = self.client.post("/api/projects", json={"name": "   "})
+        self.assertEqual(response.status_code, 400)
+        body = self._json(response)
+        self.assertEqual(body["success"], False)
+        self.assertEqual(body["msg"], "项目名称不能为空")
+
+        # create：非法状态
+        response = self.client.post("/api/projects", json={"name": "合法名称", "status": "bogus"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self._json(response)["msg"], "项目状态不合法")
+
+        # 不存在项目：detail / update / timeline / archive / restore / export list / backup list
+        missing_id = 987654
+        expect_msg = f"项目不存在: {missing_id}"
+        endpoints = [
+            ("get", f"/api/projects/{missing_id}", None),
+            ("patch", f"/api/projects/{missing_id}", {"name": "改名"}),
+            ("get", f"/api/projects/{missing_id}/timeline", None),
+            ("post", f"/api/projects/{missing_id}/archive", {}),
+            ("post", f"/api/projects/{missing_id}/restore", {}),
+            ("get", f"/api/projects/{missing_id}/exports", None),
+            ("get", f"/api/projects/{missing_id}/backups", None),
+        ]
+        for method, url, payload in endpoints:
+            response = self.client.open(url, method=method, json=payload)
+            self.assertEqual(response.status_code, 400, url)
+            body = self._json(response)
+            self.assertEqual(body["msg"], expect_msg, url)
+
+        # update：存在项目但状态非法（「项目状态不合法」走 400 回显而非兜底文案）
+        project_id = self._json(
+            self.client.post("/api/projects", json={"name": "校验回显项目"})
+        )["data"]["id"]
+        response = self.client.patch(f"/api/projects/{project_id}", json={"status": "bogus"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self._json(response)["msg"], "项目状态不合法")
+
+        # 反向对照：泛化异常（非 ValueError）仍走兜底文案不回显原文
+        # （except Exception 兜底沿用既有 200 语义，本轮不改变）
+        import applications.api.project as project_api_module
+
+        with patch.object(
+            project_api_module,
+            "get_project_detail",
+            side_effect=RuntimeError("db exploded: secret/path"),
+        ):
+            response = self.client.get(f"/api/projects/{project_id}")
+        body = self._json(response)
+        self.assertEqual(body["success"], False)
+        self.assertEqual(body["msg"], "项目操作失败，请稍后重试或联系管理员")
+        self.assertNotIn("db exploded", body["msg"])
 
 
 if __name__ == "__main__":
