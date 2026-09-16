@@ -1,6 +1,7 @@
+import re
 import shutil
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import cv2
 import numpy as np
@@ -126,6 +127,51 @@ def scan_year_masks(fid: str, fid_dir: Path) -> List[Tuple[int, Path, Path]]:
     return out
 
 
+# 同 fid 第二图斑（F1 修复）产物的变体 stem：`{fid}+{YYYY}_vN` / `{fid}_{YYYY}_vN`
+# （年命名）与 `{fid}_{old|new}_vN`（无年命名）。parse_year 对 "2024_v2" 返回 None，
+# 这些文件不会进 scan_year_masks，统计链语义因此保持不变——但 cleanup 不得因此
+# 把它们当垃圾误删。
+_VARIANT_STEM_PATTERNS = (
+    re.compile(r"^\+(\d{4})_v\d+$"),
+    re.compile(r"^_(\d{4})_v\d+$"),
+    re.compile(r"^_(?:old|new)_v\d+$"),
+)
+
+
+def _variant_keep_names(fid: str, fid_dir: Path, kept_years: Optional[Set[int]]) -> Set[str]:
+    """清理白名单的 `_vN` 变体补充集。
+
+    kept_years 传 None 时全部保留（无年命名产物或无法判定年份的保守场景）；
+    传入保留年份集合时，年命名变体仅当年份仍在保留期内才保护，随基础年份
+    一起淘汰。
+    """
+    keep: Set[str] = set()
+    for p in fid_dir.glob(f"{fid}*_mask.png"):
+        name = p.name
+        if not name.endswith("_mask.png"):
+            continue
+        stem = name[: -len("_mask.png")]
+        if not stem.startswith(fid):
+            continue
+        tail = stem[len(fid) :]
+        matched = False
+        for pattern in _VARIANT_STEM_PATTERNS:
+            m = pattern.match(tail)
+            if not m:
+                continue
+            if kept_years is not None and m.lastindex and m.group(1) and m.group(1).isdigit():
+                if int(m.group(1)) not in kept_years:
+                    break
+            matched = True
+            break
+        if not matched:
+            continue
+        keep.add(name)
+        keep.add(f"{stem}.png")
+        keep.add(f"{stem}_src.png")
+    return keep
+
+
 def cleanup_output_dir(fid: str, fid_dir: Path, keep_last_years: int = 3) -> int:
     removed = 0
     year_masks = scan_year_masks(fid, fid_dir)
@@ -144,6 +190,10 @@ def cleanup_output_dir(fid: str, fid_dir: Path, keep_last_years: int = 3) -> int
                 "class_ratio_percent.json",
             }
         )
+        # F1 同 fid 多图斑的 _vN 变体随其年份进保留集（parse_year("2024_v2")
+        # 返回 None 不进 scan_year_masks，统计链语义不变，但清理不得误删）
+        kept_years = {y for y, _, _ in year_masks}
+        keep |= _variant_keep_names(fid, fid_dir, kept_years)
     else:
         keep.update(
             {
@@ -156,6 +206,8 @@ def cleanup_output_dir(fid: str, fid_dir: Path, keep_last_years: int = 3) -> int
                 "class_ratio_percent.json",
             }
         )
+        # 无年命名产物的保守场景：_vN 变体全部保留
+        keep |= _variant_keep_names(fid, fid_dir, None)
 
     for p in fid_dir.iterdir():
         if not p.is_file():
