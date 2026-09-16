@@ -1,6 +1,7 @@
 // 解译平台「地物分类」GUI 冒烟测试——Segmentation.vue 组件拆分的安全网。
 // 覆盖：工作流渲染 / 文件选择注入 / 预处理复选框受控化 / 年份校验 / 执行按钮状态机 / 全局导航。
-// 上传→推理的请求契约由 tests/upload-contract.test.mjs 在 Node 层覆盖。
+// 上传→推理的请求契约由 test/analysisWorkflow.contract.test.mjs 在 Node 层覆盖
+// （kmlRoiInfer 载荷 / record_id 2 段式 / no_features 透传等断言）。
 // 运行：npm run smoke（默认 4174/5178 容器在运行；
 //      起本地 dev server 时用 SMOKE_BASE_URL=http://127.0.0.1:<dev端口> 覆盖）
 import { createRequire } from 'node:module';

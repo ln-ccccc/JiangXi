@@ -5,7 +5,9 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
+    "test": "node --test test/*.test.mjs",
     "test:backend-url": "node --test test/backendUrl.test.mjs",
+    "test:download": "node --test test/download.contract.test.mjs",
     "test:navigation": "node --test test/platformNavigation.test.mjs test/tablogin.contract.test.mjs test/applicationShell.contract.test.mjs",
     "test:ui": "node scripts/verify-brand-theme.cjs",
     "test:workflow": "node --test test/analysisWorkflow.contract.test.mjs",
