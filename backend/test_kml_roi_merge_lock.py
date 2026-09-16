@@ -117,7 +117,7 @@ class ParentLockMergeTests(unittest.TestCase):
     def _run_inference(self):
         with patch.object(
             service, "resolve_default_jiangxi_kmz", return_value=self.default_kml
-        ), patch.object(service.subprocess, "run", side_effect=self._fake_run):
+        ), patch.object(service, "_run_subprocess_with_cleanup", side_effect=self._fake_run):
             return service.run_kml_roi_inference(
                 old_tif_path=str(self.tif_path),
                 new_tif_path=str(self.tif_path),
@@ -170,7 +170,7 @@ class ParentLockMergeTests(unittest.TestCase):
         # 锁仍由子进程按原语义自行获取（BFF 链路完全不受影响）。
         with patch.object(
             service, "resolve_default_jiangxi_kmz", return_value=self.default_kml
-        ), patch.object(service.subprocess, "run", side_effect=self._fake_run):
+        ), patch.object(service, "_run_subprocess_with_cleanup", side_effect=self._fake_run):
             result = service.run_kml_roi_inference(
                 old_tif_path=str(self.tif_path),
                 new_tif_path=str(self.tif_path),
@@ -181,7 +181,7 @@ class ParentLockMergeTests(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         command = self.captured[0]["command"]
         self.assertNotIn("--lock_fd", command)
-        self.assertNotIn("pass_fds", self.captured[0]["kwargs"])
+        self.assertEqual(self.captured[0]["kwargs"].get("pass_fds"), ())
         # 父锁路径未触发：全程没有创建锁文件
         self.assertFalse(self.lock_path.exists())
 
@@ -214,7 +214,7 @@ class NoFallbackLockTests(unittest.TestCase):
 
             with patch.object(
                 service, "resolve_default_jiangxi_kmz", return_value=default_kml
-            ), patch.object(service.subprocess, "run", side_effect=fake_run):
+            ), patch.object(service, "_run_subprocess_with_cleanup", side_effect=fake_run):
                 result = service.run_kml_roi_inference(
                     old_tif_path=str(tif_path),
                     new_tif_path=str(tif_path),
@@ -228,7 +228,7 @@ class NoFallbackLockTests(unittest.TestCase):
             # .kml 底座场景 merge_target=default 库本身，原子写落盘
             self.assertIn("<name>2</name>", default_kml.read_text(encoding="utf-8"))
             self.assertNotIn("--lock_fd", captured[0]["command"])
-            self.assertNotIn("pass_fds", captured[0]["kwargs"])
+            self.assertEqual(captured[0]["kwargs"].get("pass_fds"), ())
 
 
 if __name__ == "__main__":

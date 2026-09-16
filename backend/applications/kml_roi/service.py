@@ -161,6 +161,54 @@ def run_kml_roi_inference(
             parent_lock.close()
 
 
+def _terminate_proc(proc):
+    """兜底杀进程：POSIX 上整组 kill（防将来 pipeline 内再 spawn 下级进程时漏杀），
+    Windows 用 TerminateProcess 只杀直接子进程（无进程组语义）。"""
+    if os.name != "nt":
+        import signal
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            return
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+    proc.kill()
+
+
+def _run_subprocess_with_cleanup(cmd, *, timeout, cwd, pass_fds=()):
+    """subprocess.run 的孤儿安全版本（复用 mmseg_inference_caller 同款模式）。
+
+    裸 subprocess.run 在父进程（Flask worker）被 kill 时不会杀子进程：孤儿
+    kml_roi_infer.py 继续持推理 flock 最长 90 分钟，期间所有推理请求 400/409。
+    本函数任何退出路径（超时、上游异常、BFF 超时 SIGTERM 引发的 SystemExit）
+    都在 finally 里杀掉并回收子进程。pass_fds 用于 P2-2 的父进程合并锁传递。
+    """
+    popen_kwargs = {}
+    if pass_fds:
+        popen_kwargs["pass_fds"] = tuple(pass_fds)
+    if os.name != "nt":
+        # POSIX 上独立进程组，killpg 才能整组杀；Windows 忽略（无该语义）
+        popen_kwargs["start_new_session"] = True
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=cwd,
+        **popen_kwargs,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    finally:
+        # 单一收口：超时/上游异常/SystemExit 任何路径都杀掉并回收子进程
+        if proc.poll() is None:
+            _terminate_proc(proc)
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            pass
+    return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+
+
 def _run_inference_subprocess(
     *,
     old_tif_path,
@@ -206,20 +254,17 @@ def _run_inference_subprocess(
         cmd.extend(["--limit", str(int(limit))])
 
     cmd.extend(["--work_dir", work_dir])
-    popen_kwargs = {}
-    if parent_lock is not None:
+    lock_fd = parent_lock.fileno() if parent_lock is not None else None
+    if lock_fd is not None:
         # 锁 fd 随子进程传递：子进程复用父进程已持有的锁（--lock_fd），
         # 不再自行 flock（重复取会 busy 自杀）；锁的释放在父进程 finally。
-        cmd.extend(["--lock_fd", str(parent_lock.fileno())])
-        popen_kwargs["pass_fds"] = (parent_lock.fileno(),)
+        cmd.extend(["--lock_fd", str(lock_fd)])
     try:
-        run_res = subprocess.run(
+        run_res = _run_subprocess_with_cleanup(
             cmd,
-            cwd=str(backend_root),
-            capture_output=True,
-            text=True,
             timeout=3600,
-            **popen_kwargs,
+            cwd=str(backend_root),
+            pass_fds=(lock_fd,) if lock_fd is not None else (),
         )
     except Exception as e:
         raise RuntimeError(f"执行失败: {str(e)}") from e
