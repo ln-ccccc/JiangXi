@@ -133,6 +133,9 @@ class ComposeIsolationTests(unittest.TestCase):
                 services["backend"]["environment"][key],
                 services["miner-api"]["environment"][key],
             )
+        # 此键为活依赖：miner/services/authBackend.js 与 projectBackend.js 以其
+        # 作为后端 base URL（历史误名），删除会导致 compose 形态 miner 登录/项目
+        # 转发全部打空
         self.assertEqual(
             services["miner-api"]["environment"]["GEOVIEW_BACKEND_URL"],
             "http://backend:5008",
