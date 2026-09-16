@@ -103,7 +103,12 @@ class ParentLockMergeTests(unittest.TestCase):
 
     def _fake_run(self, command, **kwargs):
         self.captured.append({"command": list(command), "kwargs": kwargs})
-        # 合并链路：子进程执行期间父进程锁必须仍被持有（此刻尝试抢锁应失败）
+        # 合并链路：子进程执行期间父进程锁必须仍被持有（此刻尝试抢锁应失败）。
+        # 默认库链路不取父锁，锁文件与其父目录都不会被创建（2026-09-16 容器内
+        # 权威跑抓出：此探针曾假设 outputs/ 存在，默认库用例 FileNotFoundError）——
+        # 锁文件不存在即"父锁未持有"，与本类 default 用例断言一致，直接放行。
+        if not self.lock_path.exists():
+            return SimpleNamespace(returncode=0, stdout='{"status":"completed"}\n', stderr="")
         with open(self.lock_path, "w") as probe:
             try:
                 fcntl.flock(probe.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
