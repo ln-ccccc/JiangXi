@@ -18,6 +18,7 @@ const tabInfo = read("src", "components", "Tabinfor.vue");
 const bottomInfo = read("src", "components", "Bottominfor.vue");
 const theme = read("src", "assets", "css", "theme-dark.css");
 const uploadUtility = read("src", "utils", "getUploadImg.js");
+const preHandleUtility = read("src", "utils", "preHandle.js");
 const authRedirect = read("src", "utils", "authRedirect.js");
 const loginView = read("src", "views", "Login.vue");
 
@@ -150,6 +151,13 @@ test("flash 卡片 record_id 冻结为 2 段式 tbbh|name（与后端删除接�
   const recordIdSource = uploadUtility.slice(recordIdIndex, recordIdIndex + 80);
   assert.match(recordIdSource, /record_id:\s*`\$\{tbbh\}\|\$\{name\}`/);
   assert.doesNotMatch(uploadUtility, /record_id:\s*`\$\{tbbh\}\|\$\{mapFid\}/);
+});
+
+test("预处理预览失败必须给出可见提示而不是静默吞掉", () => {
+  // 双层静默 catch 曾导致「勾选成功、预览区永远空白」且无任何解释
+  assert.doesNotMatch(preHandleUtility, /\.catch\(\(\) => \{\}\)/);
+  assert.match(preHandleUtility, /\$message\?\.\s*warning\?\.\(\s*['"]预处理预览生成失败/);
+  assert.match(preHandleUtility, /\$message\?\.\s*warning\?\.\(\s*['"]预处理原图上传失败/);
 });
 
 test("kmlRoiInfer 载荷携带预处理状态（与后端契约冻结：prehandle / denoise）", () => {

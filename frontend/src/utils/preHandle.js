@@ -40,8 +40,14 @@ function requestPrehandlePreview(type, prehandleValue, previewField) {
       this[previewField] = res.data.data.map((item) => {
         return global.BASEURL + item
       })
-    }).catch(() => {})
-  }).catch(() => {})
+    }).catch(() => {
+      // 预览失败必须可见：此前静默吞掉，勾选成功但预览区永远空白
+      this?.$message?.warning?.('预处理预览生成失败')
+    })
+  }).catch(() => {
+    // 原图上传失败同样静默过：预览区空白且无任何解释
+    this?.$message?.warning?.('预处理原图上传失败，无法生成预览')
+  })
 }
 
 function selectSharpen(type, event) {
