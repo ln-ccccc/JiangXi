@@ -83,3 +83,16 @@ test('kml-roi 500 分支固定文案：内部异常原文不回显，仅设备�
   assert.ok(failureReturn, 'kml-roi 500 分支应返回固定文案对象');
   assert.ok(!failureReturn[0].includes('detail'), '500 返回体不得回显内部异常原文 detail');
 });
+
+test('npm scripts 不得指向不存在的 scripts/ 目录（import:ndvi 死链不回潮）', async () => {
+  // 2026-09-16 审查 P2-16：scripts/ 目录从未存在，import:ndvi 一跑即 MODULE_NOT_FOUND。
+  const pkg = JSON.parse(await read('../package.json'));
+
+  assert.ok(!('import:ndvi' in pkg.scripts), 'import:ndvi 死链不应存在');
+  for (const [name, command] of Object.entries(pkg.scripts)) {
+    assert.ok(
+      !/(^|\s|"|')scripts\/[^\s"']+/u.test(String(command)),
+      `npm script ${name} 指向不存在的 scripts/ 文件: ${command}`
+    );
+  }
+});
