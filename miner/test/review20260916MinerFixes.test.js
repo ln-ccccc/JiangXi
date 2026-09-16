@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const read = (relativePath) => readFile(new URL(relativePath, import.meta.url), 'utf8');
@@ -122,4 +122,43 @@ test('后端 fetch 超时分级：普通 CRUD 15s，导出/备份恢复慢操作
   assert.match(authBackend, /const AUTH_TIMEOUT_MS = 15000;/u);
   assert.match(authBackend, /signal: AbortSignal\.timeout\(AUTH_TIMEOUT_MS\)/u);
   assert.doesNotMatch(authBackend, /AbortSignal\.timeout\(15000\)/u);
+});
+
+test('lint/format 清单 glob 化：全部测试文件纳入风格门，禁止回退枚举（2026-09-16 审查验证门）', async () => {
+  // 77674c0 的清单缺 8+ 个测试文件形成风格门盲区；改为 glob 后新增测试自动纳入。
+  const pkg = JSON.parse(await read('../package.json'));
+
+  for (const scriptName of ['format', 'format:check', 'lint']) {
+    const command = String(pkg.scripts[scriptName]);
+    assert.match(command, /"test\/\*\*\/\*\.test\.js"/u, `${scriptName} 应含 test glob`);
+    assert.doesNotMatch(
+      command,
+      /test\/[A-Za-z0-9_]+\.test\.js/u,
+      `${scriptName} 不得回退为枚举测试文件`
+    );
+  }
+
+  const testFiles = (await readdir(new URL('../test', import.meta.url))).filter((name) =>
+    /\.test\.js$/u.test(name)
+  );
+  assert.ok(testFiles.length >= 30, `测试文件数量异常: ${testFiles.length}`);
+
+  // 行为证明：在 test/ 投放一个格式违规探针文件，glob 化的 format:check 必须让它失败——
+  // 即「任何新增测试文件无需登记自动被风格门覆盖」。
+  const { spawnSync } = await import('node:child_process');
+  const probePath = path.join(minerRoot, 'test', '__style_gate_probe__.test.js');
+  await writeFile(probePath, 'const probe=[1,2,3];\nexport default probe;\n', 'utf8');
+  try {
+    const probe = spawnSync('npm run --silent format:check', {
+      cwd: minerRoot,
+      encoding: 'utf8',
+      shell: true,
+      windowsHide: true,
+    });
+    assert.notEqual(probe.status, 0, '格式违规探针文件必须被 glob 化风格门拦截');
+    const combined = `${probe.stdout || ''}${probe.stderr || ''}`;
+    assert.match(combined, /__style_gate_probe__\.test\.js/u, '拦截输出应点名探针文件');
+  } finally {
+    await rm(probePath, { force: true });
+  }
 });

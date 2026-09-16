@@ -6,7 +6,7 @@ import { buildChangeMatrixAssetPath } from '../services/changeMatrixAssets.js';
 test('buildChangeMatrixAssetPath returns a same-origin relative path', () => {
   assert.equal(
     buildChangeMatrixAssetPath(11191, '11191_old.png'),
-    '/change-matrix-outputs/11191/11191_old.png',
+    '/change-matrix-outputs/11191/11191_old.png'
   );
 });
 

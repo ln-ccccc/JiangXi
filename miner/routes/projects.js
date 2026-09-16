@@ -19,12 +19,15 @@ export function createProjectRoutes({
 
   router.get('/', async (req, res) => {
     try {
-      const upstream = await projectApi.listProjects({
-        name: req.query.name ?? null,
-        region: req.query.region ?? null,
-        status: req.query.status ?? null,
-        monitor_year: req.query.monitor_year ?? null,
-      }, requestCookie(req));
+      const upstream = await projectApi.listProjects(
+        {
+          name: req.query.name ?? null,
+          region: req.query.region ?? null,
+          status: req.query.status ?? null,
+          monitor_year: req.query.monitor_year ?? null,
+        },
+        requestCookie(req)
+      );
       relayJson(res, upstream);
     } catch (error) {
       // 上游异常细节只进服务端日志，不回显给浏览器
@@ -55,7 +58,10 @@ export function createProjectRoutes({
 
   router.patch('/:projectId', async (req, res) => {
     try {
-      relayJson(res, await projectApi.updateProject(req.params.projectId, req.body || {}, requestCookie(req)));
+      relayJson(
+        res,
+        await projectApi.updateProject(req.params.projectId, req.body || {}, requestCookie(req))
+      );
     } catch (error) {
       // 上游异常细节只进服务端日志，不回显给浏览器
       console.error('projects route upstream error:', error);
@@ -65,7 +71,14 @@ export function createProjectRoutes({
 
   router.put('/:projectId/mines', async (req, res) => {
     try {
-      relayJson(res, await projectApi.replaceProjectMines(req.params.projectId, req.body || {}, requestCookie(req)));
+      relayJson(
+        res,
+        await projectApi.replaceProjectMines(
+          req.params.projectId,
+          req.body || {},
+          requestCookie(req)
+        )
+      );
     } catch (error) {
       // 上游异常细节只进服务端日志，不回显给浏览器
       console.error('projects route upstream error:', error);
@@ -75,7 +88,14 @@ export function createProjectRoutes({
 
   router.post('/:projectId/datasets', async (req, res) => {
     try {
-      relayJson(res, await projectApi.createProjectDataset(req.params.projectId, req.body || {}, requestCookie(req)));
+      relayJson(
+        res,
+        await projectApi.createProjectDataset(
+          req.params.projectId,
+          req.body || {},
+          requestCookie(req)
+        )
+      );
     } catch (error) {
       // 上游异常细节只进服务端日志，不回显给浏览器
       console.error('projects route upstream error:', error);
@@ -95,7 +115,10 @@ export function createProjectRoutes({
 
   router.post('/:projectId/archive', async (req, res) => {
     try {
-      relayJson(res, await projectApi.archiveProject(req.params.projectId, req.body || {}, requestCookie(req)));
+      relayJson(
+        res,
+        await projectApi.archiveProject(req.params.projectId, req.body || {}, requestCookie(req))
+      );
     } catch (error) {
       // 上游异常细节只进服务端日志，不回显给浏览器
       console.error('projects route upstream error:', error);
@@ -105,7 +128,10 @@ export function createProjectRoutes({
 
   router.post('/:projectId/restore', async (req, res) => {
     try {
-      relayJson(res, await projectApi.restoreProject(req.params.projectId, req.body || {}, requestCookie(req)));
+      relayJson(
+        res,
+        await projectApi.restoreProject(req.params.projectId, req.body || {}, requestCookie(req))
+      );
     } catch (error) {
       // 上游异常细节只进服务端日志，不回显给浏览器
       console.error('projects route upstream error:', error);
@@ -149,7 +175,14 @@ export function createProjectRoutes({
 
   router.post('/:projectId/backups', async (req, res) => {
     try {
-      relayJson(res, await projectApi.createProjectBackup(req.params.projectId, req.body || {}, requestCookie(req)));
+      relayJson(
+        res,
+        await projectApi.createProjectBackup(
+          req.params.projectId,
+          req.body || {},
+          requestCookie(req)
+        )
+      );
     } catch (error) {
       // 上游异常细节只进服务端日志，不回显给浏览器
       console.error('projects route upstream error:', error);
@@ -169,7 +202,15 @@ export function createProjectRoutes({
 
   router.post('/:projectId/backups/:backupId/restore', async (req, res) => {
     try {
-      relayJson(res, await projectApi.restoreProjectBackup(req.params.projectId, req.params.backupId, req.body || {}, requestCookie(req)));
+      relayJson(
+        res,
+        await projectApi.restoreProjectBackup(
+          req.params.projectId,
+          req.params.backupId,
+          req.body || {},
+          requestCookie(req)
+        )
+      );
     } catch (error) {
       // 上游异常细节只进服务端日志，不回显给浏览器
       console.error('projects route upstream error:', error);

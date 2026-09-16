@@ -10,7 +10,7 @@ function toFiniteNumber(value) {
 
 function sortEntries(statsMap, digits = 0) {
   return Object.entries(statsMap)
-    .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], 'zh-CN'))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'))
     .map(([name, value]) => ({
       name,
       value: digits > 0 ? Number(value.toFixed(digits)) : value,
@@ -32,7 +32,9 @@ function isDistributionInformative(list) {
     .filter((item) => isUnknownBucket(item.name))
     .reduce((sum, item) => sum + toFiniteNumber(item.value), 0);
 
-  const knownItems = list.filter((item) => !isUnknownBucket(item.name) && toFiniteNumber(item.value) > 0);
+  const knownItems = list.filter(
+    (item) => !isUnknownBucket(item.name) && toFiniteNumber(item.value) > 0
+  );
   const knownTotal = knownItems.reduce((sum, item) => sum + toFiniteNumber(item.value), 0);
 
   if (knownItems.length >= 2) return true;
@@ -70,7 +72,9 @@ export function buildDashboardStats({ minesData = [] } = {}) {
     const area = toFiniteNumber(p.area || p.TBTYMJ || p.TBTYMJ_1);
     areaTotal += area;
 
-    const status = String(p.status_normalized || '').trim().toLowerCase();
+    const status = String(p.status_normalized || '')
+      .trim()
+      .toLowerCase();
     if (status === 'treated') treatedArea += area;
     if (status === 'untreated') untreatedArea += area;
 
@@ -103,10 +107,12 @@ export function buildDashboardStats({ minesData = [] } = {}) {
     ...item,
     value: Number((item.value / 10000).toFixed(2)),
   }));
-  const restorationMethodAreaDistribution = sortEntries(restorationMethodAreaStats, 2).map((item) => ({
-    ...item,
-    value: Number((item.value / 10000).toFixed(2)),
-  }));
+  const restorationMethodAreaDistribution = sortEntries(restorationMethodAreaStats, 2).map(
+    (item) => ({
+      ...item,
+      value: Number((item.value / 10000).toFixed(2)),
+    })
+  );
   const miningMethodAreaDistribution = sortEntries(miningMethodAreaStats, 2).map((item) => ({
     ...item,
     value: Number((item.value / 10000).toFixed(2)),

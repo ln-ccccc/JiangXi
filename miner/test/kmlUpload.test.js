@@ -20,9 +20,12 @@ test('saveKmlUpload stores a valid kml file and returns a bare filename for the 
   assert.equal(path.isAbsolute(result.kml_path), false);
   assert.equal(
     fs.readFileSync(result.kml_path_absolute, 'utf-8'),
-    '<kml><Document></Document></kml>',
+    '<kml><Document></Document></kml>'
   );
-  assert.equal(fs.readFileSync(path.join(uploadRoot, '新增矿山.kml'), 'utf-8'), '<kml><Document></Document></kml>');
+  assert.equal(
+    fs.readFileSync(path.join(uploadRoot, '新增矿山.kml'), 'utf-8'),
+    '<kml><Document></Document></kml>'
+  );
 });
 
 test('saveKmlUpload rejects non-kml names and blank content', () => {
@@ -30,10 +33,10 @@ test('saveKmlUpload rejects non-kml names and blank content', () => {
 
   assert.throws(
     () => saveKmlUpload({ uploadRoot, filename: 'bad.txt', content: '<kml />' }),
-    /只支持 \.kml 文件/,
+    /只支持 \.kml 文件/
   );
   assert.throws(
     () => saveKmlUpload({ uploadRoot, filename: 'bad.kml', content: '   ' }),
-    /KML 内容不能为空/,
+    /KML 内容不能为空/
   );
 });

@@ -17,7 +17,9 @@ export function requireMinerAuth({ sessionApi }) {
     } catch (error) {
       // 上游异常细节只进服务端日志，不回显给浏览器（与 server.js auth 端点同风格）
       console.error('authGuard upstream error:', error);
-      return res.status(502).json({ success: false, code: 1, msg: '登录校验服务不可用，请稍后重试' });
+      return res
+        .status(502)
+        .json({ success: false, code: 1, msg: '登录校验服务不可用，请稍后重试' });
     }
   };
 }
