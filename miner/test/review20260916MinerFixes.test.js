@@ -96,3 +96,30 @@ test('npm scripts 不得指向不存在的 scripts/ 目录（import:ndvi 死链�
     );
   }
 });
+
+test('后端 fetch 超时分级：普通 CRUD 15s，导出/备份恢复慢操作 120s', async () => {
+  // 2026-09-16 审查 P2-15：15s 无差别套用会让导出/备份恢复类慢操作
+  // 「用户看到 502 而后端任务实际成功」，诱导重复提交。
+  const projectBackend = await read('../services/projectBackend.js');
+  const authBackend = await read('../services/authBackend.js');
+
+  // 分级常量 + 透传
+  assert.match(projectBackend, /const DEFAULT_TIMEOUT_MS = 15000;/u);
+  assert.match(projectBackend, /const SLOW_OP_TIMEOUT_MS = 120000;/u);
+  assert.match(projectBackend, /signal: AbortSignal\.timeout\(timeoutMs\)/u);
+
+  // 恰好三个慢操作调用点显式放宽
+  assert.equal(
+    (projectBackend.match(/timeoutMs: SLOW_OP_TIMEOUT_MS/gu) || []).length,
+    3,
+    '应且仅应导出/备份/恢复三个慢操作放宽超时'
+  );
+  assert.match(projectBackend, /\/exports`, \{[\s\S]{0,160}?timeoutMs: SLOW_OP_TIMEOUT_MS/u);
+  assert.match(projectBackend, /\/backups`, \{[\s\S]{0,160}?timeoutMs: SLOW_OP_TIMEOUT_MS/u);
+  assert.match(projectBackend, /\/restore`, \{[\s\S]{0,160}?timeoutMs: SLOW_OP_TIMEOUT_MS/u);
+
+  // 认证操作均为轻量请求，保持 15s 常量分级
+  assert.match(authBackend, /const AUTH_TIMEOUT_MS = 15000;/u);
+  assert.match(authBackend, /signal: AbortSignal\.timeout\(AUTH_TIMEOUT_MS\)/u);
+  assert.doesNotMatch(authBackend, /AbortSignal\.timeout\(15000\)/u);
+});
