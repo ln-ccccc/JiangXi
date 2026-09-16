@@ -216,9 +216,14 @@ test("会话过期跳转携带 hash 路由且登录页消费 reason", () => {
   assert.match(authRedirect, /params\.set\("redirect",\s*hashRoute\)/);
   assert.match(authRedirect, /params\.set\("reason",\s*reason\)/);
   assert.match(authRedirect, /#\/login\?\$\{params\.toString\(\)\}/);
+  // 已在登录页时迟到的 401 重跳转必须合并既有 query，不得覆盖丢失 redirect
+  assert.match(authRedirect, /new URLSearchParams\(search\)/);
+  assert.match(authRedirect, /pathname\.startsWith\("\/login"\)/);
 
-  // 登录页必须把 reason 呈现为可见文案，而不是无声吞掉
-  assert.match(loginView, /\$route\?\.query\?\.reason/);
+  // 登录页必须把 reason 呈现为可见文案，而不是无声吞掉；
+  // 且必须 watch 响应式消费（组件不重建，迟到的 reason 只在 created 读一次会丢）
+  assert.match(loginView, /"\$route\.query\.reason":\s*\{/);
+  assert.match(loginView, /immediate:\s*true/);
   assert.match(loginView, /登录已过期，请重新登录/);
   assert.match(loginView, /v-if="sessionNotice"/);
   assert.match(loginView, /this\.\$router\.replace\(this\.\$route\.query\.redirect \|\| "\/segmentation"\)/);
