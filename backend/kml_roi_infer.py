@@ -24,13 +24,17 @@ def _request_shutdown(signum, _frame):
     raise SystemExit(128 + signum)
 
 
-def _acquire_run_lock(output_root: Path):
+def _acquire_run_lock(output_root: Path, lock_fd: int = -1):
     """跨进程推理互斥锁。
 
     Flask subprocess 与 miner BFF execFile 两条链最终都运行本脚本，
     在此统一串行化，防止并发推理交叉写共享 output_root/<fid>/。
     fcntl 不可用（Windows 开发机）时跳过互斥。
+    lock_fd >= 0 时父进程（Flask 合并链路）已持锁并把 fd 传入——直接复用，
+    不再 flock（重复取会 busy 退出，自己堵自己）；锁由父进程统一释放。
     """
+    if lock_fd is not None and lock_fd >= 0:
+        return os.fdopen(lock_fd, "w")
     try:
         import fcntl
     except ImportError:
@@ -81,6 +85,12 @@ def main() -> int:
     )
     parser.add_argument("--limit", type=int, default=0, help="Process first N polygons only")
     parser.add_argument("--keep_workdir", action="store_true", help="Keep work directory")
+    parser.add_argument(
+        "--lock_fd",
+        type=int,
+        default=-1,
+        help="父进程已持有的推理锁 fd（Flask 合并链路传入时直接复用，不再 flock）",
+    )
     parser.add_argument("--year", default="", help="Single snapshot year (YYYY). Stores outputs as {FID}+{YYYY}.")
     parser.add_argument("--old_year", default="", help="Old year label (YYYY) for old_tif")
     parser.add_argument("--new_year", default="", help="New year label (YYYY) for new_tif")
@@ -97,8 +107,9 @@ def main() -> int:
     kml_path = Path(args.kml).expanduser().resolve()
     output_root = Path(args.output_root).expanduser().resolve()
     work_dir = Path(args.work_dir).expanduser().resolve()
-    # 进程存活期间持锁；GPU 串行语义 + 防并发交叉写共享产物目录
-    run_lock = _acquire_run_lock(output_root)
+    # 进程存活期间持锁；GPU 串行语义 + 防并发交叉写共享产物目录。
+    # --lock_fd >= 0（Flask 合并链路）时父进程已持锁，这里只复用不重复获取。
+    run_lock = _acquire_run_lock(output_root, lock_fd=args.lock_fd)
     if not args.manifest:
         raise RuntimeError("江西推理必须提供资产 manifest，禁止直接使用历史 FID")
     manifest_path = Path(args.manifest).expanduser().resolve()
