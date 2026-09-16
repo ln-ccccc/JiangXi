@@ -158,12 +158,16 @@ function getLandTypeList(value) {
   return Array.from(new Set(types.length ? types : ['未知']));
 }
 
+// 启动链探测必须带超时：resolvePythonRunner 在 initData()→app.listen 之前执行，
+// 探测挂起会导致 miner 永不 bind。探测类操作 15s 足够。
+const STARTUP_PROBE_TIMEOUT_MS = 15000;
+
 function commandExists(cmd) {
   try {
     const probe =
       process.platform === 'win32'
-        ? spawnSync('where', [cmd], { encoding: 'utf-8' })
-        : spawnSync('which', [cmd], { encoding: 'utf-8' });
+        ? spawnSync('where', [cmd], { encoding: 'utf-8', timeout: STARTUP_PROBE_TIMEOUT_MS })
+        : spawnSync('which', [cmd], { encoding: 'utf-8', timeout: STARTUP_PROBE_TIMEOUT_MS });
     return probe.status === 0;
   } catch (_) {
     return false;
@@ -174,6 +178,7 @@ function pythonRunnable(cmd, preArgs = []) {
   try {
     const probe = spawnSync(cmd, [...preArgs, '-c', 'import sys; print(sys.executable)'], {
       encoding: 'utf-8',
+      timeout: STARTUP_PROBE_TIMEOUT_MS,
     });
     return probe.status === 0;
   } catch (_) {
