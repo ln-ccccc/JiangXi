@@ -63,13 +63,16 @@ test('buildDashboardStats returns Jiangxi overview metrics with area-based statu
     { name: '上饶市', value: 0.03 },
     { name: '赣州市', value: 0.01 },
   ]);
-  assert.deepEqual(stats.recommended_panels.map((item) => item.key), [
-    'city_distribution',
-    'damage_type_distribution',
-    'restoration_method_area_distribution',
-    'city_area_distribution',
-    'mining_method_distribution',
-  ]);
+  assert.deepEqual(
+    stats.recommended_panels.map((item) => item.key),
+    [
+      'city_distribution',
+      'damage_type_distribution',
+      'restoration_method_area_distribution',
+      'city_area_distribution',
+      'mining_method_distribution',
+    ]
+  );
 });
 
 test('buildDashboardStats keeps unknown buckets explicit and never returns fake land type stats', () => {
@@ -156,7 +159,7 @@ test('buildDashboardStats hides low-information mining panels when unknown bucke
   ]);
   assert.equal(
     stats.recommended_panels.some((item) => item.key === 'mining_method_distribution'),
-    false,
+    false
   );
 });
 

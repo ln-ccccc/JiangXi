@@ -302,16 +302,10 @@ const handleInferenceSubmit = async (formData) => {
     const writtenCount = Array.isArray(result?.written_tbbh_list)
       ? result.written_tbbh_list.length
       : 0;
-    const kmlChangedCount =
-      Number(result?.kml_update?.updated || 0) + Number(result?.kml_update?.inserted || 0);
-    if (writtenCount > 0 || kmlChangedCount > 0) {
-      await loadData();
-    }
     if (writtenCount > 0) {
+      await loadData();
       showInferenceModal.value = false;
       focusByTbbh(result.written_tbbh_list[0]);
-    } else if (kmlChangedCount > 0) {
-      showInferenceModal.value = false;
     } else {
       // 零写入不再静默：给出明确反馈并保留弹窗供修改重试（复审 B2）
       const failedCount = Array.isArray(result?.failed_tiles) ? result.failed_tiles.length : 0;

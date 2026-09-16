@@ -80,6 +80,9 @@ function extractKmlTextFromKmz(kmzPath) {
     ].join(' ');
     const probe = spawnSync('powershell.exe', ['-NoProfile', '-Command', archiveCommand], {
       encoding: 'utf8',
+      // 启动链执行：挂起会导致 initData()→app.listen 之前的加载永不返回。
+      // KMZ 为小体积压缩包，Expand-Archive 含 PowerShell 启动 30s 足够。
+      timeout: 30000,
     });
     if (probe.status !== 0) {
       throw new Error(`Expand-Archive failed: ${probe.stderr || probe.stdout}`.trim());
@@ -230,7 +233,14 @@ print(json.dumps(geojson, ensure_ascii=False))
   const { stdout } = await execFile(
     pythonRunner.cmd,
     [...pythonRunner.preArgs, '-c', script, path.resolve(shpPath)],
-    { encoding: 'utf8', maxBuffer: 100 * 1024 * 1024 }
+    {
+      encoding: 'utf8',
+      maxBuffer: 100 * 1024 * 1024,
+      // 启动链执行：geopandas 首次 import 较慢，放宽到 120s；超时 SIGTERM 杀掉，
+      // 避免 initData()→app.listen 之前挂起导致 miner 永不 bind。
+      timeout: 120000,
+      killSignal: 'SIGTERM',
+    }
   );
   return JSON.parse(stdout);
 }

@@ -158,12 +158,16 @@ function getLandTypeList(value) {
   return Array.from(new Set(types.length ? types : ['未知']));
 }
 
+// 启动链探测必须带超时：resolvePythonRunner 在 initData()→app.listen 之前执行，
+// 探测挂起会导致 miner 永不 bind。探测类操作 15s 足够。
+const STARTUP_PROBE_TIMEOUT_MS = 15000;
+
 function commandExists(cmd) {
   try {
     const probe =
       process.platform === 'win32'
-        ? spawnSync('where', [cmd], { encoding: 'utf-8' })
-        : spawnSync('which', [cmd], { encoding: 'utf-8' });
+        ? spawnSync('where', [cmd], { encoding: 'utf-8', timeout: STARTUP_PROBE_TIMEOUT_MS })
+        : spawnSync('which', [cmd], { encoding: 'utf-8', timeout: STARTUP_PROBE_TIMEOUT_MS });
     return probe.status === 0;
   } catch (_) {
     return false;
@@ -174,6 +178,7 @@ function pythonRunnable(cmd, preArgs = []) {
   try {
     const probe = spawnSync(cmd, [...preArgs, '-c', 'import sys; print(sys.executable)'], {
       encoding: 'utf-8',
+      timeout: STARTUP_PROBE_TIMEOUT_MS,
     });
     return probe.status === 0;
   } catch (_) {
@@ -1090,11 +1095,9 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       failed_tiles: parsed?.failed_tiles || [],
       stage_durations: parsed?.stage_durations || null,
       total_seconds: parsed?.total_seconds ?? null,
-      // 后端键为 inference_runtime（pipeline.py），旧名 runtime 保留兼容
+      // kml_roi_infer.py:150 对 pipeline 的 inference_runtime pop 后改名 runtime 输出，
+      // inference_runtime 仅为兼容旧键而保留读取
       runtime: parsed?.inference_runtime || parsed?.runtime || null,
-      // 透传 KML 增量更新结果：MapDashboard 依赖 kml_update.updated/inserted
-      // 决定纯 KML 更新型推理是否关弹窗，缺失会导致弹窗永不自动关闭
-      kml_update: parsed?.kml_update || null,
       stderr_tail: String(stderr || '')
         .split('\n')
         .slice(-8)
@@ -1114,11 +1117,17 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       });
     }
     const message = err?.message || String(err);
-    const status = /device 仅支持|CUDA 不可用|江西项目仅支持 CPU/.test(message) ? 400 : 500;
-    return res.status(status).json({
-      error: 'Failed to run kml roi inference',
-      detail: message,
-    });
+    // 设备契约类失败（normalizeInferenceDevice / kml_roi_infer.py 的设备校验）属于用户
+    // 可修正的请求错误，400 透出原文；其余一律 500 固定文案——原始异常含完整命令行与
+    // 绝对路径，只进服务端日志不回显（与 projects/auth 路由的 502 固定文案同一收口原则）。
+    if (/device 仅支持|CUDA 不可用|江西项目仅支持 CPU/.test(message)) {
+      return res.status(400).json({
+        error: 'Failed to run kml roi inference',
+        detail: message,
+      });
+    }
+    console.error('[inference] kml-roi 推理失败:', message);
+    return res.status(500).json({ error: '推理任务执行失败，请稍后重试或联系管理员' });
   } finally {
     kmlInferenceActive = false;
   }
