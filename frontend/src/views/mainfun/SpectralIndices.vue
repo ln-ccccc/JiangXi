@@ -12,7 +12,7 @@
         <div class="workflow-badges" aria-label="运行配置">
           <span>江西</span>
           <span>同步分析</span>
-          <span>CPU</span>
+          <span>{{ inferenceDevice }}</span>
         </div>
       </template>
     </Tabinfor>
@@ -173,7 +173,7 @@
             <el-button
               type="primary"
               class="btn-animate btn-animate__shiny"
-              :disabled="fileList.length === 0"
+              :disabled="fileList.length === 0 || runState === 'running'"
               @click="startCompute"
             >
               开始计算 {{ indexType }}
@@ -224,6 +224,8 @@
 import { createSrc, imgUpload } from "@/api/upload";
 import { getUploadImg } from "@/utils/getUploadImg";
 import { historyDeleteOne } from "@/api/history";
+import { legacySession } from "@/api/auth";
+import { redirectToLegacyLogin } from "@/utils/authRedirect";
 import Tabinfor from "@/components/Tabinfor";
 import Bottominfor from "@/components/Bottominfor";
 import ImgShow from "@/components/ImgShow";
@@ -254,11 +256,29 @@ export default {
         red: 3,
         green: 2,
         swir: 5
-      }
+      },
+      sessionRefreshTimer: null,
+      // 设备徽章与 Segmentation/RunPanel 同源：随部署环境注入的推理设备展示，
+      // 不做自动回退（契约：无 auto、非法值由后端拒绝）
+      inferenceDevice: String(process.env.VUE_APP_JIANGXI_INFERENCE_DEVICE || 'cpu')
+        .trim()
+        .toLowerCase()
     };
   },
   created() {
     this.getUploadImg("光谱指数计算");
+    // 与 Segmentation 保持一致：打开期间定期心跳，会话失效则回登录页
+    this.sessionRefreshTimer = window.setInterval(() => {
+      legacySession().then((res) => {
+        if (!res?.data?.data?.authenticated) redirectToLegacyLogin("expired");
+      }).catch(() => { });
+    }, 10 * 60 * 1000);
+  },
+  beforeUnmount() {
+    if (this.sessionRefreshTimer !== null) {
+      window.clearInterval(this.sessionRefreshTimer);
+      this.sessionRefreshTimer = null;
+    }
   },
   methods: {
     createSrc,
@@ -422,6 +442,10 @@ export default {
       }).catch(() => {});
     },
     startCompute() {
+      if (this.runState === "running") {
+        this.$message.warning("当前已有计算任务在执行，请等待完成。");
+        return;
+      }
       if (!this.fileList.length) {
         this.runState = "error";
         this.runMessage = "请先选择 tif / tiff 影像。";

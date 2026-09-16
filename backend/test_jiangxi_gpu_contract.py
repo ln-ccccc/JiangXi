@@ -39,7 +39,11 @@ class JiangxiGpuContractTests(unittest.TestCase):
         source = (ROOT / "docker" / "standalone" / "Dockerfile.jiangxi").read_text(
             encoding="utf-8"
         )
-        self.assertIn("HEALTHCHECK --interval=30s --timeout=15s", source)
+        # 2026-09-14：timeout 15s→30s（CPU 模式资产哈希 ~2GB 会吃穿 15s 预算），
+        # 新增 start-period=300s（首启种子+模型加载+前端冷编译不误判 unhealthy）
+        self.assertIn(
+            "HEALTHCHECK --interval=30s --timeout=30s --start-period=300s", source
+        )
 
     def test_gpu_build_reuses_the_torch_compatible_mmcv_extension(self):
         source = (ROOT / "docker" / "standalone" / "Dockerfile.jiangxi").read_text(

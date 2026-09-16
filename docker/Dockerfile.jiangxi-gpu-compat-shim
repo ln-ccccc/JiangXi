@@ -1,0 +1,20 @@
+# jiangxi-gpu-compat:shim —— CPU 构建专用占位镜像
+#
+# 背景：docker/standalone/Dockerfile.jiangxi 无条件执行
+#   COPY --from=jiangxi-gpu-compat /opt/venv/lib/python3.10/site-packages/mmcv ...
+#   COPY --from=jiangxi-gpu-compat /opt/venv/lib/python3.10/site-packages/mmcv-2.1.0.dist-info ...
+# 该内容只在 JIANGXI_INFERENCE_DEVICE != cpu 的分支里被真正安装（CPU 构建时对应 RUN 分支
+# 不执行，暂存路径最终被构建收尾 RUN 删除）。CPU 构建传入本 shim 即可满足 COPY 的路径
+# 存在性要求，不依赖 GPU 基础镜像。
+#
+# 构建标记为 jiangxi-gpu-compat:shim；严禁将本镜像用于 GPU 构建。
+# 使用见 docker/scripts/rebuild-runtime.md。
+
+FROM ubuntu:20.04
+
+RUN mkdir -p /opt/venv/lib/python3.10/site-packages/mmcv \
+             /opt/venv/lib/python3.10/site-packages/mmcv-2.1.0.dist-info \
+    && echo "CPU-build shim placeholder: not a real mmcv build" \
+        > /opt/venv/lib/python3.10/site-packages/mmcv/.cpu-build-shim \
+    && echo "CPU-build shim placeholder: not a real dist-info" \
+        > /opt/venv/lib/python3.10/site-packages/mmcv-2.1.0.dist-info/.cpu-build-shim

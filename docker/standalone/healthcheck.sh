@@ -28,14 +28,17 @@ http_get() {
 import sys
 from urllib.request import urlopen
 
-with urlopen(sys.argv[1], timeout=5) as response:
+# timeout=2：http_get 串行 4 次，最坏 4x5s=20s 会吃穿 HEALTHCHECK 预算
+with urlopen(sys.argv[1], timeout=2) as response:
     if response.status < 200 or response.status >= 300:
         raise SystemExit(f"HTTP status {response.status}")
     sys.stdout.write(response.read().decode("utf-8"))
 PY
 }
 
-http_get "http://127.0.0.1:${BACKEND_PORT}/" >/dev/null
+# backend 根路径无路由（404 语义修复后不再被吞成 200）——探测会话端点：
+# 未登录也返回 200 JSON，是 backend 存活的真实信号
+http_get "http://127.0.0.1:${BACKEND_PORT}/api/auth/session" >/dev/null
 http_get "http://127.0.0.1:${FRONTEND_PORT}/" >/dev/null
 http_get "http://127.0.0.1:${MINER_FRONTEND_PORT}/" >/dev/null
 
@@ -68,7 +71,9 @@ if health.get("manifest_sha256") != digest:
 PY
 
 if is_gpu_inference_device; then
-  "${PYTHON_BIN}" /app/backend/applications/interface/mmseg_worker.py \
+  # ping 超时放宽到 10s：worker 串行设计下长推理期间 ping 需排队，2s 会误报不可用
+  JIANGXI_MMSEG_WORKER_PING_TIMEOUT="${JIANGXI_MMSEG_WORKER_PING_TIMEOUT:-10}" \
+    "${PYTHON_BIN}" /app/backend/applications/interface/mmseg_worker.py \
     --socket "${JIANGXI_MMSEG_WORKER_SOCKET:-/tmp/jiangxi-mmseg-worker.sock}" \
     --ping \
     --expect-device "${JIANGXI_INFERENCE_DEVICE:-cuda:0}" >/dev/null

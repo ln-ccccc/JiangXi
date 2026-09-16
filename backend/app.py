@@ -1,15 +1,15 @@
-import traceback
-
 from flask import session
 from flask_migrate import Migrate
 
 from applications import create_app
-from applications.common.utils.http import fail_api
 from applications.extensions import db
 from runtime_frontend_env import load_runtime_config, write_legacy_frontend_env
 
-debug_mode = False
 app = create_app()
+
+# /static 上传目录鉴权与全局错误处理（HTTPException 直通、debug 打印堆栈、
+# 生产只回通用文案不回显异常原文）注册在 create_app 工厂
+# （applications/__init__.py），对所有配置环境与测试环境一致生效。
 
 
 @app.before_request
@@ -19,13 +19,6 @@ def before():
     if session.get("admin_user_id"):
         # 确保活动请求刷新永久会话的过期时间，覆盖直接加载图片的请求。
         session.modified = True
-
-
-@app.errorhandler(Exception)
-def error_handler(e):
-    if debug_mode:
-        traceback.print_exc()
-    return fail_api("后端出现异常：{}".format(str(e)))
 
 
 migrate = Migrate(app, db)

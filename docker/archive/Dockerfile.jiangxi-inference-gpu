@@ -1,0 +1,43 @@
+# =============================================================================
+# [归档 2026-09-15] 镜像谱系解耦调查回收的构建定义（原样留档，非现行构建入口）
+# - 来源：.worktrees/jiangxi-platform-repair（分支 fix/jiangxi-platform-repair，
+#   commit 698134e）；本文件在主树、main 与 fix/code-review-20260914 均已不存在。
+# - 构建产物：jiangxi-inference-worker:gpu（镜像 ID 0d2b4e8093ba，20.8GB，40 层）。
+# - FROM 链事实：第二阶段基础镜像 geoview-inference-worker:current 已不在本地
+#   镜像库，本 Dockerfile 目前无法原样重建；第一阶段 jiangxi-runtime:current 仍在
+#   本地，但其层链包含 yunnan-runtime:current（=geoview-runtime:split-clean）全部
+#   30 层云南历史死重，谱系事实见 AGENTS.md §4“镜像谱系与独立性”。
+# - 如需重建 GPU worker 链：先恢复 geoview-inference-worker:current 基础镜像
+#   （离线 tar 或历史构建机），或直接基于现行 jiangxi-analysis-worker:gpu 演进。
+# =============================================================================
+# syntax=docker/dockerfile:1
+# Build a GPU inference worker with the Jiangxi model bundle from the local CPU image.
+# The source image remains unchanged and can still be used for CPU rollback.
+FROM jiangxi-runtime:current AS jiangxi-model
+
+FROM geoview-inference-worker:current
+
+USER root
+
+ENV JIANGXI_MMSEG_MODEL_ROOT=/app/backend/model/jiangxi \
+    JIANGXI_MMSEG_CONFIG_PATH=/app/backend/model/jiangxi/config.py \
+    JIANGXI_MMSEG_CHECKPOINT_PATH=/app/backend/model/jiangxi/model.pth \
+    JIANGXI_MMSEG_METADATA_PATH=/app/backend/model/jiangxi/metadata.json \
+    JIANGXI_MMSEG_SOURCE_ROOT=/app/backend/model/jiangxi/dinov3_swinV1 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# The legacy inference worker resolves checkpoints under mmseg_config. Copy
+# only the Jiangxi inference checkpoint there and keep the worker's matching
+# CUDA-enabled config/source tree. The CPU image remains the authoritative
+# source of the model bytes.
+COPY --from=jiangxi-model /app/backend/model/jiangxi/model.pth /app/backend/model/mmseg_config/model.inference.pth
+COPY --from=jiangxi-model /app/backend/model/jiangxi/model.pth /app/backend/model/mmseg_config/model.pth
+
+RUN set -eux; \
+    test -f /app/backend/model/mmseg_config/model.inference.pth; \
+    test -f /app/backend/model/mmseg_config/model.pth; \
+    sha256sum /app/backend/model/mmseg_config/model.inference.pth; \
+    /opt/venv/bin/python -c "import mmcv, mmengine, mmseg, torch; assert torch.version.cuda == '12.8', torch.version.cuda; print('Jiangxi GPU runtime:', torch.__version__, mmcv.__version__, mmengine.__version__, mmseg.__version__)"
+
+USER inference

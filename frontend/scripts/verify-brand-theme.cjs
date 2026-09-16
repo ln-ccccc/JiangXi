@@ -39,24 +39,26 @@ const minerTheme = fs.readFileSync(
   "utf8",
 );
 
+// 基准值以 miner/src/assets/base.css 与 frontend theme-dark.css 的一致现状为准
+// （2026-09-16 修正：山地制图台重设计更新了令牌，本表未跟上导致 test:ui 长期红）
 const expectedCanonicalTokens = {
-  "--jx-bg": "#071923",
-  "--jx-bg-elevated": "#0b222b",
-  "--jx-surface": "#0d2630",
-  "--jx-surface-muted": "rgba(230, 201, 140, 0.06)",
-  "--jx-border": "rgba(156, 231, 189, 0.22)",
-  "--jx-border-strong": "rgba(156, 231, 189, 0.5)",
-  "--jx-text": "#e5f1ed",
-  "--jx-text-muted": "#9bb0ab",
-  "--jx-primary": "#9ce7bd",
-  "--jx-primary-hover": "#b7f0d0",
-  "--jx-success": "#82d7a7",
-  "--jx-warning": "#d68058",
-  "--jx-danger": "#d96b6b",
+  "--jx-bg": "#06141c",
+  "--jx-bg-elevated": "#0a1f2a",
+  "--jx-surface": "#0b2230",
+  "--jx-surface-muted": "rgba(127, 216, 166, 0.05)",
+  "--jx-border": "rgba(148, 210, 189, 0.14)",
+  "--jx-border-strong": "rgba(148, 210, 189, 0.38)",
+  "--jx-text": "#e9f3ef",
+  "--jx-text-muted": "#8fa9a0",
+  "--jx-primary": "#7fd8a6",
+  "--jx-primary-hover": "#98e2b9",
+  "--jx-success": "#7fd8a6",
+  "--jx-warning": "#e2c285",
+  "--jx-danger": "#e08a80",
   "--jx-info": "#8fc6c8",
-  "--jx-sand": "#e6c98c",
-  "--jx-radius": "10px",
-  "--jx-radius-large": "16px",
+  "--jx-sand": "#e2c285",
+  "--jx-radius": "8px",
+  "--jx-radius-large": "14px",
 };
 
 const themeTokens = cssDeclarations(theme);
@@ -168,8 +170,8 @@ assert.match(aside, /光谱指数/);
 assert.match(aside, /操作提示/);
 assert.match(header, /江西样区档案/);
 assert.match(header, /返回矿山地图/);
-assert.match(login, /江西生态图册/);
-assert.match(login, /一次登录可访问江西地图与解译平台/);
+assert.match(login, /登录工作台/);
+assert.match(login, /输入平台账号，登录后继续选择地物分类或光谱指数/);
 assert.match(notFound, /江西生态图册/);
 assert.match(notFound, /返回地物分类/);
 assert.match(notFound, /\/segmentation/);

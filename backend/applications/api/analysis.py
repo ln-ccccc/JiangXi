@@ -26,6 +26,15 @@ miner_change_output_root = Path(
     os.getenv("MINER_CHANGE_OUTPUT_ROOT") or repo_root / "miner" / "change_matrix_outputs"
 ).expanduser().resolve()
 upload_path_prefix = "static/upload/"
+upload_url_prefix = "/_uploads/photos/"
+
+
+def _safe_int(value, default):
+    """分页等数值查询参数容错：非数字/空值回退默认值，不进全局异常处理器。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _asset_manifest_path():
@@ -88,11 +97,75 @@ def _history_identity(map_fid_dir):
     return {"tbbh": tbbh, "map_fid": map_fid}
 
 
-def _normalize_uploaded_tiff_name(value):
+def _normalize_uploaded_tiff_name(value, input_root=None):
     text = str(value or "").strip().replace("\\", "/")
+    # 同一物理上传目录的三种受控形态：相对路径前缀、服务 URL 前缀、裸文件名
     if text.startswith(upload_path_prefix):
-        return text[len(upload_path_prefix):]
-    return text
+        text = text[len(upload_path_prefix):]
+    elif text.startswith(upload_url_prefix):
+        text = text[len(upload_url_prefix):]
+    if "/" not in text:
+        return text
+    # 含分隔符的值分两类：前端把上传响应的 raw_tiff_path（受控 upload 目录内的
+    # 绝对路径）原样回传提交推理/光谱计算——必须剥成 basename 放行，否则主链路
+    # 被 resolve_managed_file 的 basename 校验拒掉；越界路径（resolve 后不在受控根
+    # 内，如 /etc/x.tif、../x.tif）则明确拒绝。
+    if input_root is not None:
+        try:
+            resolved = Path(text).resolve()
+            resolved.relative_to(Path(input_root).resolve())
+            return resolved.name
+        except ValueError as exc:
+            raise PathValidationError(
+                "文件路径超出受控目录: {}".format(text)
+            ) from exc
+    return text.rsplit("/", 1)[-1]
+
+
+def _resolve_spectral_kml_path(kml_root, kml_path):
+    """非空 kml_path 一律收敛到受控 kml_root 下的 .kml/.kmz 文件。"""
+    if not kml_path or not str(kml_path).strip():
+        return kml_path
+    return str(resolve_managed_file(kml_root, str(kml_path).strip(), {".kml", ".kmz"}))
+
+
+def _normalize_spectral_tiff_items(img_list, input_root):
+    """归一 spectral 输入项里的 tif 路径，覆盖 dict 项五个路径键与纯字符串项。
+
+    前端真实形态是上传响应回传的服务器绝对路径（raw_tiff_path），先剥成 basename
+    （_normalize_uploaded_tiff_name）再判断；纯 basename 保持原样由底层处理，
+    含 URL 编码字符（%..）的一律经 resolve_managed_file 收敛到受控 input_root 下。
+    basename 化同时消解越界读取：../x.tif -> x.tif 只能命中受控根内文件。
+    """
+    def _normalize_value(text):
+        stripped = _normalize_uploaded_tiff_name(text, input_root)
+        if "%" in stripped:
+            return str(resolve_managed_file(input_root, stripped, {".tif", ".tiff"}))
+        if Path(stripped).name == stripped:
+            return None  # 已是纯 basename，无需改写
+        return stripped
+
+    for index, item in enumerate(img_list):
+        if isinstance(item, str):
+            text = item.strip()
+            if not text:
+                continue
+            normalized = _normalize_value(text)
+            if normalized is not None:
+                img_list[index] = normalized
+            continue
+        if not isinstance(item, dict):
+            continue
+        for key in ("raw_tiff_path", "raw_tiff", "path", "src", "preview_src"):
+            if key not in item:
+                continue
+            text = str(item.get(key) or "").strip()
+            if not text:
+                continue
+            normalized = _normalize_value(text)
+            if normalized is not None:
+                item[key] = normalized
+    return img_list
 
 
 @analysis_api.before_request
@@ -148,8 +221,8 @@ def show_result(analysis_type):
     if not hasattr(type_utils, analysis_type):
         return fail_api("当前类型暂未开放")
 
-    page = int(request.args.get('page', 1) or 1)
-    limit = int(request.args.get('limit', 10) or 10)
+    page = _safe_int(request.args.get('page'), 1)
+    limit = _safe_int(request.args.get('limit'), 10)
     query = Analysis.query.filter_by(type=getattr(type_utils, analysis_type)).order_by(desc(Analysis.create_time))
 
     pagination = query.paginate(page=page, per_page=limit, error_out=False)
@@ -187,8 +260,12 @@ def semantic_segmentation_api():
             device=resolve_inference_device()["effective_device"],
         )
         return success_api()
+    except ValueError as e:
+        # 业务校验消息保持回显
+        return fail_api(str(e))
     except Exception as e:
-        return fail_api(f"推理失败: {str(e)}")
+        current_app.logger.error("推理失败: %s", e, exc_info=True)
+        return fail_api("推理失败，请稍后重试或查看服务端日志")
 
 @analysis_api.post('/image_pre')
 def image_pre_api():
@@ -229,6 +306,15 @@ def spectral_indices_api():
     map_fid = _tbbh_to_map_fid(tbbh)
     if map_fid is None:
         return fail_api(f"TBBH 不存在: {tbbh}"), 404
+    try:
+        kml_path = _resolve_spectral_kml_path(
+            current_app.config["KML_ROI_KML_ROOT"], kml_path
+        )
+        img_list = _normalize_spectral_tiff_items(
+            img_list, current_app.config["KML_ROI_INPUT_ROOT"]
+        )
+    except PathValidationError as exc:
+        return fail_api(str(exc)), 400
     # 计算核心使用小写键（nir/red/green/swir），这里统一标准化避免前端大小写差异导致映射失效
     normalized_band_map = {str(k).lower(): v for k, v in (band_map or {}).items()}
 
@@ -265,22 +351,36 @@ def spectral_indices_api():
         if warnings:
             return success_api(msg="计算完成，未同步部分Miner指数", data=result)
         return success_api(data=result)
+    except ValueError as e:
+        # interface 层业务校验消息（如"不支持的指数类型"）保持回显
+        return fail_api(str(e))
     except Exception as e:
-        return fail_api(f"计算失败: {str(e)}")
+        current_app.logger.error("光谱指数计算失败: %s", e, exc_info=True)
+        return fail_api("计算失败，请稍后重试或查看服务端日志")
 
 
 @analysis_api.post('/kml_roi_inference')
 def kml_roi_inference_api():
     req_json = request.json or {}
+    # 契约：prehandle ∈ {0,2,4}（无/CLAHE/锐化），denoise ∈ {0,3,5}（无/中值/高斯），默认 0 行为不变
+    try:
+        prehandle = int(req_json.get("prehandle", 0) or 0)
+        denoise = int(req_json.get("denoise", 0) or 0)
+    except (TypeError, ValueError):
+        return fail_api("prehandle/denoise 必须为整数"), 400
+    if prehandle not in (0, fun_type_2, fun_type_4) or denoise not in (0, fun_type_3, fun_type_5):
+        return fail_api("prehandle/denoise 参数异常"), 400
     try:
         if req_json.get("output_root"):
             raise PathValidationError("不支持自定义输出目录")
         input_root = current_app.config["KML_ROI_INPUT_ROOT"]
         kml_root = current_app.config["KML_ROI_KML_ROOT"]
         default_kmz_name = Path(current_app.config["MINER_DEFAULT_KMZ_PATH"]).name
-        old_tif_name = _normalize_uploaded_tiff_name(req_json.get("old_tif_path"))
+        old_tif_name = _normalize_uploaded_tiff_name(
+            req_json.get("old_tif_path"), input_root=input_root
+        )
         new_tif_name = _normalize_uploaded_tiff_name(
-            req_json.get("new_tif_path") or old_tif_name
+            req_json.get("new_tif_path") or old_tif_name, input_root=input_root
         )
         old_tif_path = resolve_managed_file(input_root, old_tif_name, {".tif", ".tiff"})
         new_tif_path = resolve_managed_file(
@@ -306,6 +406,8 @@ def kml_roi_inference_api():
             old_year=req_json.get('old_year') or '',
             new_year=req_json.get('new_year') or '',
             manifest_path=str(_asset_manifest_path()),
+            prehandle=prehandle,
+            denoise=denoise,
         )
         if data.get("status") == "failed":
             errors = data.get("tile_errors") or {}
@@ -321,8 +423,12 @@ def kml_roi_inference_api():
         return success_api(data=data)
     except PathValidationError as exc:
         return fail_api(str(exc)), 400
+    except ValueError as exc:
+        # 业务消息透出（如跨进程推理锁占用时 kml_roi_infer 返回的「已有任务在执行」）
+        return fail_api(str(exc)), 400
     except Exception as e:
-        return fail_api(str(e))
+        current_app.logger.error("图斑推理失败: %s", e, exc_info=True)
+        return fail_api("推理失败，请稍后重试或查看服务端日志")
 
 
 @analysis_api.get('/kml_roi_output/<tbbh>/<filename>')
@@ -345,8 +451,8 @@ def kml_roi_output_file(tbbh, filename):
 
 @analysis_api.get('/kml_roi_history')
 def kml_roi_history_list():
-    page = int(request.args.get('page', 1) or 1)
-    limit = int(request.args.get('limit', 20) or 20)
+    page = _safe_int(request.args.get('page'), 1)
+    limit = _safe_int(request.args.get('limit'), 20)
     page = max(1, page)
     limit = max(1, min(100, limit))
 
@@ -381,9 +487,16 @@ def kml_roi_history_list():
 def kml_roi_history_remove_one():
     req_json = request.json or {}
     record_id = str(req_json.get("record_id", "")).strip()
-    if "|" not in record_id:
+    # 契约：首段为 tbbh、末段为 filename。兼容两种历史形态——现行历史列表
+    # 产出的 2 段式 `tbbh|filename`，与推理完成 flash 卡片曾用过的 3 段式
+    # `tbbh|map_fid|filename`（中段 map_fid 忽略；filename 按产物命名规则
+    # 不含 |）。2026-09-16 审查 P2-1：此前 split("|", 1) 对 3 段式会把
+    # "map_fid|filename" 整段当文件名，删除必然「记录不存在」。
+    parts = record_id.split("|")
+    tbbh = parts[0].strip()
+    filename = parts[-1].strip()
+    if len(parts) < 2 or not tbbh or not filename:
         return fail_api("参数异常")
-    tbbh, filename = record_id.split("|", 1)
     if tbbh in {".", ".."} or "/" in tbbh or "\\" in tbbh:
         return fail_api("TBBH 参数不合法"), 400
     try:

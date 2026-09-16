@@ -78,10 +78,12 @@ services:
       - backend-static:/app/backend/static
       - hf-cache:/root/.cache/huggingface
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5008/ >/dev/null || exit 1"]
+      # standalone 运行镜像内无 curl，统一用 python3 urllib 探测（HTTP>=400 抛异常即非零退出）
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:5008/api/auth/session\", timeout=4)'"]
       interval: 30s
       timeout: 5s
       retries: 5
+      start_period: 120s
 
   frontend:
     <<: *runtime-base
@@ -99,10 +101,12 @@ services:
       - ./frontend/src:/app/frontend/src:ro
       - ./frontend/public:/app/frontend/public:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1"]
+      # standalone 运行镜像内无 curl，统一用 python3 urllib 探测；vue dev server 冷编译较慢
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:3000/\", timeout=4)'"]
       interval: 30s
       timeout: 5s
       retries: 5
+      start_period: 120s
 
   miner-api:
     <<: *runtime-base
@@ -127,10 +131,12 @@ services:
       - backend-static:/app/backend/static
       - hf-cache:/root/.cache/huggingface
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/auth/session >/dev/null || exit 1"]
+      # standalone 运行镜像内无 curl，统一用 python3 urllib 探测（Express 启动快）
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/api/auth/session\", timeout=4)'"]
       interval: 30s
       timeout: 5s
       retries: 5
+      start_period: 60s
 
   miner-web:
     <<: *runtime-base
@@ -150,10 +156,12 @@ services:
       - ./miner/src:/app/miner/src:ro
       - ./miner/vite.config.js:/app/miner/vite.config.js:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4000/ >/dev/null || exit 1"]
+      # standalone 运行镜像内无 curl，统一用 python3 urllib 探测；vite dev server 冷编译较慢
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:4000/\", timeout=4)'"]
       interval: 30s
       timeout: 5s
       retries: 5
+      start_period: 120s
 
   mysql:
     image: ${MYSQL_IMAGE:-registry.openanolis.cn/openanolis/mysql:8.0.30-8.6}

@@ -19,13 +19,17 @@ export const DEFAULT_JIANGXI_KMZ_CANDIDATES = [
 export function resolveDefaultJiangxiGeoSourcePath(value = '', existsSyncImpl = fs.existsSync) {
   const text = String(value || '').trim();
   if (text) return text;
-  const existingCandidate = DEFAULT_JIANGXI_GEO_SOURCE_CANDIDATES.find((candidate) => existsSyncImpl(candidate));
+  const existingCandidate = DEFAULT_JIANGXI_GEO_SOURCE_CANDIDATES.find((candidate) =>
+    existsSyncImpl(candidate)
+  );
   return existingCandidate || DEFAULT_JIANGXI_GEO_SOURCE_PATH;
 }
 
 export function resolveDefaultJiangxiKmzPath(value = '', existsSyncImpl = fs.existsSync) {
   const text = String(value || '').trim();
   if (text) return text;
-  const existingCandidate = DEFAULT_JIANGXI_KMZ_CANDIDATES.find((candidate) => existsSyncImpl(candidate));
+  const existingCandidate = DEFAULT_JIANGXI_KMZ_CANDIDATES.find((candidate) =>
+    existsSyncImpl(candidate)
+  );
   return existingCandidate || DEFAULT_JIANGXI_KMZ_PATH;
 }

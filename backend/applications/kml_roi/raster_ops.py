@@ -254,7 +254,8 @@ def crop_prediction_by_polygon(
     boundary_mask = poly_mask.astype(np.uint8)
     contours, _ = cv2.findContours(boundary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if contours:
-        cv2.drawContours(outlined_image, contours, -1, (0, 255, 255), 3)
+        # ROI 描边必须用白色常量，避免与道路类别的黄色混淆（见 ROI_BOUNDARY_COLOR 注释）
+        cv2.drawContours(outlined_image, contours, -1, ROI_BOUNDARY_COLOR, 3)
     cropped_image = outlined_image[y0:y1, x0:x1]
 
     cropped_mask = np.full(pred_mask.shape, 255, dtype=np.uint8)

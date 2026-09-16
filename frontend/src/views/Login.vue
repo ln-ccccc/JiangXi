@@ -7,6 +7,9 @@
       <p class="login-record data-label">江西样区档案 · 用户认证</p>
       <h2 id="login-title" class="login-title atlas-title">登录工作台</h2>
       <p class="login-subtitle">输入平台账号，登录后继续选择地物分类或光谱指数。</p>
+      <div v-if="sessionNotice" class="session-notice" role="status">
+        {{ sessionNotice }}
+      </div>
       <el-form label-position="top" @submit.prevent="submitLogin">
         <el-form-item label="账号">
           <el-input v-model="form.username" autocomplete="username" />
@@ -48,11 +51,30 @@ export default {
     return {
       loading: false,
       errorMessage: "",
+      sessionNotice: "",
       form: {
         username: "admin",
         password: "",
       },
     };
+  },
+  watch: {
+    // reason 必须响应式消费：已在登录页时迟到的 401 会经 redirectToLegacyLogin
+    // 重写 query（/#/login → /#/login?reason=expired&redirect=...），组件
+    // 不会重建，只在 created 读一次会丢失提示（immediate 兼顾首跳场景）。
+    "$route.query.reason": {
+      immediate: true,
+      handler(reason) {
+        const value = String(reason || "").trim();
+        if (value === "expired") {
+          this.sessionNotice = "登录已过期，请重新登录";
+        } else if (value) {
+          this.sessionNotice = "登录状态已失效，请重新登录";
+        } else {
+          this.sessionNotice = "";
+        }
+      },
+    },
   },
   methods: {
     async submitLogin() {
@@ -177,6 +199,16 @@ export default {
   margin-top: 10px;
   font-size: 16px;
   letter-spacing: 0.02em;
+}
+
+.session-notice {
+  margin: 0 0 18px;
+  padding: 9px 10px;
+  border-left: 2px solid var(--jx-warning);
+  background: var(--jx-surface-muted);
+  color: var(--jx-warning);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .error-text {

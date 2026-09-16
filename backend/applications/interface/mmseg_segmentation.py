@@ -100,6 +100,32 @@ def load_rs_image_with_gdal(img_path: str, to_float32: bool = True) -> Optional[
     return img_array
 
 
+def _probe_image_shape(img_path: str) -> Optional[tuple]:
+    """
+    只读栅格元数据获取加载后数组 shape，不读取像素（流式加载第一遍探测用）。
+
+    打开方式与 load_rs_image_with_gdal 保持一致（GDAL 优先，缺省回退 cv2），
+    返回值对应该函数加载出的 (H, W, C) shape；打开失败返回 None。
+    """
+    try:
+        from osgeo import gdal
+    except ImportError:
+        img = cv2.imread(img_path)
+        if img is None:
+            return None
+        return tuple(img.shape)
+
+    ds = gdal.Open(img_path)
+    if ds is None:
+        return None
+    try:
+        # load_rs_image_with_gdal 的 ReadAsArray 输出 (C, H, W)，einsum 后为 (H, W, C)
+        shape = (ds.RasterYSize, ds.RasterXSize, ds.RasterCount)
+    finally:
+        ds = None  # 释放数据集句柄
+    return shape
+
+
 def save_with_georeference(output_path: str, data: np.ndarray, reference_path: str):
     """
     保存带地理参考信息的 GeoTIFF
@@ -171,8 +197,11 @@ def run_loaded_model_inference(
 ) -> dict:
     """Run inference with a model that has already passed the Jiangxi contract.
 
-    同尺寸瓦片合并为批量前向（JIANGXI_MMSEG_BATCH_SIZE，默认 4）；批量失败
-    自动退回逐张推理，保持逐瓦片的错误隔离与输出契约不变。
+    两阶段流式加载：第一遍只读元数据按 shape 分组（不加载像素），第二遍逐 chunk
+    加载→批量前向→释放（JIANGXI_MMSEG_BATCH_SIZE，默认 4）——kml_roi 瓦片几乎
+    全部同尺寸，仅按 shape 分组不降内存，必须 chunk 级流式才能避免全量 float32
+    驻留（348×2 期 ≈2GB）。批量失败自动退回逐张推理，保持逐瓦片的错误隔离与
+    输出契约不变。
     """
     if inference_fn is None:
         from mmseg.apis import inference_model
@@ -194,25 +223,27 @@ def run_loaded_model_inference(
     os.makedirs(output_dir, exist_ok=True)
     results = []
 
-    loaded = []
+    # 第一遍只读元数据：按 shape 分组但不加载像素；打开失败的文件保持原错误语义
+    shape_groups: Dict[Any, List] = {}
     for filename in file_names:
+        img_path = os.path.join(input_dir, filename)
         try:
-            img_path = os.path.join(input_dir, filename)
-            img_array = load_rs_image_with_gdal(img_path, to_float32=True)
-            if img_array is None:
-                results.append({
-                    "name": filename,
-                    "status": "error",
-                    "error": "Failed to load image",
-                })
-            else:
-                loaded.append((filename, img_array))
+            shape = _probe_image_shape(img_path)
         except Exception as exc:
             results.append({
                 "name": filename,
                 "status": "error",
                 "error": str(exc),
             })
+            continue
+        if shape is None:
+            results.append({
+                "name": filename,
+                "status": "error",
+                "error": "Failed to load image",
+            })
+            continue
+        shape_groups.setdefault(shape, []).append((filename, img_path))
 
     def _predict(img_arrays: List[np.ndarray]) -> List[np.ndarray]:
         if len(img_arrays) == 1:
@@ -247,30 +278,60 @@ def run_loaded_model_inference(
         })
         print(f"[MMSeg] Processed: {filename} -> {out_name}", file=sys.stderr)
 
-    # 同尺寸瓦片分组批量前向，减少 GPU/内存往返次数
-    shape_groups: Dict[Any, List] = {}
-    for item in loaded:
-        shape_groups.setdefault(tuple(item[1].shape), []).append(item)
+    def _emit_single(filename: str, img_array: np.ndarray) -> None:
+        try:
+            _emit(filename, img_array, _predict([img_array])[0])
+        except Exception as exc:
+            results.append({
+                "name": filename,
+                "status": "error",
+                "error": str(exc),
+            })
+            print(f"[MMSeg] Error processing {filename}: {exc}", file=sys.stderr)
 
-    for group in shape_groups.values():
+    # 第二遍逐 chunk 流式：每个 chunk 即时加载→批量前向→写入→脱离引用，
+    # 任一时刻驻留内存只有当前 chunk 的像素数据，而不是整个 file_names 列表
+    for group_shape, group in shape_groups.items():
         for start in range(0, len(group), batch_size):
             chunk = group[start:start + batch_size]
-            try:
-                preds = _predict([img for _, img in chunk])
-                for (filename, img_array), pred_mask in zip(chunk, preds):
-                    _emit(filename, img_array, pred_mask)
-            except Exception:
-                # 批量失败（如显存不足）退回逐张推理，保持逐瓦片错误隔离
-                for filename, img_array in chunk:
-                    try:
-                        _emit(filename, img_array, _predict([img_array])[0])
-                    except Exception as exc:
-                        results.append({
-                            "name": filename,
-                            "status": "error",
-                            "error": str(exc),
-                        })
-                        print(f"[MMSeg] Error processing {filename}: {exc}", file=sys.stderr)
+            chunk_items = []
+            # 元数据 shape 与实际不一致的极端文件（元数据撒谎），退回逐张，
+            # 保证批量前向永远看不到混合 shape——与旧实现的全量 shape 分组等价
+            stragglers = []
+            for filename, img_path in chunk:
+                try:
+                    img_array = load_rs_image_with_gdal(img_path, to_float32=True)
+                except Exception as exc:
+                    results.append({
+                        "name": filename,
+                        "status": "error",
+                        "error": str(exc),
+                    })
+                    continue
+                if img_array is None:
+                    results.append({
+                        "name": filename,
+                        "status": "error",
+                        "error": "Failed to load image",
+                    })
+                    continue
+                if tuple(img_array.shape) == group_shape:
+                    chunk_items.append((filename, img_array))
+                else:
+                    stragglers.append((filename, img_array))
+            if chunk_items:
+                try:
+                    preds = _predict([img for _, img in chunk_items])
+                    for (filename, img_array), pred_mask in zip(chunk_items, preds):
+                        _emit(filename, img_array, pred_mask)
+                except Exception:
+                    # 批量失败（如显存不足）退回逐张推理，保持逐瓦片错误隔离
+                    for filename, img_array in chunk_items:
+                        _emit_single(filename, img_array)
+            for filename, img_array in stragglers:
+                _emit_single(filename, img_array)
+            # 让本 chunk 的像素数据立刻脱离引用，进入下一轮被覆盖/回收
+            del chunk_items, stragglers
 
     if effective_device == "cuda:0":
         import torch

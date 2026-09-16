@@ -1,0 +1,81 @@
+# =============================================================================
+# [归档 2026-09-15] 镜像谱系解耦调查回收的构建定义（原样留档，非现行构建入口）
+# - 来源：.worktrees/jiangxi-platform-repair（分支 fix/jiangxi-platform-repair，
+#   commit 698134e）；本文件在主树、main 与 fix/code-review-20260914 均已不存在。
+# - 构建产物：jiangxi-analysis-worker:gpu（镜像 ID 71f55653f308，20.9GB，54 层）；
+#   该镜像同时是现行 GPU 交付链的 JIANGXI_GPU_COMPAT_IMAGE/JIANGXI_BASE_IMAGE。
+# - FROM 链事实：上游 jiangxi-inference-worker:gpu 本地仍在（构建定义见同目录
+#   Dockerfile.jiangxi-inference-gpu 归档），但其上游 geoview-inference-worker:current
+#   已不在本地镜像库；第一阶段 jiangxi-runtime:current 仍在本地（含云南 30 层死重）。
+# - 本 Dockerfile COPY docker/start-analysis-worker-gpu.sh 作为 ENTRYPOINT，该脚本
+#   一并归档于本目录。
+# - GPU 交付链（jiangxi-inference-worker:gpu → jiangxi-analysis-worker:gpu →
+#   geoview-jiangxi:jiangxi-gpu*）与 yunnan-runtime:current 实测仅共享 2 个最底层
+#   公共基础层（nvidia/cuda 血统），功能独立，视为已解耦（2026-09-15 实测）。
+# =============================================================================
+# syntax=docker/dockerfile:1
+# The verified legacy CUDA worker already contains a matching CUDA/PyTorch/
+# mmcv binary stack. Keep that stack intact and add only the Flask queue
+# dependencies that are present in the current Jiangxi runtime image.
+FROM jiangxi-runtime:current AS current-runtime
+FROM jiangxi-inference-worker:gpu
+
+USER root
+
+ENV PATH=/opt/venv/bin:${PATH} \
+    PYTHONPATH=/app/backend/model/jiangxi/dinov3_swinV1:/app/backend \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    ANALYSIS_WORKER_NAME=gpu-inference
+
+# The inference image intentionally omits the web/API stack. Copy the small
+# set of packages used by the current persistent queue from the CPU runtime;
+# do not replace torch, torchvision, mmcv, mmengine, or the CUDA extensions.
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/flask_cors \
+    /opt/venv/lib/python3.10/site-packages/flask_cors
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/flask_migrate \
+    /opt/venv/lib/python3.10/site-packages/flask_migrate
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/flask_marshmallow \
+    /opt/venv/lib/python3.10/site-packages/flask_marshmallow
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/marshmallow \
+    /opt/venv/lib/python3.10/site-packages/marshmallow
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/marshmallow_sqlalchemy \
+    /opt/venv/lib/python3.10/site-packages/marshmallow_sqlalchemy
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/alembic \
+    /opt/venv/lib/python3.10/site-packages/alembic
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mako \
+    /opt/venv/lib/python3.10/site-packages/mako
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/openpyxl \
+    /opt/venv/lib/python3.10/site-packages/openpyxl
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/skimage \
+    /opt/venv/lib/python3.10/site-packages/skimage
+COPY --from=current-runtime /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/sqlparse \
+    /opt/venv/lib/python3.10/site-packages/sqlparse
+
+# The verified extension is ABI-compatible with this worker's CUDA/PyTorch
+# stack; the bundled metadata predates the current Jiangxi source tree's
+# mmcv>=2.2 guard, so expose the compatible API level without rebuilding the
+# extension against a different torch ABI.
+RUN sed -i "s/__version__ = '2.1.0'/__version__ = '2.2.0'/" \
+    /opt/venv/lib/python3.10/site-packages/mmcv/version.py
+
+# MMEngine determines whether a config import is from the standard library by
+# comparing it with sys.executable's prefix. This legacy image uses /opt/venv
+# while Python's standard library is under /usr/lib; use the actual root so
+# ``import os`` is not incorrectly treated as a lazy third-party import.
+RUN sed -i "s#PYTHON_ROOT_DIR = osp.dirname(osp.dirname(sys.executable))#PYTHON_ROOT_DIR = '/usr'#" \
+    /opt/venv/lib/python3.10/site-packages/mmengine/config/utils.py
+
+COPY docker/start-analysis-worker-gpu.sh /app/docker/start-analysis-worker-gpu.sh
+RUN chmod 0755 /app/docker/start-analysis-worker-gpu.sh \
+    && python - <<'PY'
+import mmcv
+import mmengine
+import torch
+
+assert torch.version.cuda == "12.8", torch.version.cuda
+assert tuple(int(part) for part in mmcv.__version__.split(".")[:2]) >= (2, 1)
+print("Jiangxi CUDA worker:", torch.__version__, torch.version.cuda, mmcv.__version__, mmengine.__version__)
+PY
+
+ENTRYPOINT ["/bin/bash", "/app/docker/start-analysis-worker-gpu.sh"]

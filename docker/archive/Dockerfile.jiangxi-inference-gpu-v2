@@ -1,0 +1,321 @@
+# =============================================================================
+# JiangXi GPU 推理底座 v2 —— 自包含重建定义（2026-09-16 编写，未构建）
+#
+# 【目的】让 GPU 交付链 jiangxi-inference-worker → jiangxi-analysis-worker →
+# geoview-jiangxi:jiangxi-gpu* 在上游镜像消失后仍可从第三方公共基础镜像重建，
+# 零依赖云南血统镜像。配套手册与本 Dockerfile 的验收门见同目录
+# README-rebuild-gpu.md。
+#
+# 【相比归档 v1（Dockerfile.jiangxi-inference-gpu，产物 0d2b4e8093ba）的关键差异】
+# 1. 删除对 geoview-inference-worker:current 的 FROM 依赖。该标签已不在本地镜像库，
+#    v1 因此不可原样重建（见 AGENTS.md §4.1）；v2 直接 FROM 第三方公共基础
+#    nvidia/cuda:12.8.0-devel-ubuntu22.04。
+# 2. 删除对 jiangxi-runtime:current（含云南 30 层历史死重）的第一阶段模型拷贝。
+#    v2 从本仓库构建上下文直接 COPY backend/model/jiangxi（.dockerignore 已放行
+#    该目录，构建上下文约 3.5GB）。
+# 3. v1 只把 model.pth 拷进 /app/backend/model/mmseg_config/（旧 worker 的解析路径）；
+#    v2 按现役约定落盘 /app/backend/model/jiangxi 四件套（config.py / model.pth /
+#    metadata.json / dinov3_swinV1 源码树），并在构建期执行 metadata.json 三哈希
+#    （config_sha256 / checkpoint_sha256 / source_sha256 + 依赖权重哈希）校验，
+#    算法与 backend/applications/interface/mmseg_inference_caller.py 的
+#    _verified_sha256 / _source_tree_sha256 / _verify_dependency_hashes 逐字一致。
+# 4. 环境配方改编自云南仓库 docker/Dockerfile.inference-gpu（同源代码，v1 的实际
+#    构建定义；本文件是江西自有改编副本，不引用云南仓库任何路径或 helper 脚本）：
+#    /opt/venv + torch(cu128 官方索引) + mmengine/mmsegmentation/opencv/rasterio
+#    + 源码编译 mmcv wheel（devel 层 nvcc）+ 系统 GDAL/PROJ 库。
+# 5. 血统事实更正：v1 的实际底端血统是 nvidia/cuda:12.8.0-base-ubuntu22.04
+#    （运行层）+ nvidia/cuda:12.8.0-devel-ubuntu22.04（仅 mmcv 构建层）两段拆分。
+#    本 v2 按重建决策统一使用 devel 单一基础（少一个镜像变体、构建更简单），
+#    代价是运行层多出约 3-4GB CUDA 工具链；确认整链验收通过后，可再改回
+#    base/devel 两段拆分瘦身（云南原版即此结构）。
+# 6. mmdet 事实：v1 venv 实测没有 mmdet（mmdet 3.3.0 只存在于最终交付镜像的
+#    conda MMSeg310 环境，来自 jiangxi-runtime 侧）。v2 与 v1 保持一致，不在
+#    venv 安装 mmdet。
+#
+# 【版本钉死依据（2026-09-16 实测，禁止臆造改动；探测记录见 README）】
+#   python 3.10.12 / torch 2.7.0+cu128 / torchvision 0.22.0+cu128 /
+#   torch.version.cuda 12.8 / mmcv 2.1.0（源码编译）/ mmengine 0.10.4 /
+#   mmsegmentation 1.2.2（venv site-packages；运行时经 PYTHONPATH 生效的
+#   vendored 树是 1.1.2）/ opencv-python-headless 4.10.0.84 / rasterio 1.4.4 /
+#   numpy 1.26.4 / shapely 1.8.5.post1 / Pillow 11.3.0 / PyYAML 6.0.3 /
+#   addict 2.4.0 / yapf 0.43.0 / Flask 2.2.2（及 worker.txt 同组钉死值）。
+#
+# 【GDAL/PROJ 说明】apt 安装 gdal-bin + libgdal30 + libgeos-c1v5 提供系统
+# GDAL/PROJ 运行库与 CLI（gdalinfo/ogr2ogr）；Python 栅格栈由 rasterio 1.4.4
+# 的 manylinux wheel 自带 GDAL/PROJ 提供，二者共存互不冲突。现役交付镜像使用的
+# geopandas→osgeo.ogr 显式回退发生在 conda 侧（docker/standalone/Dockerfile.jiangxi），
+# 不属于本镜像职责；事实出入记录见 README 第 8 节。
+#
+# 【健康检查】对齐 v1 镜像继承自云南构建的 /proc/1/cmdline 检查形态：确认 PID 1
+# 仍是本镜像声明的入口进程（v1 查 run_inference_worker.py；现行江西代码已剔除
+# 该 worker，v2 改查本镜像真实入口 hold_jiangxi_inference_gpu.py——见文件尾部
+# 注释）。GPU 可用性与真实 CUDA 推理属于 README 验收门，不放进 30s 健康检查。
+#
+# 【构建】需要 BuildKit（RUN --mount=cache 与 heredoc 语法）；构建上下文为仓库
+# 根目录，且必须包含 backend/model/jiangxi 四件套——该目录被 .gitignore 忽略，
+# 只存在于主工作树（worktree 检出没有它，详见 README 第 4 节开头）。命令序列
+# 与 tag 约定见 README-rebuild-gpu.md 第 4 节。
+# =============================================================================
+# syntax=docker/dockerfile:1
+
+# ---------------------------------------------------------------------------
+# 阶段一：mmcv 源码编译（需要 devel 层的 nvcc；与 v1 血统相同的 CUDA 12.8 工具链）
+# mmcv _ext 必须在与运行时完全相同的 torch/CUDA ABI 上编译，且绝不能跨基础镜像
+# 复制 .so（AGENTS §7 GLIBC_2.32 教训）。本阶段产出的 wheel 在阶段二原样安装。
+# ---------------------------------------------------------------------------
+FROM nvidia/cuda:12.8.0-devel-ubuntu22.04 AS mmcv-builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TORCH_VERSION=2.7.0
+ARG TORCHVISION_VERSION=0.22.0
+ARG CUDA_VERSION=12.8
+ARG MMCV_VERSION=2.1.0
+# 与云南原版一致的 arch 清单：12.0+PTX 覆盖 RTX 5060（Blackwell sm_120，
+# 2026-09 已在现役交付链实测可用）。MAX_JOBS=2 抑制并行 nvcc 内存峰值。
+ARG TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;8.9;9.0;10.0;12.0+PTX"
+
+RUN sed -i -E 's|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|http://security.ubuntu.com/ubuntu|https://security.ubuntu.com/ubuntu|g' /etc/apt/sources.list \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+       build-essential \
+       ca-certificates \
+       git \
+       ninja-build \
+       libgl1 \
+       libglib2.0-0 \
+       libgomp1 \
+       libsm6 \
+       libxext6 \
+       libxrender1 \
+       python3 \
+       python3-dev \
+       python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/build-venv
+
+ENV PATH="/opt/build-venv/bin:${PATH}" \
+    CUDA_HOME=/usr/local/cuda \
+    FORCE_CUDA=1 \
+    MMCV_WITH_OPS=1 \
+    MAX_JOBS=2 \
+    TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
+
+# torch 与 pip 工具钉死版本（与现役 v1 venv 实测一致；pip 缓存挂载供两阶段复用，
+# torch ~1.2GB 只下载一次）。
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --retries 12 --timeout 180 --upgrade \
+      "pip==25.1.1" "setuptools==80.9.0" "wheel==0.45.1" ninja psutil \
+    && python -m pip install --retries 12 --timeout 180 \
+      "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" \
+      --index-url https://download.pytorch.org/whl/cu128 \
+      --extra-index-url https://pypi.org/simple
+
+# 注意：索引 URL 硬编码 cu128（RUN 默认 /bin/sh 不支持 bash 的 ${VAR/./} 替换）；
+# CUDA_VERSION ARG 只用于版本断言。更换 CUDA 线时需同步改索引与基础镜像 tag。
+
+# 从 PyPI sdist 源码编译 mmcv wheel 并在本阶段完成 ABI 验证（import roi_align）。
+# 云南原版用其仓库内的 build-mmcv-wheel.py 做 wheel 缓存与校验；该脚本不随江西
+# 仓库分发，此处改为等价的内联 pip download/wheel + import 验证，逻辑对齐：
+# 校验失败即构建失败，绝不让未验证的 _ext 进入运行层。
+RUN --mount=type=cache,target=/root/.cache/pip \
+    mkdir -p /tmp/mmcv-src /tmp/mmcv-wheel \
+    && python -m pip download --retries 12 --timeout 180 \
+      --no-deps --no-binary mmcv --no-build-isolation \
+      --dest /tmp/mmcv-src "mmcv==${MMCV_VERSION}" \
+    && python -m pip wheel --no-build-isolation --no-deps \
+      --wheel-dir /tmp/mmcv-wheel "/tmp/mmcv-src/mmcv-${MMCV_VERSION}.tar.gz" \
+    && test "$(find /tmp/mmcv-wheel -maxdepth 1 -type f -name "mmcv-${MMCV_VERSION}-*.whl" | wc -l)" -eq 1 \
+    && python -m pip install --retries 12 --timeout 180 \
+      "mmengine==0.10.4" "addict==2.4.0" "yapf==0.43.0" \
+      "opencv-python-headless==4.10.0.84" "numpy==1.26.4" \
+      "Pillow==11.3.0" "PyYAML==6.0.3" packaging \
+    && python -m pip install --no-deps /tmp/mmcv-wheel/mmcv-${MMCV_VERSION}-*.whl \
+    && python -c "import mmcv, mmengine, torch; from mmcv.ops import roi_align; assert torch.version.cuda == '${CUDA_VERSION}', torch.version.cuda; assert mmcv.__version__ == '${MMCV_VERSION}', mmcv.__version__; print('mmcv wheel ABI verified:', mmcv.__version__, torch.__version__, torch.version.cuda)"
+
+# ---------------------------------------------------------------------------
+# 阶段二：运行时镜像（CUDA 12.8 devel + /opt/venv + 江西模型四件套）
+# ---------------------------------------------------------------------------
+FROM nvidia/cuda:12.8.0-devel-ubuntu22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TORCH_VERSION=2.7.0
+ARG TORCHVISION_VERSION=0.22.0
+ARG CUDA_VERSION=12.8
+ARG MMCV_VERSION=2.1.0
+
+RUN sed -i -E 's|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|http://security.ubuntu.com/ubuntu|https://security.ubuntu.com/ubuntu|g' /etc/apt/sources.list \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+       ca-certificates \
+       gdal-bin \
+       libgdal30 \
+       libgeos-c1v5 \
+       libgl1 \
+       libglib2.0-0 \
+       libgomp1 \
+       libsm6 \
+       libxext6 \
+       libxrender1 \
+       python3 \
+       python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/venv
+
+ENV PATH="/opt/venv/bin:${PATH}" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY --from=mmcv-builder /tmp/mmcv-wheel /tmp/mmcv-wheel
+
+# 依赖组与 v1 venv 实测逐项对齐（云南 inference-core.txt / inference-worker.txt
+# 的钉死版）：torch → 核心推理栈 → Flask worker 组 → mmcv wheel（--no-deps，
+# mmcv 的运行依赖 addict/yapf 等已在上一步显式安装）。
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --retries 12 --timeout 180 --upgrade \
+      "pip==25.1.1" "setuptools==80.9.0" "wheel==0.45.1" \
+    && python -m pip install --retries 12 --timeout 180 \
+      "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" \
+      --index-url https://download.pytorch.org/whl/cu128 \
+      --extra-index-url https://pypi.org/simple \
+    && python -m pip install --retries 12 --timeout 180 \
+      "mmengine==0.10.4" \
+      "mmsegmentation==1.2.2" \
+      "numpy==1.26.4" \
+      "opencv-python-headless==4.10.0.84" \
+      "rasterio==1.4.4" \
+      "shapely==1.8.5.post1" \
+      "Pillow==11.3.0" \
+      "PyYAML==6.0.3" \
+      "addict==2.4.0" \
+    && python -m pip install --retries 12 --timeout 180 \
+      "Flask==2.2.2" \
+      "Flask-SQLAlchemy==2.5.1" \
+      "SQLAlchemy==1.4.46" \
+      "PyMySQL==1.2.0" \
+      "Werkzeug==2.2.3" \
+      "python-dotenv==1.2.2" \
+    && python -m pip install --no-deps --no-index \
+      --find-links=/tmp/mmcv-wheel "mmcv==${MMCV_VERSION}" \
+    && rm -rf /tmp/mmcv-wheel
+
+# 构建期导入冒烟。注意 PYTHONPATH 必须显式清空：下方 ENV 会把江西 vendored
+# mmseg（1.1.2，要求 mmcv>=2.2.0，见 backend/model/jiangxi/dinov3_swinV1/
+# mmseg/__init__.py 的 MMCV_MIN='2.2.0'）顶到 site-packages mmseg（1.2.2）之前；
+# 本镜像的 mmcv 尚未做 2.2.0 版本号修补（那一步属于 analysis-worker v2），
+# 直接 import vendored mmseg 会触发版本断言。site-packages 组合
+# （mmseg 1.2.2 + mmcv 2.1.0）与云南 v1 构建期验证一致，可安全导入。
+RUN PYTHONPATH= python -c "\
+import torch, torchvision, mmcv, mmengine, mmseg, cv2, rasterio, shapely, numpy, flask; \
+from mmcv.ops import nms, roi_align; \
+assert torch.version.cuda == '${CUDA_VERSION}', torch.version.cuda; \
+assert mmcv.__version__ == '${MMCV_VERSION}', mmcv.__version__; \
+assert mmengine.__version__ == '0.10.4', mmengine.__version__; \
+assert mmseg.__version__ == '1.2.2', mmseg.__version__; \
+print('JiangXi GPU v2 inference stack OK:', 'python', __import__('sys').version.split()[0], '/', torch.__version__, '/', mmcv.__version__, '/', mmengine.__version__, '/', mmseg.__version__)"
+
+# 运行用户与目录（与 v1 血统一致：inference uid/gid 10001，nologin shell）。
+RUN groupadd --gid 10001 inference \
+    && useradd --uid 10001 --gid inference --create-home --shell /usr/sbin/nologin inference \
+    && mkdir -p /app \
+    && chown inference:inference /app
+
+WORKDIR /app
+
+# 江西模型四件套直接来自构建上下文（v1 是从 jiangxi-runtime:current 拷贝）。
+COPY backend/model/jiangxi /app/backend/model/jiangxi
+
+# 现役环境变量约定（与 docker/standalone/Dockerfile.jiangxi 的 GPU 构建一致）。
+ENV JIANGXI_MMSEG_MODEL_ROOT=/app/backend/model/jiangxi \
+    JIANGXI_MMSEG_CONFIG_PATH=/app/backend/model/jiangxi/config.py \
+    JIANGXI_MMSEG_CHECKPOINT_PATH=/app/backend/model/jiangxi/model.pth \
+    JIANGXI_MMSEG_METADATA_PATH=/app/backend/model/jiangxi/metadata.json \
+    JIANGXI_MMSEG_SOURCE_ROOT=/app/backend/model/jiangxi/dinov3_swinV1 \
+    PYTHONPATH=/app/backend/model/jiangxi/dinov3_swinV1:/app/backend \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# 构建期资产门：metadata.json 三哈希 + 依赖权重哈希 + region/classes 契约。
+# 算法逐字对齐 backend/applications/interface/mmseg_inference_caller.py
+# （_verified_sha256 / _source_tree_sha256 / _verify_dependency_hashes），
+# 任何一项不匹配即构建失败——模型资产缺失或哈希不一致必须阻止启动（AGENTS §1）。
+RUN python - <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+root = Path("/app/backend/model/jiangxi")
+metadata = json.loads((root / "metadata.json").read_text(encoding="utf-8"))
+classes = ["grassland", "forest", "building", "road", "bareground", "water"]
+
+assert str(metadata.get("region", "")).strip().lower() == "jiangxi", "region != jiangxi"
+assert metadata.get("classes") == classes, "classes 顺序不匹配"
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+assert sha256_file(root / "config.py") == str(metadata["config_sha256"]).lower(), "config_sha256 不匹配"
+assert sha256_file(root / "model.pth") == str(metadata["checkpoint_sha256"]).lower(), "checkpoint_sha256 不匹配"
+
+source_root = root / "dinov3_swinV1"
+digest = hashlib.sha256()
+files = sorted(
+    (path for path in source_root.rglob("*.py") if path.is_file()),
+    key=lambda path: path.relative_to(source_root).as_posix(),
+)
+for path in files:
+    relative = path.relative_to(source_root).as_posix().encode("utf-8")
+    digest.update(len(relative).to_bytes(8, "big"))
+    digest.update(relative)
+    digest.update(path.stat().st_size.to_bytes(8, "big"))
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+assert len(files) == int(metadata["source_file_count"]), "source_file_count 不匹配"
+assert digest.hexdigest() == str(metadata["source_sha256"]).lower(), "source_sha256 不匹配"
+
+for name, expected in (metadata.get("dependencies") or {}).items():
+    candidates = [source_root / name, *source_root.rglob(name)]
+    dependency = next((path for path in candidates if path.is_file()), None)
+    assert dependency is not None, f"依赖权重不存在：{name}"
+    assert sha256_file(dependency) == str(expected).strip().lower(), f"依赖权重哈希不匹配：{name}"
+
+print(f"JiangXi 模型三哈希校验通过：{len(files)} 个源码文件 + {len(metadata.get('dependencies') or {})} 个依赖权重")
+PY
+
+# 入口：现行江西代码已无独立推理 worker 进程（run_inference_worker.py 与
+# applications/inference 已于复审 E 批剔除；交付链的推理在最终镜像的 Flask
+# 进程内经 Unix Socket worker 完成，见 AGENTS §3）。本镜像的真实角色是
+# analysis-worker v2 与 standalone GPU 构建的 CUDA 栈与模型资产载体，故入口
+# 是一个最小 hold 进程：保持容器存活，供健康检查与健康验证使用。
+RUN mkdir -p /app/docker \
+    && printf '%s\n' \
+       '#!/opt/venv/bin/python' \
+       '"""JiangXi GPU v2 inference carrier hold process (see Dockerfile header)."""' \
+       'import signal' \
+       'signal.pause()' \
+       > /app/docker/hold_jiangxi_inference_gpu.py \
+    && chmod 0755 /app/docker/hold_jiangxi_inference_gpu.py \
+    && chown -R inference:inference /app
+
+# 健康检查形态对齐 v1 继承的 /proc/1/cmdline 检查（AGENTS §7 记载的入口进程
+# 存活式检查）：确认 PID 1 仍是本镜像声明的 hold 入口，而非被其它进程顶替。
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD ["/opt/venv/bin/python", "-c", "from pathlib import Path; assert 'hold_jiangxi_inference_gpu.py' in Path('/proc/1/cmdline').read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace')"]
+
+ENTRYPOINT ["/opt/venv/bin/python", "/app/docker/hold_jiangxi_inference_gpu.py"]
+
+USER inference
+
+LABEL org.opencontainers.image.title="JiangXi GPU inference base (v2, self-contained)" \
+      io.jiangxi.python.version="3.10" \
+      io.jiangxi.torch.version="2.7.0+cu128" \
+      io.jiangxi.mmcv.version="2.1.0" \
+      io.jiangxi.mmengine.version="0.10.4" \
+      io.jiangxi.mmsegmentation.version="1.2.2"

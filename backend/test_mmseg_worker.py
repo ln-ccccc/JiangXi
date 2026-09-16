@@ -10,6 +10,7 @@ from applications.interface.mmseg_worker import (
     MmsegWorker,
     WorkerUnavailableError,
     _remove_stale_socket,
+    ping_worker,
     request_worker,
     serve_worker,
 )
@@ -144,6 +145,112 @@ class MmsegWorkerTests(unittest.TestCase):
             self.assertEqual(third.get("status"), "completed")
             self.assertEqual(third["results"][0]["name"], "pred_b.png")
             self.assertTrue(thread.is_alive(), "serve_worker 因单客户端断开而退出")
+            self.assertEqual(serve_failures, [])
+
+    @unittest.skipUnless(hasattr(socket, "AF_UNIX"), "AF_UNIX 仅在 Linux/容器环境可用")
+    def test_silent_connection_is_dropped_and_serve_survives(self):
+        """哑连接（connect 后一字不发）只应在读超时后被丢弃，不得挂死 serve 循环。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            socket_path = Path(temp_dir) / "worker.sock"
+            serve_failures = []
+
+            def run_server():
+                try:
+                    serve_worker(str(socket_path), self.worker, read_timeout=0.3)
+                except Exception as exc:
+                    serve_failures.append(exc)
+
+            thread = threading.Thread(target=run_server, daemon=True)
+            thread.start()
+            deadline = time.time() + 5
+            while not socket_path.exists() and time.time() < deadline:
+                time.sleep(0.05)
+            self.assertTrue(socket_path.exists(), "serve_worker 未在期限内创建 socket")
+
+            silent = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                silent.connect(str(socket_path))
+                # 不发送任何字节，等待读超时触发丢弃
+                time.sleep(0.8)
+            finally:
+                silent.close()
+
+            pong = request_worker(str(socket_path), {"action": "ping"}, timeout=5.0)
+            self.assertEqual(pong.get("status"), "ok")
+            self.assertTrue(thread.is_alive(), "serve_worker 因哑连接而挂死或退出")
+            self.assertEqual(serve_failures, [])
+
+    @unittest.skipUnless(hasattr(socket, "AF_UNIX"), "AF_UNIX 仅在 Linux/容器环境可用")
+    def test_ping_answered_while_inference_in_flight(self):
+        """长推理期间 ping 必须即时应答：serve 循环不得被 infer 请求阻塞。
+
+        GPU worker 串行设计下，健康检查 ping 在旧实现里要在推理后面排队，
+        全量推理持续 >150s 时容器会被 HEALTHCHECK 误判为 unhealthy。
+        """
+        release = threading.Event()
+
+        def slow_infer(**kwargs):
+            release.wait(timeout=10)
+            return {
+                "status": "completed",
+                "results": [],
+                "runtime": {"effective_device": "cuda:0"},
+            }
+
+        worker = MmsegWorker(
+            model=self.model,
+            runtime={
+                "requested_device": "cuda:0",
+                "effective_device": "cuda:0",
+                "device_name": "test-gpu",
+            },
+            inference_fn=slow_infer,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            socket_path = Path(temp_dir) / "worker.sock"
+            serve_failures = []
+
+            def run_server():
+                try:
+                    serve_worker(str(socket_path), worker)
+                except Exception as exc:
+                    serve_failures.append(exc)
+
+            thread = threading.Thread(target=run_server, daemon=True)
+            thread.start()
+            deadline = time.time() + 5
+            while not socket_path.exists() and time.time() < deadline:
+                time.sleep(0.05)
+            self.assertTrue(socket_path.exists())
+
+            infer_result = {}
+
+            def run_infer():
+                infer_result["resp"] = request_worker(
+                    str(socket_path),
+                    {
+                        "action": "infer",
+                        "input_dir": "/input",
+                        "output_dir": "/output",
+                        "file_names": ["slow.tif"],
+                    },
+                    timeout=15.0,
+                )
+
+            infer_thread = threading.Thread(target=run_infer, daemon=True)
+            infer_thread.start()
+            time.sleep(0.5)  # 等 infer 进入执行（slow_infer 阻塞在 release 上）
+
+            started = time.time()
+            pong = ping_worker(str(socket_path), timeout=5.0)
+            ping_elapsed = time.time() - started
+            self.assertEqual(pong.get("status"), "ok")
+            self.assertLess(ping_elapsed, 2.0, "推理未结束时 ping 仍被阻塞")
+
+            release.set()
+            infer_thread.join(timeout=10)
+            self.assertEqual(infer_result["resp"].get("status"), "completed")
+            self.assertTrue(thread.is_alive())
             self.assertEqual(serve_failures, [])
 
 

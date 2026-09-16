@@ -1,4 +1,11 @@
-const backendBaseUrl = (process.env.GEOVIEW_BACKEND_URL || 'http://localhost:5008').replace(/\/$/, '');
+const backendBaseUrl = (process.env.GEOVIEW_BACKEND_URL || 'http://localhost:5008').replace(
+  /\/$/,
+  ''
+);
+
+// 认证操作（login/logout/session）均为轻量请求，统一 15s 超时；
+// 慢操作分级（导出/备份恢复 120s）见 projectBackend.js 的 SLOW_OP_TIMEOUT_MS。
+const AUTH_TIMEOUT_MS = 15000;
 
 export async function requestBackendAuth(method, path, { body, cookie } = {}) {
   const response = await fetch(`${backendBaseUrl}${path}`, {
@@ -8,6 +15,7 @@ export async function requestBackendAuth(method, path, { body, cookie } = {}) {
       ...(cookie ? { cookie } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
   });
 
   const text = await response.text();
@@ -21,9 +29,12 @@ export async function requestBackendAuth(method, path, { body, cookie } = {}) {
   return {
     status: response.status,
     body: parsed,
-    setCookies: typeof response.headers.getSetCookie === 'function'
-      ? response.headers.getSetCookie()
-      : (response.headers.get('set-cookie') ? [response.headers.get('set-cookie')] : []),
+    setCookies:
+      typeof response.headers.getSetCookie === 'function'
+        ? response.headers.getSetCookie()
+        : response.headers.get('set-cookie')
+          ? [response.headers.get('set-cookie')]
+          : [],
   };
 }
 

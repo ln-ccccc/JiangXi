@@ -185,7 +185,9 @@ python app.py &
 BACKEND_PID=$!
 
 cd /app/frontend
-npm run serve -- --host "${FRONTEND_HOST}" --port "${FRONTEND_PORT}" &
+# NODE_ENV=development：镜像级 ENV NODE_ENV=production 只为 Express 生产模式；
+# webpack dev server 在 production 模式下会改变构建/HMR 行为，这里钉回开发语义
+NODE_ENV=development npm run serve -- --host "${FRONTEND_HOST}" --port "${FRONTEND_PORT}" &
 FRONTEND_PID=$!
 
 # --- Miner (鐭垮北鐩戞祴绯荤粺) conditional startup ---
@@ -207,8 +209,9 @@ if [ "${MINER_ENABLED}" = "true" ]; then
   MINER_BACKEND_PID=$!
 
   # Start Miner Vite dev server (using Node.js 20)
+  # NODE_ENV=development：同上，避免镜像级 production 影响 vite dev 行为
   cd /app/miner
-  PATH=/opt/node20/bin:$PATH npx vite --host 0.0.0.0 --port "${MINER_FRONTEND_PORT}" &
+  PATH=/opt/node20/bin:$PATH NODE_ENV=development npx vite --host 0.0.0.0 --port "${MINER_FRONTEND_PORT}" &
   MINER_FRONTEND_PID=$!
 
   echo "[entrypoint] Miner backend PID=${MINER_BACKEND_PID}, frontend PID=${MINER_FRONTEND_PID}"
@@ -239,5 +242,9 @@ terminate() {
 
 trap terminate SIGTERM SIGINT
 
-wait -n "${WAIT_PIDS[@]}"
+# set -e 环境下 wait -n 的非零退出码必须就地兜底（同上方监督循环 :150-152），
+# 否则任一子服务非零退出会在 wait 行直接退出脚本、跳过 terminate() 的清理
+rc=0
+wait -n "${WAIT_PIDS[@]}" || rc=$?
 terminate
+exit "$rc"

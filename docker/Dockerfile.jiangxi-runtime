@@ -1,0 +1,130 @@
+# 江西自有 CPU 运行时底座（从源码可独立重建）
+#
+# 目标：摆脱云南血统。现 jiangxi-runtime:current/squashed-20260915 的 conda/node
+# 环境内容源自七月隔离前的云南构建（不可再生的历史层）；本文件以 ubuntu:20.04 为起点，
+# 用导出的环境清单（docker/runtime-env/）+ 公网源重建等价运行环境。
+#
+# 布局对齐现底座：/opt/conda + MMSeg310 环境、/opt/node20（node v20.19.0/npm 10.8.2）、
+# /app 工作目录、PATH 预激活 MMSeg310。
+# 与现底座的刻意差异（详见 docker/scripts/rebuild-runtime.md）：
+#   1. 不携带云南时代 /app 业务内容（backend/frontend/runtime_data 等）；
+#   2. ENV 无云南血统残留（MYSQL_* 凭据、大理 TIF 路径、paddle_rs 库名等一概不进入）；
+#   3. mmsegmentation 为 PyPI 正式安装（原环境 editable 指向已不存在的云南旧路径，
+#      运行时真实生效的 mmseg 一直由 PYTHONPATH=JIANGXI_MMSEG_SOURCE_ROOT 的 fork 源码树覆盖）；
+#   4. /app/miner 仅预置 package.json/package-lock.json 与两个 Linux 原生 npm 包
+#      （@rollup/rollup-linux-x64-gnu、@esbuild/linux-x64）——docker/standalone/Dockerfile.jiangxi
+#      构建交付镜像时从本镜像 COPY 这两个包回补离线 npm ci 的原生依赖。
+#
+# 构建（在仓库根目录）：
+#   docker build -f docker/Dockerfile.jiangxi-runtime -t jiangxi-runtime:rebuilt-20260915 .
+# 预期耗时 30-90 分钟（conda 解算/下载 + pip 大轮子下载为主）。
+
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Shanghai \
+    FLASK_CONFIG=production \
+    PATH=/opt/conda/envs/MMSeg310/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 系统依赖：对齐 squashed 底座的 dpkg 集合中实际需要的部分——
+# 编译工具链（历史 pip 源码包兜底）、git/curl/wget、opencv-python 轮子的 GL/glib 运行库、procps。
+# apt 源换为清华镜像：2026-09-16 实测 archive.ubuntu.com 边缘节点持续 502，
+# 与 conda/pip 所用镜像族保持一致（离线替代方案见 docker/scripts/rebuild-runtime.md）。
+# 注意用 http：基础镜像尚无 ca-certificates，https 自举失败；apt 完整性由 GPG 签名保证，
+# ca-certificates 装好后其余下载（curl/pip/conda/npm）全部走 https。
+RUN sed -i \
+        -e 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
+        -e 's|http://security.ubuntu.com/ubuntu/|http://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
+        /etc/apt/sources.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        curl \
+        wget \
+        git \
+        bzip2 \
+        xz-utils \
+        openssl \
+        procps \
+        libgl1 \
+        libgl1-mesa-dri \
+        libglx-mesa0 \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender1 \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- 阶段 1：Miniconda 安装器（/opt/conda）----
+# 系统级 .condarc 置空 channels：中立化安装器自带的 defaults 通道
+# （repo.anaconda.com/pkgs/*，其 ToS 确认会阻断非交互构建；本底座全部 conda 包
+# 实测仅来自 conda-forge，见 runtime-env 清单头注）。
+RUN curl -fsSL -o /tmp/miniconda.sh \
+        https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+    && bash /tmp/miniconda.sh -b -p /opt/conda \
+    && rm -f /tmp/miniconda.sh \
+    && printf 'channels: []\nchannel_priority: strict\n' > /opt/conda/.condarc
+
+# ---- 阶段 2：MMSeg310 conda 环境（大层，清单独立缓存）----
+COPY docker/runtime-env/MMSeg310.environment.yml /tmp/MMSeg310.environment.yml
+RUN /opt/conda/bin/conda env create -f /tmp/MMSeg310.environment.yml \
+    && /opt/conda/bin/conda clean --all --yes \
+    && rm -f /tmp/MMSeg310.environment.yml \
+    && test -x /opt/conda/envs/MMSeg310/bin/python \
+    && /opt/conda/envs/MMSeg310/bin/python --version | grep -F "Python 3.10"
+
+# ---- 阶段 3：pip 包集合 ----
+# --no-deps：清单来自实测可用环境的闭合集合，避免解析器因 mm 系包的版本上界互相降级
+# （mmsegmentation 1.1.2 官方要求 mmcv<2.2.0，而本环境实测组合为 mmcv 2.2.0）。
+# torch==2.2.2+cpu 只存在于 pytorch CPU 索引；mmcv==2.2.0 优先取 openmmlab CPU 预编译轮子
+# （带 _ext ops，免现场编译；PyPI 同名 sdist 会被轮子优先规则压过）。
+COPY docker/runtime-env/MMSeg310.requirements.txt /tmp/MMSeg310.requirements.txt
+RUN pip install --no-cache-dir --no-deps \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        --find-links https://download.openmmlab.com/mmcv/dist/cpu/torch2.2/index.html \
+        -r /tmp/MMSeg310.requirements.txt \
+    && rm -f /tmp/MMSeg310.requirements.txt
+
+# ---- 阶段 3b：mm 系版本护栏放宽（与实测组合 mmcv 2.2.0 对齐）----
+# PyPI mmsegmentation 1.1.2 护栏 mmcv>=2.0.0rc4,<2.1.0、mmdet 3.3.0 护栏 mmcv<2.2.0，
+# 均与本清单的 mmcv 2.2.0 冲突。放宽边界与 fork 源码树
+# （backend/model/jiangxi/dinov3_swinV1/mmseg/__init__.py 的 2.2.0–2.3.0）一致；
+# 与 docker/standalone/Dockerfile.jiangxi 对 mmdet 的同类 sed 等价——该步骤在交付镜像
+# 构建时因已是 2.3.0 自动变为 no-op（其 grep 守卫仍通过）。
+RUN sed -i -e "s/^MMCV_MIN = '2.0.0rc4'$/MMCV_MIN = '2.2.0'/" \
+            -e "s/^MMCV_MAX = '2.1.0'$/MMCV_MAX = '2.3.0'/" \
+        /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmseg/__init__.py \
+    && sed -i "s/mmcv_maximum_version = '2.2.0'/mmcv_maximum_version = '2.3.0'/" \
+        /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmdet/__init__.py \
+    && grep -q "^MMCV_MAX = '2.3.0'$" /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmseg/__init__.py \
+    && grep -Fq "mmcv_maximum_version = '2.3.0'" /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmdet/__init__.py
+
+# ---- 阶段 4：node20（v20.19.0 / npm 10.8.2，与现底座实测一致）----
+RUN curl -fsSL -o /tmp/node.tar.xz \
+        https://nodejs.org/dist/v20.19.0/node-v20.19.0-linux-x64.tar.xz \
+    && mkdir -p /opt/node20 \
+    && tar -xJf /tmp/node.tar.xz -C /opt/node20 --strip-components=1 \
+    && rm -f /tmp/node.tar.xz
+
+# ---- 阶段 5：miner 的 Linux 原生 npm 依赖（版本号从 package-lock.json 读取，随锁文件演进）----
+COPY miner/package.json miner/package-lock.json /app/miner/
+RUN set -eux; \
+    export PATH=/opt/node20/bin:${PATH}; \
+    ver_rollup="$(node -e "const l=require('/app/miner/package-lock.json'); const p=l.packages&&l.packages['node_modules/@rollup/rollup-linux-x64-gnu']; if(!p)process.exit(1); console.log(p.version)")"; \
+    ver_esbuild="$(node -e "const l=require('/app/miner/package-lock.json'); const p=l.packages&&l.packages['node_modules/@esbuild/linux-x64']; if(!p)process.exit(1); console.log(p.version)")"; \
+    npm install --prefix /app/miner --no-save --no-package-lock --ignore-scripts \
+        --no-audit --no-fund \
+        "@rollup/rollup-linux-x64-gnu@${ver_rollup}" "@esbuild/linux-x64@${ver_esbuild}"; \
+    test -f /app/miner/node_modules/@rollup/rollup-linux-x64-gnu/rollup.linux-x64-gnu.node; \
+    test -x /app/miner/node_modules/@esbuild/linux-x64/bin/esbuild; \
+    npm cache clean --force
+
+WORKDIR /app
+
+# ---- 构建门：import 集合对齐 docker/standalone/Dockerfile.jiangxi 的验证门 ----
+# mmcv 必须带编译 ops（from mmcv.ops import nms）；node/npm 版本钉死与现底座一致。
+RUN python -c "import flask, openpyxl, rasterio, torch, mmseg, mmcv, mmdet; from mmcv.ops import nms; assert torch.__version__ == '2.2.2+cpu'; print('jiangxi runtime base python gate passed')" \
+    && (python -c "import geopandas" || python -c "from osgeo import ogr") \
+    && /opt/node20/bin/node --version | grep -Fx 'v20.19.0' \
+    && PATH=/opt/node20/bin:${PATH} npm --version | grep -Fx '10.8.2'

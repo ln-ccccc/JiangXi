@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from applications.auth.guard import ensure_logged_in
 from applications.common.utils import type_utils, upload as upload_curd
@@ -57,7 +57,8 @@ def upload_api():
         except ValueError as e:
             return fail_api(str(e))
         except Exception as e:
-            return fail_api(f'文件上传失败: {str(e)}')
+            current_app.logger.error("文件上传失败: %s", e, exc_info=True)
+            return fail_api('文件上传失败，请稍后重试或查看服务端日志')
 
     res = {'msg': '上传成功', 'code': 0, 'success': True, 'data': data}
     return jsonify(res)

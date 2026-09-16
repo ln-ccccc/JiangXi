@@ -209,7 +209,7 @@ export default {
           if (funtype === "地物分类") {
             this.imgUpload(this.uploadSrc,'semantic_segmentation').then((res) => {
               this.fileList = [];
-              this.$message.success("上传成功！");
+              this.$message.success("上传成功！已提交分析并归档（本页历史仅展示图斑推理记录）");
               this.$emit('child-refresh')
             }).catch((rej)=>{})
           } else if (funtype === "目标检测") {

@@ -108,7 +108,11 @@ def request_worker(
     return response
 
 
-def ping_worker(socket_path: str, *, timeout: float = 2.0) -> Dict[str, Any]:
+def ping_worker(socket_path: str, *, timeout: float | None = None) -> Dict[str, Any]:
+    # 健康检查可经 JIANGXI_MMSEG_WORKER_PING_TIMEOUT 放宽（秒）：worker 串行设计下
+    # 长推理期间 ping 需要排队，2s 默认值在重负载下会误报不可用
+    if timeout is None:
+        timeout = float(os.getenv("JIANGXI_MMSEG_WORKER_PING_TIMEOUT", "2"))
     response = request_worker(socket_path, {"action": "ping"}, timeout=timeout)
     if response.get("status") != "ok" or not response.get("model_ready"):
         raise WorkerUnavailableError(
@@ -217,10 +221,25 @@ def build_model_worker(model_id: str, device: str) -> MmsegWorker:
     return MmsegWorker(model=model, runtime=runtime)
 
 
-def serve_worker(socket_path: str, worker: MmsegWorker) -> None:
-    """Serve requests serially so the GPU always hosts exactly one loaded model."""
+def serve_worker(
+    socket_path: str,
+    worker: MmsegWorker,
+    *,
+    read_timeout: float | None = None,
+) -> None:
+    """Serve requests so the GPU always hosts exactly one loaded model.
+
+    - infer 请求交给独立线程并在全局锁上排队（GPU 串行语义不变），
+      serve 主循环保持可应答——长推理期间健康检查 ping 不会被阻塞，
+      Docker HEALTHCHECK 不会再把全量推理中的容器误判为 unhealthy；
+    - 已接受连接设读超时（默认 30s，可经 read_timeout / 环境变量调整），
+      哑连接（connect 后一字不发）只会被丢弃，不会挂死单线程 serve 循环。
+    """
+    if read_timeout is None:
+        read_timeout = float(os.getenv("JIANGXI_MMSEG_WORKER_READ_TIMEOUT", "30"))
     path = _remove_stale_socket(socket_path)
     stopping = False
+    inference_lock = threading.Lock()
 
     def request_stop(_signum, _frame) -> None:
         nonlocal stopping
@@ -231,6 +250,31 @@ def serve_worker(socket_path: str, worker: MmsegWorker) -> None:
         # signal 注册仅主线程合法；线程内运行（测试/嵌入场景）时跳过
         for signum in (signal.SIGTERM, signal.SIGINT):
             previous_handlers[signum] = signal.signal(signum, request_stop)
+
+    def _respond_or_drop(connection: socket.socket, response: Dict[str, Any]) -> None:
+        # 客户端可能不读响应就断开（健康检查超时会留下陈旧连接）：
+        # 单个客户端的死活不得终止 serve 循环
+        try:
+            _send_message(connection, response)
+        except OSError as exc:
+            print(
+                f"[MMSeg-Worker] 响应发送失败，已丢弃该连接：{exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    def _serve_infer_connection(connection: socket.socket, request: Dict[str, Any]) -> None:
+        # daemon 线程：进程退出时不等待；持有 connection 直到结果写回
+        with connection:
+            with inference_lock:
+                try:
+                    response = worker.handle_request(request)
+                except Exception as exc:
+                    response = {
+                        "status": "error",
+                        "error": f"GPU 推理 Worker 请求无效：{exc}",
+                    }
+            _respond_or_drop(connection, response)
 
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
@@ -244,25 +288,38 @@ def serve_worker(socket_path: str, worker: MmsegWorker) -> None:
                 connection, _ = server.accept()
             except socket.timeout:
                 continue
-            with connection:
+            try:
+                connection.settimeout(read_timeout)
+                request = _read_message(connection)
+            except Exception as exc:
+                # 请求读取失败/读超时：直接丢弃该连接（含一字不发的哑连接）
+                print(
+                    f"[MMSeg-Worker] 请求读取失败，已丢弃该连接：{exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 try:
-                    request = _read_message(connection)
-                    response = worker.handle_request(request)
-                except Exception as exc:
-                    response = {
-                        "status": "error",
-                        "error": f"GPU 推理 Worker 请求无效：{exc}",
-                    }
-                # 客户端可能不读响应就断开（健康检查超时会留下陈旧连接）：
-                # 单个客户端的死活不得终止 serve 循环
-                try:
-                    _send_message(connection, response)
-                except OSError as exc:
-                    print(
-                        f"[MMSeg-Worker] 响应发送失败，已丢弃该连接：{exc}",
-                        file=sys.stderr,
-                        flush=True,
-                    )
+                    connection.close()
+                except OSError:
+                    pass
+                continue
+            if isinstance(request, dict) and request.get("action") == "infer":
+                handler = threading.Thread(
+                    target=_serve_infer_connection,
+                    args=(connection, request),
+                    daemon=True,
+                )
+                handler.start()
+            else:
+                with connection:
+                    try:
+                        response = worker.handle_request(request)
+                    except Exception as exc:
+                        response = {
+                            "status": "error",
+                            "error": f"GPU 推理 Worker 请求无效：{exc}",
+                        }
+                    _respond_or_drop(connection, response)
     finally:
         server.close()
         if os.path.lexists(path) and stat.S_ISSOCK(os.lstat(path).st_mode):

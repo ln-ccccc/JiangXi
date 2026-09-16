@@ -11,14 +11,18 @@ export default [
     files: ['**/*.{js,vue}'],
     languageOptions: {
       globals: {
+        AbortSignal: 'readonly',
         Buffer: 'readonly',
         alert: 'readonly',
         Blob: 'readonly',
+        clearInterval: 'readonly',
         console: 'readonly',
         document: 'readonly',
         fetch: 'readonly',
         process: 'readonly',
+        ResizeObserver: 'readonly',
         setTimeout: 'readonly',
+        setInterval: 'readonly',
         URL: 'readonly',
         window: 'readonly',
       },

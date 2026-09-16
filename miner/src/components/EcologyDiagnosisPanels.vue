@@ -137,7 +137,7 @@ const predictionItems = computed(() =>
     ['自然恢复概率', formatPercent(prediction.value.natural_recovery_probability)],
     ['预测置信度', formatPercent(prediction.value.confidence)],
     ['置信度等级', prediction.value.confidence_level],
-    ['恢复倾向等级', prediction.value.recovery_tendency],
+    ['恢复倾向等级', prediction.value.recovery_tendency_level],
     ['与台账修复方式一致', prediction.value.matches_original_restoration_mode],
     ['模型判别阈值', prediction.value.decision_threshold],
     ['复核建议', prediction.value.review_recommendation],

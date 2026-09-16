@@ -223,6 +223,166 @@
   能拦截的测法。
 - **何时可省**：纯计算/纯展示逻辑（无交互入口）。
 
+### T22. 宿主机验证 ≠ 镜像内验证（行业检索词：interpreter drift; validation environment parity）
+- **针对的失效**：任何「在宿主机跑一遍当验证」的动作，当宿主机与镜像运行时存在版本/
+  文件差异时给出假阳性。2026-09-14 一条链上连爆三例：① `write-runtime-env.py` 的
+  f-string 嵌套单引号在宿主 Python 3.14 `py_compile` 通过，镜像内 MMSeg310 Python
+  3.10 直接 SyntaxError，容器启动即死；② GPU 契约测试断言 HEALTHCHECK 旧参数，
+  挂载宿主 backend 跑单测时读到的却是镜像内旧 Dockerfile——断言通过，重建后镜像内
+  跑才红；③ 上一条的根源是挂载式验证天然混合环境（宿主 backend + 镜像其它部分）。
+- **为什么有效**：T19 已定性"单测必须在镜像解释器跑"，本条是其推论——**py_compile
+  /语法级检查也一样**（3.12+ 放行 f-string 嵌套同类引号）；且挂载式容器只替换
+  `/app/backend`，凡测试读取 `/app/docker`、`/app/frontend` 等镜像内文件时，测的是
+  旧镜像内容。最终验收必须在重建后的镜像容器内全套重跑（本次 140/140 即在那里
+  拦下契约测试失配）。
+- **本项目实证**（2026-09-14）：修复线四分支挂载验证全绿（backend 140/140），镜像
+  重建后容器首启 SyntaxError、二启契约测试失败，各多花一轮重建。防回归：
+  `test_jiangxi_gpu_contract.py` 已锁新 HEALTHCHECK 参数；f-string 修复处留有版本
+  警示注释。
+- **执行要点**：改 `docker/` 下任何被测试引用的文件（Dockerfile/entrypoint/*.py 脚本）
+  后，宿主验证只能算冒烟；权威门 = 重建镜像 → 容器内全套单测 + 首启日志人工看一遍。
+- **何时可省**：改动与镜像内容完全无关（如纯文档）。
+
+### T23. 共享临时目录的清理契约（行业检索词： temp dir ownership; startup cleanup contract）
+- **针对的失效**：一个目录被两个进程/阶段先后使用，后启动的一方按"目录归我"的假设
+  清空它，把先到者写的文件吞掉。2026-09-14：kml_roi 推理的 Flask 进程把预处理产物写
+  在 per-run `work_dir/preprocess/` 下，而子进程 `pipeline.py:48-49` 启动时
+  `rmtree(work_dir)`（防上一轮残留的既有双保险），产物被删，切瓦片报
+  `No such file or directory`——单测全绿（fake 子进程不执行 rmtree），只有真实推理暴露。
+- **为什么有效**：这类失效的盲区在「跨进程目录所有权」从不体现在任何单测里——fake
+  掉子进程就 fake 掉了它的清理行为。防线有二：① 写入方使用**目录所有者之外的独立
+  临时目录**（本例 `mkdtemp(prefix="kml-roi-preprocess-")`，生命周期只覆盖自己）；
+  ② 契约测试断言"产物路径不在 work_dir 内"（`test_kml_roi_preprocess.py` 已加
+  `is_relative_to(work_dir)` 反断言）。
+- **本项目实证**（2026-09-14）：prehandle=2 首次真实验证即触发；修复后 baseline /
+  prehandle=2 / prehandle=4+denoise=5 / 非法值 400 全场景复验通过。
+- **执行要点**：向任何"别人也会用"的目录写入前，先 grep 该目录的全部读写方与清理
+  逻辑（rmtree/mkdtemp/cleanup）；两进程共用数据时，各自的数据放各自前缀的独立
+  临时目录，只把"只读引用"（路径字符串）跨进程传递。
+- **何时可省**：单进程独占的临时目录。
+
+### T24. 验证链对「被修复行为」的隐性依赖（行业检索词：test oracle dependence on bugs；ripple effect of fixes）
+- **针对的失效**：验证基础设施（健康检查、冒烟、契约测试）本身依赖着某个 bug 的存在
+  才通过——修复该 bug 后验证链反向断裂。2026-09-14 修复夜两连发：① 404 语义修复
+  （HTTPException 不再被吞成 200）后容器变 unhealthy——healthcheck 一直探测 backend
+  根路径 `/`，靠的正是「404 被吞成 200」才绿；② 同一轮 CRLF 事故：Windows 上以文本
+  模式写 shell 脚本引入 ``，shebang 变 `bash` 退出码 127，`bash -n` 与源码断言
+  都不查行尾。
+- **为什么有效**：这类失效无法从被修模块单测发现——healthcheck 是独立脚本，跑在
+  容器编排层。防线：① 探测点必须用**语义化端点**（/api/auth/session 这类业务真实
+  存在且区分于 404 的路由），不用根路径这种"碰巧有响应"的位置；② 给验证基建自身
+  上守卫（docker/tests 新增 shell 脚本 LF 行尾断言）；③ 修复任何「响应语义」类 bug
+  （状态码/错误体）后，必须 grep 全部消费该响应的探测点（healthcheck/监控/curl
+  脚本）再重建验收。
+- **本项目实证**（2026-09-14）：404 修复 → healthcheck unhealthy（探测点依赖旧
+  bug）；改探测点 → 仍 unhealthy（CRLF 杀 shebang）；LF 修复 + 行尾守卫后才绿。
+  三连击全部由「重建镜像 → 容器真实验收」拦下，无一带病交付。
+- **执行要点**：改 shell 脚本一律二进制/显式 newline="
+" 写入；healthcheck 探测
+  语义化端点；修复状态码/错误语义类 bug 后全量 grep 消费方。
+- **何时可省**：与响应语义、脚本执行无关的纯库函数改动。
+
+### T25. Windows junction 与递归删除穿透（行业检索词：reparse point traversal；symlink-aware cleanup）
+- **针对的失效**：给临时 git worktree 用 NTFS junction（`New-Item -ItemType Junction`）
+  共享主工作树 `node_modules` 后，任何**穿透型递归删除**（`git worktree remove`、
+  `Remove-Item -Recurse`）都会沿 junction 把**目标目录内容整体删掉**——链接不是
+  挡板而是通道。2026-09-15 复审修复夜两次发生：`git worktree remove` 清理
+  `.worktrees/recheck-*` 时把主树 miner/frontend 的 node_modules 全部删空。
+- **为什么有效**：失效发生在"工作区管理"而非任何被测代码里，单测/构建门全绿也
+  拦不住；且第一次删除后 junction 指向空目录，后续构建失败表象（模块缺失）与
+  根因（链接穿透）相距很远。防线：清理 worktree 前**先枚举 reparse point 并只删
+  链接本身**（`cmd /c rmdir <link>` 只摘链接不碰目标），再执行 worktree remove；
+  给子代理的任务书里明确禁止其自行 remove worktree。
+- **本项目实证**（2026-09-15）：两次删空、两次 `npm ci` 恢复；第二次的诱因是
+  bash 双引号吞掉 PowerShell 的 `$_` 变量导致 junction 摘除命令静默变成语法错误、
+  `git worktree remove` 照常执行——**跨 shell 拼接命令时先跑只读枚举确认输出**，
+  不能假设中间步骤成功。
+- **执行要点**：摘链接用 `cmd /c rmdir`（勿用 Remove-Item -Recurse）；枚举用
+  `Get-ChildItem -Recurse -Attributes ReparsePoint`；PowerShell 命令经 bash 传递时
+  `$_` 必须转义或改用逐条显式路径；并发 `npm ci` 重建期间不要经 junction 跑构建。
+- **何时可省**：不使用 junction/符号链接共享依赖目录的仓库。
+
+### T26. 修复声明 vs 实现逐条对照（行业检索词：claim-to-evidence audit；fix verification）
+- **针对的失效**：修复提交的信息/注释声称的行为与代码实际行为不符——收口漏改
+  （注释说"业务消息走上面的 ValueError 分支"而分支不存在）、透传死键（BFF 读的
+  键在子进程输出里从不存在）、守卫失效（语法守卫注释声称能拦实际拦不住）。三类
+  都是"声明与实现的接缝"处断裂，且写修复时的测试往往没有覆盖到声明本身。
+- **为什么有效**：修复验收通常只验证"改的地方对不对"，不验证"声称的地方全不全"。
+  把每条修复声明当作待证命题、沿生产者→消费者两侧重走代码路径并 grep 证据，能
+  在合入前暴露缝隙。2026-09-16 第二轮审查的 4 个 P1 中 3 个由此捕获。
+- **本项目实证**（2026-09-16）：docs/code-review-20260916.md P1-1/P1-2/P1-3。
+- **执行要点**：审查指令里显式要求"对上一轮每条修复声明给出实现证据（file:line）
+  或判定不成立"；两个独立代理交叉发现同一问题可视为免复验信号（record_id 双代理
+  各自命中）。
+- **何时可省**：修复带有行为级测试且主控在目标环境亲跑过门时。
+
+### T27. 语法守卫必须用目标解释器子进程实测+元测试自证（行业检索词：PEP 701；feature_version limitation）
+- **针对的失效**：在高版本宿主用 `ast.parse(source, feature_version=(3,10))` 拦截
+  语法级回归。PEP 701（3.12）改变了 f-string 的 token 化方式，`feature_version`
+  **不会**回退 f-string 文法——3.12+ 宿主对嵌套同类引号 f-string 照样 ACCEPTED，
+  守卫注释却声称"高版本宿主也拒绝"，形成守卫自身假绿。
+- **为什么有效**：守卫类测试的失效模式是"守卫本身从未被喂过非法样本"。给守卫补
+  元测试（喂已知非法 fixture，断言守卫 reject），并让守卫改为子进程调用真实目标
+  解释器（Windows `py -3.10`、容器内 `sys.executable`），语法判定就不再依赖宿主
+  版本语义。2026-09-16 实测：3.14.4 ACCEPTED、真 3.10.3 SyntaxError、新守卫元
+  测试抓到 fixture。
+- **本项目实证**：docker/tests/test_write_runtime_env.py（103eb11 修复）。
+- **执行要点**：守卫=子进程目标解释器 + 缺解释器时显式 skip 并告警（勿静默 pass）
+  + 元测试自证；至少删掉守卫里未经实测的论断性注释。
+- **何时可省**：宿主与目标解释器同版本时（此时 ast 直接可判）。
+
+### T28. 同 blob 不同检出 → 门判定分裂；CR 计数假象（行业检索词：autocrlf drift；working tree skew）
+- **针对的失效**：`.gitattributes eol=lf` 规则晚于文件首次提交时，老检出（autocrlf
+  时代写盘 CRLF）与新检出（规则生效写盘 LF）磁盘字节不同、blob 相同。按磁盘字节
+  判定的门（prettier `endOfLine: lf`）于是出现"worktree 绿、主树红"的分裂，漂移
+  被误诊为代码问题。2026-09-16：useWeather.js 主树 verify 红、当日新建 r2-miner
+  worktree 同文件绿。
+- **为什么有效**：先比"同一文件在两个检出的 md5"再下结论，能立刻把问题从代码层
+  拨到工作区层。另注意测量假象：bash `$'\r'` 在某些复合命令里被吞成空模式，
+  `grep -c ''` 数的是**总行数**，曾据此误判"blob 内嵌 139 个 CR"——空模式计数=
+行数，与文件行数相同即应怀疑。
+- **本项目实证**：2026-09-16，cp LF 副本刷新主树工作文件后 prettier 立即绿、
+  git 视为零变更（内容本来就相同）。
+- **执行要点**：行尾判定用 `file`/`od -c` 交叉验证，慎用 `$'\r'` 单证据；修复=
+  刷新工作副本（或 `git add --renormalize`），并向后记录哪些历史文件未 renormalize。
+- **何时可省**：仓库从初始提交就钉死 eol 且无 autocrlf 历史检出。
+
+### T29. 「死键」裁决前必须 grep 键名本身（行业检索词：dead code detection false positive）
+- **针对的失效**：宣布环境变量/npm script/配置键已死时，只 grep 了**旧消费者文件
+  名**（geoviewBackend.js 已删 → 认定 GEOVIEW_BACKEND_URL 无消费者），漏掉**新的
+  消费者按变量名**读它（authBackend.js/projectBackend.js 第一行 `process.env.
+  GEOVIEW_BACKEND_URL`）。compose 部署形态下该键是 miner→Flask 全部转发的唯一
+  正确取值来源，删除即登录/项目转发打空。
+- **为什么有效**：变量是按名字被读的，判死必须按名字全仓反查（含 services/、
+  compose、start 脚本、测试契约）；修复期删除前再取证一次，与审查结论互相独立，
+  2026-09-16 修复代理删除前 grep 拦下审查的这条例行"清理项"（审查报告已加更正
+  注记）。
+- **本项目实证**：docs/code-review-20260916.md P2-16 更正；test_compose_isolation
+  已补防误删注释（7f05ab0）。
+- **执行要点**：判死三步——`grep -rn "<KEY>"`（名字级）、枚举 `process.env.`/
+  `os.getenv` 引用面、检查契约测试是否锁定该键；跨辖区键的清理必须由主控排批次。
+- **何时可省**：键有类型化配置层（集中读取、静态可查）时风险较低，仍建议名字级
+  grep。
+
+### T30. 验证车辆必须复刻目标运行形态（行业检索词：test environment fidelity；device contract）
+- **针对的失效**：两类车辆失配——① 挂载式跑法（宿主代码卷覆盖 /app）遇到
+  gRPC-FUSE 目录读抖动，importlib `_fill_cache` 报 `Cannot allocate memory`，
+  同一套件一次 1 error 一次全绿，误诊为代码回归；② fresh 容器漏带 `--gpus`/
+  `JIANGXI_INFERENCE_DEVICE=cpu` 覆盖时，env 文件钉死的 cuda:0 让设备契约**正确
+  拒绝**，5 个推理 API 测试收 400——契约工作正常，门却假红（2026-09-16 终验
+  曾据此误判需重查）。
+- **为什么有效**：设备的无静默回退契约本来就会把"无 GPU 车辆跑 GPU 配置"变成
+  显式失败；把"车辆形态与被测套件的要求匹配"列为跑门前检查项（GPU 测试 → GPU
+  车辆或显式 cpu 覆盖且测试不依赖 cuda、单测权威跑 → 种子过的烘焙镜像内 §5 跑法），
+  假红即可归因到车辆而不是代码。重复性失败优先怀疑车辆、单次性失败优先怀疑代码，
+  本轮两者先后发生且都被此法归因。
+- **本项目实证**：2026-09-16 电池——battery 容器（--gpus + 种子卷）191 OK；
+  fresh 无 GPU 容器同套件 5 failures（设备 400），补 cpu 覆盖后 191 OK。
+- **执行要点**：跑门前核对车辆清单（设备变量、GPU 挂载、种子卷、挂载 vs 烘焙）；
+  权威门一律在烘焙镜像 + 完整 entrypoint 初始化的容器里跑；挂载式跑法只作快速
+  信号，不作为裁决依据（T22 重申）。
+- **何时可省**：纯宿主侧门（miner/npm、docker/tests）无车辆失配问题。
+
 ---
 
 ## 五、失效案例速查表
@@ -239,6 +399,14 @@
 | 验证门一夜之间 25 个 import error（2026-09-09） | unittest 大面积红 | 宿主机解释器/依赖漂移 | T19 |
 | 图表悬停信息框溢出面板压住相邻内容（2026-09-12） | tooltip 跟随鼠标越界 + 类目名截断 | 窄容器默认定位 + truncate 截断 | T20 |
 | 「选择文件/文件夹」按钮无效（2026-09-12） | 点击无反应 | 组件拆分后 refs 失联 + 直达式自动化放行 | T21 |
+| 容器首启 SyntaxError / 契约测试镜像内才红（2026-09-14） | 宿主验证全绿、镜像跑挂 | 宿主/镜像解释器与文件双漂移 | T22、T19 |
+| prehandle=2 真实推理"文件不存在"（2026-09-14） | 切瓦片打不开预处理产物 | 跨进程共享 work_dir，子进程启动 rmtree 吞掉写入方文件 | T23、T2 |
+| 404 修复后 healthcheck unhealthy ×2（2026-09-14） | 容器判死/127 退出码 | 探测点依赖「404 吞成 200」旧 bug + CRLF 杀 shebang | T24、T22 |
+| 主树 node_modules 两度被删空（2026-09-15） | worktree 清理后构建模块全缺 | junction 被递归删除穿透（含跨 shell 变量转义失效变体） | T25 |
+| 4 个 P1 全是修复批次缝隙（2026-09-16） | 收口漏改/死键/守卫假绿过门 | 声称的行为无实现或无测试锁 | T26、T27 |
+| 同一测试文件 worktree 绿主树红（2026-09-16） | prettier 门判定分裂 | 老检出 CRLF vs 新检出 LF，同 blob 不同磁盘字节 | T28 |
+| 险删 GEOVIEW_BACKEND_URL 活依赖（2026-09-16） | compose 登录/转发链路差点打空 | 死键裁决只 grep 旧消费者文件名 | T29 |
+| fresh 容器推理套件 5 假红（2026-09-16） | 400 ≠ 200 疑似代码回归 | 无 GPU 车辆跑 cuda:0 配置，设备契约正确拒绝 | T30 |
 
 ---
 

@@ -7,7 +7,6 @@ import dotenv from 'dotenv';
 import { promisify } from 'util';
 import { execFile as execFileCb, spawnSync } from 'child_process';
 import xlsx from 'xlsx';
-import geoviewRoutes from './routes/geoview.js';
 import { createProjectRoutes } from './routes/projects.js';
 import { authBackend } from './services/authBackend.js';
 import { relayBackendResponse, requireMinerAuth } from './services/authProxy.js';
@@ -52,18 +51,36 @@ let kmlInferenceActive = false;
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 const authGuard = requireMinerAuth({ sessionApi: authBackend.session });
-app.use('/api/geoview', authGuard, geoviewRoutes);
+
+// 认证后端不可达/超时等异常统一 502 JSON；格式与 authProxy.requireMinerAuth 的失败响应对齐，
+// 服务端 console.error 留痕，但不把异常细节回显给客户端。
+const AUTH_GATEWAY_ERROR = { success: false, code: 1, msg: '认证服务暂时不可用，请稍后重试' };
 
 app.post('/api/auth/login', async (req, res) => {
-  relayBackendResponse(res, await authBackend.login(req.body || {}));
+  try {
+    relayBackendResponse(res, await authBackend.login(req.body || {}));
+  } catch (error) {
+    console.error('[auth] login 网关请求失败:', error?.message || error);
+    res.status(502).json(AUTH_GATEWAY_ERROR);
+  }
 });
 
 app.get('/api/auth/session', async (req, res) => {
-  relayBackendResponse(res, await authBackend.session(req.headers.cookie || ''));
+  try {
+    relayBackendResponse(res, await authBackend.session(req.headers.cookie || ''));
+  } catch (error) {
+    console.error('[auth] session 网关请求失败:', error?.message || error);
+    res.status(502).json(AUTH_GATEWAY_ERROR);
+  }
 });
 
 app.post('/api/auth/logout', async (req, res) => {
-  relayBackendResponse(res, await authBackend.logout(req.headers.cookie || ''));
+  try {
+    relayBackendResponse(res, await authBackend.logout(req.headers.cookie || ''));
+  } catch (error) {
+    console.error('[auth] logout 网关请求失败:', error?.message || error);
+    res.status(502).json(AUTH_GATEWAY_ERROR);
+  }
 });
 
 app.use('/api/projects', authGuard, createProjectRoutes({ getMinesData: () => minesData }));
@@ -141,12 +158,16 @@ function getLandTypeList(value) {
   return Array.from(new Set(types.length ? types : ['未知']));
 }
 
+// 启动链探测必须带超时：resolvePythonRunner 在 initData()→app.listen 之前执行，
+// 探测挂起会导致 miner 永不 bind。探测类操作 15s 足够。
+const STARTUP_PROBE_TIMEOUT_MS = 15000;
+
 function commandExists(cmd) {
   try {
     const probe =
       process.platform === 'win32'
-        ? spawnSync('where', [cmd], { encoding: 'utf-8' })
-        : spawnSync('which', [cmd], { encoding: 'utf-8' });
+        ? spawnSync('where', [cmd], { encoding: 'utf-8', timeout: STARTUP_PROBE_TIMEOUT_MS })
+        : spawnSync('which', [cmd], { encoding: 'utf-8', timeout: STARTUP_PROBE_TIMEOUT_MS });
     return probe.status === 0;
   } catch (_) {
     return false;
@@ -157,6 +178,7 @@ function pythonRunnable(cmd, preArgs = []) {
   try {
     const probe = spawnSync(cmd, [...preArgs, '-c', 'import sys; print(sys.executable)'], {
       encoding: 'utf-8',
+      timeout: STARTUP_PROBE_TIMEOUT_MS,
     });
     return probe.status === 0;
   } catch (_) {
@@ -1001,6 +1023,9 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       {
         cwd: backendRoot,
         maxBuffer: 20 * 1024 * 1024,
+        // 90 分钟 > 后端同步接口 3600s 上限；超时 kill 后 reject 走 catch，finally 复位 kmlInferenceActive
+        timeout: 90 * 60 * 1000,
+        killSignal: 'SIGTERM',
       }
     );
 
@@ -1070,7 +1095,9 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       failed_tiles: parsed?.failed_tiles || [],
       stage_durations: parsed?.stage_durations || null,
       total_seconds: parsed?.total_seconds ?? null,
-      runtime: parsed?.runtime || null,
+      // kml_roi_infer.py:150 对 pipeline 的 inference_runtime pop 后改名 runtime 输出，
+      // inference_runtime 仅为兼容旧键而保留读取
+      runtime: parsed?.inference_runtime || parsed?.runtime || null,
       stderr_tail: String(stderr || '')
         .split('\n')
         .slice(-8)
@@ -1081,12 +1108,26 @@ app.post('/api/inference/kml-roi', async (req, res) => {
     if (err instanceof ManagedPathError) {
       return res.status(400).json({ error: err.message });
     }
+    // 后端跨进程推理锁占用（kml_roi_infer.py 退出码 3，stdout 输出 status=busy）；
+    // try 块内的 const stdout 在 catch 不可见，execFile 错误对象自带 stdout
+    const busyPayload = parseJsonFromStdout(err?.stdout);
+    if (busyPayload?.status === 'busy') {
+      return res.status(409).json({
+        error: busyPayload.error || '已有一个图斑推理任务正在执行，请等待完成后再提交',
+      });
+    }
     const message = err?.message || String(err);
-    const status = /device 仅支持|CUDA 不可用|江西项目仅支持 CPU/.test(message) ? 400 : 500;
-    return res.status(status).json({
-      error: 'Failed to run kml roi inference',
-      detail: message,
-    });
+    // 设备契约类失败（normalizeInferenceDevice / kml_roi_infer.py 的设备校验）属于用户
+    // 可修正的请求错误，400 透出原文；其余一律 500 固定文案——原始异常含完整命令行与
+    // 绝对路径，只进服务端日志不回显（与 projects/auth 路由的 502 固定文案同一收口原则）。
+    if (/device 仅支持|CUDA 不可用|江西项目仅支持 CPU/.test(message)) {
+      return res.status(400).json({
+        error: 'Failed to run kml roi inference',
+        detail: message,
+      });
+    }
+    console.error('[inference] kml-roi 推理失败:', message);
+    return res.status(500).json({ error: '推理任务执行失败，请稍后重试或联系管理员' });
   } finally {
     kmlInferenceActive = false;
   }

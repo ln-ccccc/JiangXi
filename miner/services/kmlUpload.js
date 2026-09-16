@@ -21,5 +21,7 @@ export function saveKmlUpload({ uploadRoot, filename, content }) {
   }
 
   fs.writeFileSync(target, text, 'utf-8');
-  return { kml_path: target };
+  // 返回裸文件名：提交推理走 inferencePathPolicy，只接受受控目录内的裸文件名，
+  // 绝对路径会被 400「kml_path 只能是受控目录内的文件名」拒掉（上传→提交链路必断）
+  return { kml_path: safeName, kml_path_absolute: target };
 }

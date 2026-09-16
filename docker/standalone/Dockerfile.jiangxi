@@ -38,6 +38,10 @@ ENV STANDALONE_MODE=1 \
 
 ENV PATH=/opt/node20/bin:${PATH}
 
+# Express（miner/server.js）生产模式：默认错误页不再回显堆栈；
+# entrypoint 内的两个 dev server（vue serve / vite）单独钉回 development
+ENV NODE_ENV=production
+
 COPY backend /app/backend
 COPY frontend /app/frontend
 COPY miner /app/miner
@@ -51,7 +55,11 @@ COPY --from=jiangxi-runtime-compat /app/miner/node_modules/@esbuild/linux-x64 /t
 COPY --from=jiangxi-gpu-compat /opt/venv/lib/python3.10/site-packages/mmcv /tmp/jiangxi-gpu-mmcv
 COPY --from=jiangxi-gpu-compat /opt/venv/lib/python3.10/site-packages/mmcv-2.1.0.dist-info /tmp/mmcv-2.1.0.dist-info
 
+# 旧基础镜像层残留（git 不跟踪、当前启动路径无引用）：7 月遗留的推理 worker
+# 入口与 applications/inference 旧包会随基础层进入运行镜像，COPY 不会覆盖清除
 RUN rm -rf -- /app/backend/model/mmseg_config /app/backend/model/custom_models \
+    /app/backend/run_inference_worker.py /app/backend/applications/inference \
+    /app/docker/start-inference-worker.sh /app/docker/start-analysis-worker-gpu.sh \
     && test -f /app/backend/model/jiangxi/config.py \
     && test -f /app/backend/model/jiangxi/model.pth \
     && test -f /app/backend/model/jiangxi/metadata.json \
@@ -108,6 +116,7 @@ RUN /bin/bash -lc 'source /opt/conda/etc/profile.d/conda.sh && conda activate MM
         /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv-*.dist-info; \
       cp -a /tmp/jiangxi-gpu-mmcv /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv; \
       cp -a /tmp/mmcv-2.1.0.dist-info /opt/conda/envs/MMSeg310/lib/python3.10/site-packages/mmcv-2.1.0.dist-info; \
+      python -c "from mmcv.ops import nms; print(\"GPU mmcv ops (_ext) load verified\")"; \
     fi; \
     mmdet_init="$(python -c "import importlib.util; print(importlib.util.find_spec(\"mmdet\").origin)")" && \
     test -f "${mmdet_init}" && \
@@ -121,6 +130,12 @@ RUN /bin/bash -lc 'source /opt/conda/etc/profile.d/conda.sh && conda activate MM
     python -c "import flask, openpyxl, rasterio, torch, mmseg, mmcv, mmdet; print(\"python runtime dependencies passed\")" && \
     (python -c "import geopandas" || python -c "from osgeo import ogr")'
 
+# 构建暂存收尾：npm 离线缓存与 /tmp 原生依赖、GPU mmcv 暂存只服务构建期，
+# 不烘进运行镜像；必须放在所有使用它们的 RUN 之后，否则构建失败
+RUN rm -rf -- /app/miner/.npm-cache /app/frontend/.npm-cache \
+    /tmp/jiangxi-rollup-native /tmp/jiangxi-esbuild-native \
+    /tmp/jiangxi-gpu-mmcv /tmp/mmcv-2.1.0.dist-info
+
 RUN test -x /opt/node20/bin/node \
     && test -x /opt/node20/bin/npm \
     && test -d /app/miner/node_modules \
@@ -131,6 +146,6 @@ EXPOSE 3000 4000 5008
 
 VOLUME ["/app/runtime_data"]
 
-HEALTHCHECK --interval=30s --timeout=15s --retries=5 CMD ["/app/docker/standalone/healthcheck.sh"]
+HEALTHCHECK --interval=30s --timeout=30s --start-period=300s --retries=5 CMD ["/app/docker/standalone/healthcheck.sh"]
 
 ENTRYPOINT ["/app/docker/standalone/start-jiangxi-standalone.sh"]

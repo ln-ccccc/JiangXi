@@ -118,11 +118,171 @@ ghcr 标签 `20260910-ui` 已备）包含全部 main 修复与新 UI（分页、
 + jx_env_cpu_20260910.env + MAC-RUNGUIDE.md）。旧 `cpu-20260908` 可在协作者
 确认新版可用后删除。除非用户明确确认，不删除 CPU 镜像或运行数据卷。
 
+2026-09-14 起现行已验收实例：`geoview-jiangxi-gpu-20260914`，镜像
+`geoview-jiangxi:jiangxi-gpu-20260914-fixes`（stable 标签 `jiangxi-gpu` 已同步）。
+本镜像为**代码审查修复版**（全面审查报告见 docs/code-review-20260914.md，修复分支
+`fix/code-review-20260914` 待建 PR 合 main）：P0×2（解译平台预处理复选框受控化、
+miner 恢复推理工作台/趋势报告入口）+ P1×9（svg 上传剔除、spectral 受控根、
+SECRET_KEY standalone 强制、错误键对齐、static-server 畸形 URL 400、execFile
+90min 超时、preHandle FormData、undefined.png、recovery_tendency_level）+ 稳定性
+P2（entrypoint wait 兜底、HEALTHCHECK start-period=300s/timeout=30s、env URL
+校验、GPU 构建期 mmcv nms 验证、批量推理 chunk 流式加载（驻留 2GB→chunk 级）、
+fetch 超时、Leaflet/监听器清理、光谱页会话心跳）+ 新功能：kml_roi 推理管线接入
+prehandle/denoise 预处理（默认 0 行为零变化）。
+**同夜独立复审追加修复**（见 docs/code-review-20260914-independent-recheck.md）：
+上传路径三态归一（相对前缀/服务 URL/受控绝对路径均放行、越界 400——曾误判主链路
+断裂，实为相对路径形态一直可用，归一化为鲁棒性增强）、/static 上传目录鉴权（免登录
+旁路实测坐实已封）、全局错误处理器（HTTPException 直通恢复 404 语义、不再回显
+异常原文）、miner KML 上传返回裸文件名（上传→提交链路接通）、BFF 透传
+kml_update/inference_runtime。healthcheck 探测改 /api/auth/session（原根路径
+探测依赖 404 吞 200 旧 bug，见 T24）。
+验收记录：容器内 145 单测 OK、资产 348/348 PASS、推理 001 双跑 + 002 混合形态
+completed（cuda:0 暖跑 0.5-0.6s）、prehandle=2/组合/非法值全场景通过、/static
+免登录 401、未知路由 404、KML 上传链路（裸名回填→受控根解析→fid 校验）、冒烟
+T1-T5（含 CLAHE 受控勾选）PASS、NODE_ENV 三进程正确（Express production、两个
+dev server 钉 development）。运行参数与 §4 命令一致，env 文件仍用
+`D:\项目\JiangXi\jx_env_gpu_20260909.env`（该文件含 ADMIN_PASSWORD/SECRET_KEY，
+满足新的启动强制校验）。回退副本：旧容器 `geoview-jiangxi-gpu-20260910` 已停止
+保留；代码级回退用 `ui-legacy-20260910` 或切回 main。协作者 CPU 镜像
+`cpu-20260914-fixes` 已同步重建。
+
+2026-09-15 复审修复批次 A–F 收尾版：镜像 `geoview-jiangxi:jiangxi-gpu-20260915-recheck`
+（stable 标签 `jiangxi-gpu` 未动，待确认后指向）。六批内容：A 后端泛化异常不回显
+（31 处收敛+日志）、init_db 吞错显式抛出、分页/空 body 容错；B miner 零结果明确
+提示（no_features 不再静默）、15 处 502 固定文案、上传→提交贯通测试；C GPU worker
+infer 线程化+锁（长推理期间 ping 即时应答，不再被 HEALTHCHECK 误判 unhealthy）、
+哑连接读超时、kml_roi_infer 跨进程 flock（busy 退出码 3→BFF 409）、subprocess
+Popen+finally kill 根治孤儿进程、整批超时按瓦片数缩放、前端运行中重入守卫、生态
+面板竞态 token；D spectral_live 死链删除（守护测试防回潮）；E 镜像清理（陈旧
+run_inference_worker/applications/inference 剔除、npm cache/tmp 暂存清理、
+.dockerignore 补 .worktrees 等、py3.10 ast 守卫、env 回退告警、compose 健康检查
+python 化+start_period）；F 同 fid 多 Placemark 三处合并不丢图斑（_v2 变体）、
+index_sync 文件锁、会话过期 reason 经 hash 路由透传。验收：镜像内 167 单测 OK、
+资产 348 PASS、001 真实推理连续双跑 completed（cuda:0 冷 7.2s/暖 3.5s，§5.1 重复
+执行）、未知路由 404、/static 与 /_uploads 401、KML 上传裸名→提交接通（真实
+Placemark 无交集时优雅返回 no_features）、miner/前端服务 200。运行容器
+`geoview-jiangxi-gpu-recheck`（卷 jiangxi-runtime-gpu-recheck-20260915）；
+`geoview-jiangxi-gpu-20260914` 已停止保留为回退。宿主工作树两度因 junction
+穿透删空 node_modules（npm ci 恢复，见 T25）。遗留仅剩：platform-repair 分支
+决断、readme-screenshots 合并、全面 HTTP 状态码迁移评估、HEALTHCHECK interval/
+SHA-256 短路实测调优。遗留（复审 P2/P3 未修项见复审报告第六节排期建议）：
+GPU worker 读超时、长推理 unhealthy 标记、推理并发锁、同 fid 多 Placemark、
+spectral_live 死端点、platform-repair 分支决断。
+
 注意：两期对比影像（`/app/backend/bianhua_2years/`，甲方 189 个 tif）位于
 容器可写层，**重建容器即丢失**；需从宿主机 `D:\项目\jiangxi_data\影像文件\`
 重新 `docker cp` 放入（`docker cp "D:\项目\jiangxi_data\影像文件\." 容器名:/app/backend/bianhua_2years/`）。
 GPU 镜像重建必须使用本节原样参数（JIANGXI_BASE_IMAGE=jiangxi-analysis-worker:gpu），
 换用其他 base 会复现 §7 的 GLIBC_2.32 worker 崩溃。
+
+### 4.1 镜像谱系与独立性（2026-09-15 调查结论）
+
+- **CPU 链含云南层（历史包袱，功能独立）**：`jiangxi-runtime:current`（39d4bef82816，
+  32.2GB，38 层）的最底 30 层即 `yunnan-runtime:current`（= 消失标签
+  `geoview-runtime:split-clean`，含云南 backend 约 8.23GB 死重层）；全部
+  `geoview-jiangxi:cpu-*` 交付镜像均继承这 30 层。该共享仅为磁盘/分发死重，
+  江西代码、模型与运行配置不依赖云南内容（防护测试 `docker/tests/test_source_isolation.py`
+  与 `test_compose_isolation.py` 持续在位）。
+- **GPU 链已独立**：`jiangxi-inference-worker:gpu` → `jiangxi-analysis-worker:gpu` →
+  `geoview-jiangxi:jiangxi-gpu*` 交付链与 `yunnan-runtime:current` 实测仅共享 2 个
+  最底层公共基础层（nvidia/cuda 血统），不携带云南业务层。
+- **四个基础镜像的可重建状态**：
+  1. `jiangxi-runtime:current`：无 Dockerfile（谱系起点 `geoview-runtime:split-clean`
+     标签已消失），不可从源码重建；等价 squash 底座见下。
+  2. `jiangxi-runtime:gpu`（7843a6208ccb，35.6GB）：git 全历史无构建定义，不可重建。
+  3. `jiangxi-inference-worker:gpu`（0d2b4e8093ba）：构建定义已归档
+     `docker/archive/Dockerfile.jiangxi-inference-gpu`；但其上游
+     `geoview-inference-worker:current` 已不在本地镜像库，当前无法原样重建。
+  4. `jiangxi-analysis-worker:gpu`（71f55653f308）：构建定义已归档
+     `docker/archive/Dockerfile.jiangxi-analysis-worker-gpu`（配套入口脚本
+     `start-analysis-worker-gpu.sh` 一并归档）。
+  归档文件均带来源说明（`.worktrees/jiangxi-platform-repair`，fix/jiangxi-platform-repair
+  @698134e）。
+- **后续重建 CPU 底座的方向**：以 `docker export`/`docker import` squash 掉云南 30 层
+  死重（2026-09-15 已产出验证基线 `jiangxi-runtime:squashed-20260915`，
+  b64b90e5305c，单层 16.5GB，原 38 层 32.2GB；验收镜像
+  `geoview-jiangxi:cpu-20260915-decoupled`，fbfb5d651b06，20 层 21GB，原 57 层 34.1GB；
+  与 `yunnan-runtime:current` 的内容层交集为 0——唯一重合的 digest 是 Dockerfile
+  ENV 步骤产生的 0 字节通用空层，任何镜像都含它；镜像内 167 单测全绿、
+  资产校验 348 PASS）；
+  替换现役底座属跨交付变更，须用户确认后另行推进，替换前旧底座与新底座并存。
+- **测试/验证车辆区分规则（2026-09-16 更新）**：江西侧的一切容器内验证只允许用
+  江西自己的镜像——CPU 侧用 `geoview-jiangxi:cpu-20260915-rebuilt`（从源码重建的
+  自有底座，见下方 2026-09-16 记录；主树代码卷挂载跑法同 §5，167 单测已在该镜像内
+  全绿），GPU 侧用已验收的 `jiangxi-gpu-20260915-recheck` / 运行容器
+  `geoview-jiangxi-gpu-recheck`；`cpu-20260915-decoupled`（squash 底座）降级为
+  二线回退；**旧 `cpu-20260910-ui`/`cpu-20260914-fixes` 系底座为云南血统（底层即
+  云南 runtime 30 层），只作历史回退，不再用作验证车辆**。云南侧验证一律用
+  `yunnan-runtime:current`（跑法见云南仓库 docs/development-standard.md §7）。
+  两项目镜像严禁混用。
+
+### 4.2 从源码重建的自有底座（2026-09-16 产出）
+
+- 已产出并验收（定义文件均已入库，构建手册 `docker/scripts/rebuild-runtime.md`，
+  含命令、耗时实测、实测坑与离线替代方案）：
+  1. `jiangxi-runtime:rebuilt-20260915`（80f79a74aec3，5.76GB，13 层）——
+     `docker/Dockerfile.jiangxi-runtime`：ubuntu:20.04 + Miniconda + MMSeg310
+     （清单 `docker/runtime-env/`，源自 squashed 底座 2026-09-15 导出）+ /opt/node20
+     （node v20.19.0 / npm 10.8.2）+ miner 两个 Linux 原生 npm 包
+     （@rollup/rollup-linux-x64-gnu、@esbuild/linux-x64，版本随 package-lock.json）。
+  2. `jiangxi-gpu-compat:shim`——`docker/Dockerfile.jiangxi-gpu-compat-shim`：
+     CPU 构建专用占位（Dockerfile.jiangxi 无条件 COPY 的 /opt/venv mmcv 两条路径），
+     严禁用于 GPU 构建。
+  3. `geoview-jiangxi:cpu-20260915-rebuilt`（3268bd170b13，14.7GB，28 层）——
+     Dockerfile.jiangxi 原样、三个 ARG 指向 rebuilt 底座 + shim。
+- 验收（全部真跑）：镜像内 167 单测 OK（卷挂载跑法同 §5）；资产校验
+  Excel/SHP/KMZ 348/348/348、交集 348、重复 0、PASS；行为探测未登录
+  /static/upload 401、未知路由 404；构建门含 `from mmcv.ops import nms` 与
+  node/npm 版本钉死。**真实 CPU 推理验收（2026-09-16 补跑，§5/§5.1）**：
+  镜像起容器（cpu 设备、jx_env_cpu_20260910.env），001 对 2011→2021
+  limit=1 连续双跑均 completed、written=1（ZJ3607232021017001）、device=cpu、
+  零失败瓦片，单图斑约 337-352s（CPU 直跑含每轮模型加载，符合基线量级）；
+  验收期间并实测推理互斥生效（并发第二请求立即 409「已有任务在执行」）。
+- 独立性：与 `yunnan-runtime:current` 的层交集仅 2 个内容中立层（ubuntu:20.04
+  官方层 + ENV 0 字节通用空层），与 `squashed-20260915` 交集 0；FS 抽查与镜像
+  ENV 均无云南残留（旧底座 ENV 携带的 MYSQL 凭据/大理 TIF 路径不再进入新底座）。
+- 环境 diff（vs squashed 底座）：conda 包集合与版本/构建串差异 0；pip 版本错配 0；
+  唯一形态差异：mmsegmentation 由指向已消失云南旧路径的 editable 安装变为 PyPI
+  正式安装（运行时生效的 mmseg 一直是 PYTHONPATH=JIANGXI_MMSEG_SOURCE_ROOT 指向的
+  dinov3_swinV1 fork 源码树，行为不变）；底座构建中对 mmseg/mmdet 的 mmcv 版本
+  护栏 sed 放宽与 Dockerfile.jiangxi 既有 mmdet 放宽同类。
+- 旧底座关系：`jiangxi-runtime:current` / `squashed-20260915` 及全部既有交付镜像
+  保留不动；以 rebuilt 底座替换现役交付链属跨交付变更，须用户确认后另行推进。
+  血统透明说明（2026-09-15）中"环境级完全独立需从源码重建底座"一项就此闭环；
+  GPU 链 venv 的同类重建仍属后续决策项。
+
+2026-09-16 第二轮全面审查与修复收尾（审查报告 docs/code-review-20260916.md，含
+P2-16 更正注记）：对 fix/code-review-20260914 @ 2f664bd 以来 41 个修复提交做
+回归审查 + 全项目扫描（4 路并行子代理 + 主控亲验），结论 0 P0 / 4 P1 / 15 P2；
+4 路修复代理（fix/r2-backend/frontend/miner/infra worktree 分支，文件所有权
+互斥 + 契约冻结）零冲突合入本分支。要点：
+- **P1×4 全修**：project.py 8 端点 ValueError 收口补齐；kml_update 死键按用户
+  裁决删除（miner 透传与前端死分支清零，防回潮测试在位）；py3.10 语法守卫改
+  真实 3.10 子进程编译（原 feature_version 假绿，PEP 701 后 3.12+ 宿主拦不住
+  f-string 嵌套同类引号）+ 守卫元测试；static-server 请求目标收口（绝对/协议
+  相对 URL 劫持 → 400，双层防护 + 真实子进程回归三例）。
+- **审查误报更正**：GEOVIEW_BACKEND_URL 并非死键（authBackend/projectBackend
+  以其为后端 base URL，compose:117 是唯一正确取值来源），entrypoint 恢复原行
+  （0241a21）并补防误删注释；跨辖区正名 MINER_BACKEND_BASE_URL 记为后续决策项。
+- **P2 全清**（排除项除外）：KML 合并挪入推理锁 + 原子写（锁 fd 经 --lock_fd
+  传子进程复用）、kml_roi 子进程孤儿收口、cleanup 保留集补 _vN 变体、预处理
+  尺寸阈值防护、record_id 冻结 2 段式（前端生产端 + 后端容错解析）、启动链
+  子进程超时、kml-roi 500 收敛固定文案、fetch 超时分级、CRLF 守卫移位+glob 化、
+  healthcheck 一致性守卫、主题校验基准表修正（test:ui 孤儿门恢复绿）等。
+- **验收（2026-09-16）**：miner 103 测试绿 + verify 全链、前端 build + 契约
+  测试 + smoke + test:ui 绿、docker 测试 53 绿；镜像 `geoview-jiangxi:jiangxi-
+  gpu-20260916-fixes`（stable 标签未动）。镜像内权威门：fresh 容器全量单测
+  191 OK（1 skip 为 Windows 降级用例）；battery 容器（--gpus + 种子卷
+  jiangxi-runtime-battery-20260916）资产 348 PASS、/static 匿名 401、未知路由
+  404、SSRF 绝对/协议相对 URL 均 400 且正常转发 200、001 对推理连续双跑
+  completed（cuda:0 冷 32.2s/暖 10.6s、零失败瓦片）、并发第二请求 409、
+  prehandle=2+denoise=5 组合 completed、cleanup _vN 保留集演练 PASS。
+  容器 `geoview-jiangxi-gpu-20260916-battery` 停止保留作验收载体。
+- 新教训入 testing_playbook T26–T30（修复声明对照、解释器实测守卫、EOL 门
+  分裂与 CR 计数假象、死键裁决取证、验证车辆形态匹配）。
+- 后续决策项：stable 标签指向与运行容器切换（用户验收后）；MINER_BACKEND_BASE_URL
+  正名；历史 CRLF blob 批量 renormalize（T28 排查，需先复核测量）；GPU 链
+  mmcv 2.1.0 vs 护栏 2.2.0 矛盾（随 GPU 链解押一并处理）。
 
 ## 5. 必跑验证
 
@@ -205,3 +365,13 @@ Set-Location ..
   防黑屏的层级钳制必须用地图级 `setMaxZoom/setMinZoom`；③ `minNativeZoom` 让低
   层级复用所设层级瓦片降采样（配 map minZoom=7），是"缩小影像不消失"的关键，
   而图层 `minZoom` 会在低层级直接隐藏整层，二者不可混用。
+- 宿主验证 ≠ 镜像验证（2026-09-14 三连教训，详见 testing_playbook T22）：① f-string
+  嵌套同类引号宿主 Python 3.14 编译通过、镜像 3.10 SyntaxError——语法级检查也必须
+  用镜像解释器；② 挂载式单测是混合环境（宿主 backend + 镜像其它文件），契约测试读
+  镜像内 Dockerfile 时测到的是旧内容；③ 改 docker/ 下被测试引用的文件后，权威门 =
+  重建镜像 → 容器内全套重跑。
+- 跨进程共享临时目录先查清理契约（2026-09-14，T23）：kml_roi 子进程 pipeline 启动
+  即 `rmtree(work_dir)`（防残留双保险），Flask 进程写在该目录下的预处理产物被吞，
+  fake 子进程的单测拦不住（fake 掉子进程就 fake 掉了它的清理行为）。规则：跨进程
+  数据放各自前缀的独立临时目录，只传路径引用；对"别人也会用"的目录，写入前先 grep
+  全部读写方与清理逻辑。

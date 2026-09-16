@@ -54,6 +54,24 @@
       >
         <span>新建项目</span>
       </button>
+      <button
+        v-if="currentView === 'map'"
+        class="secondary-btn"
+        type="button"
+        aria-label="打开推理工作台"
+        @click="$emit('open-inference')"
+      >
+        <span>推理工作台</span>
+      </button>
+      <button
+        v-if="currentView === 'map'"
+        class="secondary-btn"
+        type="button"
+        aria-label="打开趋势报告"
+        @click="$emit('open-trend-report')"
+      >
+        <span>趋势报告</span>
+      </button>
       <button v-if="username" class="secondary-btn" type="button" @click="$emit('logout')">
         <span>退出登录</span>
       </button>
@@ -111,7 +129,14 @@ defineProps({
   },
 });
 
-defineEmits(['logout', 'open-workspace', 'open-map', 'create-project']);
+defineEmits([
+  'logout',
+  'open-workspace',
+  'open-map',
+  'create-project',
+  'open-inference',
+  'open-trend-report',
+]);
 
 const geoViewUrl = buildGeoViewUrl(import.meta.env.VITE_GEOVIEW_URL);
 const geoViewButtonLabel = geoViewUrl ? '打开解译平台' : '解译平台地址未配置';

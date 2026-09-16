@@ -4,6 +4,11 @@
 *.env
 !.env.example
 .trae
+.worktrees/
+recovery-snapshots/
+.superpowers/
+.zcode/
+**/__pycache__
 offline_bundle
 docs
 maps
