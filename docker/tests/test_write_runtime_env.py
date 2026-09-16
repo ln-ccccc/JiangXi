@@ -205,6 +205,17 @@ class RuntimeUrlValidationTests(unittest.TestCase):
             self._assert_exact_line(miner_env, 'VITE_GEOVIEW_URL=""')
             self.assertNotIn("evil", miner_env)
 
+    def test_malformed_local_tile_url_falls_back_to_default_template(self):
+        # 历史 env 血统污染形态（T-tile 教训）：模板尾部被拼接出多余的
+        # `{x}/{y}.png}`，坏模板会让整层本地瓦片 404——必须回退默认 XYZ 模板
+        bad_value = "/tiles/{z}/{x}/{y}.png/{x}/{y}.png}"
+        outputs = run_main_with_environment({"MINER_LOCAL_TILE_URL": bad_value})
+        miner_env = outputs["/app/miner/.env"]
+        self._assert_exact_line(
+            miner_env, "VITE_MINER_LOCAL_TILE_URL=/tiles/{z}/{x}/{y}.png"
+        )
+        self.assertNotIn(bad_value, miner_env)
+
     def test_valid_urls_survive_validation(self):
         outputs = run_main_with_environment(
             {
