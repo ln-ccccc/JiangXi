@@ -487,9 +487,16 @@ def kml_roi_history_list():
 def kml_roi_history_remove_one():
     req_json = request.json or {}
     record_id = str(req_json.get("record_id", "")).strip()
-    if "|" not in record_id:
+    # 契约：首段为 tbbh、末段为 filename。兼容两种历史形态——现行历史列表
+    # 产出的 2 段式 `tbbh|filename`，与推理完成 flash 卡片曾用过的 3 段式
+    # `tbbh|map_fid|filename`（中段 map_fid 忽略；filename 按产物命名规则
+    # 不含 |）。2026-09-16 审查 P2-1：此前 split("|", 1) 对 3 段式会把
+    # "map_fid|filename" 整段当文件名，删除必然「记录不存在」。
+    parts = record_id.split("|")
+    tbbh = parts[0].strip()
+    filename = parts[-1].strip()
+    if len(parts) < 2 or not tbbh or not filename:
         return fail_api("参数异常")
-    tbbh, filename = record_id.split("|", 1)
     if tbbh in {".", ".."} or "/" in tbbh or "\\" in tbbh:
         return fail_api("TBBH 参数不合法"), 400
     try:
