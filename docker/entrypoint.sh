@@ -205,7 +205,8 @@ if [ "${MINER_ENABLED}" = "true" ]; then
 
   # Start Miner Express backend (using Node.js 20)
   cd /app/miner
-  PATH=/opt/node20/bin:$PATH PORT=${MINER_BACKEND_PORT} GEOVIEW_BACKEND_URL="${GEOVIEW_BACKEND_URL:-http://localhost:${BACKEND_PORT}}" node server.js &
+  # GEOVIEW_BACKEND_URL 已死（geoviewBackend.js 删除后无消费者），不再向 miner 传递
+  PATH=/opt/node20/bin:$PATH PORT=${MINER_BACKEND_PORT} node server.js &
   MINER_BACKEND_PID=$!
 
   # Start Miner Vite dev server (using Node.js 20)
