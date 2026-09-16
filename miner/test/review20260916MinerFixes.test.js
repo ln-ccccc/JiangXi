@@ -64,3 +64,22 @@ test('启动链子进程必须带超时：探测类 15s、SHP 加载 120s、KMZ 
   assert.match(geoSource, /killSignal: 'SIGTERM'/u);
   assert.match(geoSource, /Expand-Archive[\s\S]{0,600}timeout: 30000/u);
 });
+
+test('kml-roi 500 分支固定文案：内部异常原文不回显，仅设备契约错误 400 透出', async () => {
+  // 2026-09-16 审查 P2-6：err.message 含完整命令行/绝对路径，不得经 detail 回显；
+  // 原文只进服务端 console.error。设备契约错误（用户可修正）保留 400 透出原文。
+  const server = await read('../server.js');
+
+  // 设备错误 400 分支保留：正则守卫 + 原文透出
+  assert.match(server, /device 仅支持\|CUDA 不可用\|江西项目仅支持 CPU/u);
+  assert.match(server, /res\.status\(400\)\.json\(\{[\s\S]*?detail: message/u);
+
+  // 其余 500：固定文案 + 原文进日志；500 返回体不得再携带 detail 键回显原文
+  assert.match(
+    server,
+    /console\.error\('\[inference\] kml-roi 推理失败:', message\);\s*return res\.status\(500\)\.json\(\{\s*error: '推理任务执行失败，请稍后重试或联系管理员',?\s*\}\);/u
+  );
+  const failureReturn = server.match(/return res\.status\(500\)\.json\(\{[^}]*\}\);/u);
+  assert.ok(failureReturn, 'kml-roi 500 分支应返回固定文案对象');
+  assert.ok(!failureReturn[0].includes('detail'), '500 返回体不得回显内部异常原文 detail');
+});

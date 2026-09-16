@@ -1117,11 +1117,17 @@ app.post('/api/inference/kml-roi', async (req, res) => {
       });
     }
     const message = err?.message || String(err);
-    const status = /device 仅支持|CUDA 不可用|江西项目仅支持 CPU/.test(message) ? 400 : 500;
-    return res.status(status).json({
-      error: 'Failed to run kml roi inference',
-      detail: message,
-    });
+    // 设备契约类失败（normalizeInferenceDevice / kml_roi_infer.py 的设备校验）属于用户
+    // 可修正的请求错误，400 透出原文；其余一律 500 固定文案——原始异常含完整命令行与
+    // 绝对路径，只进服务端日志不回显（与 projects/auth 路由的 502 固定文案同一收口原则）。
+    if (/device 仅支持|CUDA 不可用|江西项目仅支持 CPU/.test(message)) {
+      return res.status(400).json({
+        error: 'Failed to run kml roi inference',
+        detail: message,
+      });
+    }
+    console.error('[inference] kml-roi 推理失败:', message);
+    return res.status(500).json({ error: '推理任务执行失败，请稍后重试或联系管理员' });
   } finally {
     kmlInferenceActive = false;
   }
