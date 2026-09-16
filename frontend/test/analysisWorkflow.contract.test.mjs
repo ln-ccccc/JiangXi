@@ -160,6 +160,19 @@ test("预处理预览失败必须给出可见提示而不是静默吞掉", () =>
   assert.match(preHandleUtility, /\$message\?\.\s*warning\?\.\(\s*['"]预处理原图上传失败/);
 });
 
+test("推理全空时后端语义 message（no_features）必须透传进失败提示", () => {
+  // 后端对 status === "no_features" 返回 success_api 且 data.message =
+  // "No usable polygons in KML"；前端曾只读 written/failed 字段，
+  // 用户只见笼统的「Flash 推理失败」
+  assert.match(uploadUtility, /if \(payload\.message\)/);
+  assert.match(uploadUtility, /backendMessages\.push\(String\(payload\.message\)\)/);
+  assert.match(
+    uploadUtility,
+    /const detailSource = backendMessages\[0\] \|\| errorMessages\[0\]/,
+    "全空失败分支必须优选拼入后端语义 message",
+  );
+});
+
 test("kmlRoiInfer 载荷携带预处理状态（与后端契约冻结：prehandle / denoise）", () => {
   const payloadStart = uploadUtility.indexOf("await kmlRoiInfer({");
   assert.ok(payloadStart >= 0, "必须经 kmlRoiInfer 发起地物分类推理");
