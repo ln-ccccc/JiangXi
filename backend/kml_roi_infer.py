@@ -181,6 +181,8 @@ def main() -> int:
     result_manifests = []
     asset_manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     for raw_fid in written_fids:
+        if str(raw_fid).startswith("U"):
+            continue  # 非联动产物不写联动 result_manifest（无 TBBH 对应）
         map_fid = int(raw_fid)
         tbbh = map_fid_to_tbbh[map_fid]
         result_path = output_root / str(map_fid) / "result_manifest.json"
