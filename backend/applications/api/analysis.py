@@ -506,6 +506,7 @@ def kml_roi_history_list():
         unlinked_records.append(
             {
                 "record_id": None,
+                "unlinked": True,
                 "type": "地物分类",
                 "before_img": f"/api/analysis/kml_roi_unlinked_output/{u_dir.name}/{before_name}",
                 "after_img": f"/api/analysis/kml_roi_unlinked_output/{u_dir.name}/{after_name}",
