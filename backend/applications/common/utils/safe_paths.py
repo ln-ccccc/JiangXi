@@ -54,4 +54,5 @@ def resolve_managed_file(root, filename, allowed_suffixes):
 
 
 def resolve_output_file(root, fid, filename, allowed_suffixes):
-    return resolve_managed_file(resolve_output_directory(root, _positive_identifier(fid, "FID")), filename, allowed_suffixes)
+    # resolve_output_directory 已支持 U 前缀未联动命名空间，此处不再重复强校验纯数字
+    return resolve_managed_file(resolve_output_directory(root, str(fid)), filename, allowed_suffixes)
