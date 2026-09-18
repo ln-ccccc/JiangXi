@@ -90,21 +90,23 @@ def run_kml_roi_inference(
     default_kml_path = resolve_default_jiangxi_kmz()
     input_kml_path = Path(kml_path).expanduser().resolve() if kml_path else default_kml_path
     output_root = output_root or os.getenv("MINER_CHANGE_OUTPUT_ROOT") or str(repo_root / "miner" / "change_matrix_outputs")
-    effective_kml_path = default_kml_path
     kml_update = {"inserted": 0, "updated": 0, "skipped": 0, "fids": [], "kml_path": str(default_kml_path)}
     parent_lock = None
+    merge_target = None
     try:
         if input_kml_path != default_kml_path:
-            # 合并共享 runtime.kml 的读-改-写必须发生在推理锁内（见
-            # _acquire_inference_lock_for_merge），否则并发合并互相覆盖、
-            # 子进程可能以别的请求的合并结果为推理输入。
+            # 合并挪到推理成功之后（2026-09-18 验收反馈）：no_features（KML 多边形
+            # 全部落在影像范围外）或推理失败时，不得把 KML 增量同步进 runtime.kml，
+            # 否则 miner 地图会多出没有地物分类推理结果的空弹窗多边形。推理直接以
+            # 上传 KML 为输入（pipeline 本就只读 --kml），父进程锁仍全程持有——
+            # 合并在子进程成功返回后、finally 释放锁之前执行，防并发合并互相覆盖。
             parent_lock = _acquire_inference_lock_for_merge(output_root)
             merge_target = default_kml_path
             if default_kml_path.suffix.lower() == ".kmz":
                 merge_target = repo_root / "miner" / "Jiangxi_NaturalMine.runtime.kml"
-            kml_update = merge_kml_increment(default_kml_path, input_kml_path, output_kml=merge_target)
-            effective_kml_path = Path(kml_update["kml_path"])
-        kml_path = str(effective_kml_path)
+            kml_path = str(input_kml_path)
+        else:
+            kml_path = str(default_kml_path)
         if not os.path.exists(kml_path):
             raise FileNotFoundError(f"kml_path 不存在: {kml_path}")
 
@@ -152,6 +154,13 @@ def run_kml_roi_inference(
             finally:
                 if preprocess_dir:
                     shutil.rmtree(preprocess_dir, ignore_errors=True)
+            # 成功才落库：completed/partial 等价于 written>=1（pipeline 对
+            # written==0 一律判 failed；no_features 为 KML 无可用多边形）。
+            # 失败路径 runtime.kml 保持原样，kml_update 维持全零占位。
+            if merge_target is not None and result.get("status") in ("completed", "partial"):
+                kml_update = merge_kml_increment(
+                    default_kml_path, input_kml_path, output_kml=merge_target
+                )
             result["kml_update"] = kml_update
             return result
     finally:

@@ -170,6 +170,45 @@ class ParentLockMergeTests(unittest.TestCase):
         # 冲突路径不得执行合并（merge 输出文件保持原内容）
         self.assertNotIn("<name>2</name>", self.merged_kml.read_text(encoding="utf-8"))
 
+    def test_failed_inference_keeps_runtime_kml_untouched(self):
+        # 2026-09-18 验收反馈回归：no_features（KML 多边形全部落在影像范围外）
+        # 或推理失败时，KML 增量不得合并进 runtime.kml——否则 miner 地图会
+        # 多出没有地物分类推理结果的空弹窗多边形。合并已在成功后才执行。
+        for status in ("no_features", "failed"):
+            with self.subTest(status=status):
+                captured = []
+
+                def fake_run(command, **kwargs):
+                    captured.append({"command": list(command), "kwargs": kwargs})
+                    return SimpleNamespace(
+                        returncode=0,
+                        stdout='{"status":"%s"}\n' % status,
+                        stderr="",
+                    )
+
+                with patch.object(
+                    service, "resolve_default_jiangxi_kmz", return_value=self.default_kml
+                ), patch.object(
+                    service, "_run_subprocess_with_cleanup", side_effect=fake_run
+                ):
+                    result = service.run_kml_roi_inference(
+                        old_tif_path=str(self.tif_path),
+                        new_tif_path=str(self.tif_path),
+                        kml_path=str(self.upload_kml),
+                        output_root=str(self.output_root),
+                        manifest_path=str(self.manifest_path),
+                    )
+                self.assertEqual(result["status"], status)
+                # 子进程仍持父锁 fd（锁语义不变）
+                self.assertIn("--lock_fd", captured[0]["command"])
+                # runtime.kml（.kml 底座场景即 default 库）未被合并
+                self.assertNotIn("<name>2</name>", self.merged_kml.read_text(encoding="utf-8"))
+                self.assertEqual(result["kml_update"]["inserted"], 0)
+                # 返回后父锁已释放
+                with open(self.lock_path, "w") as probe:
+                    fcntl.flock(probe.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(probe.fileno(), fcntl.LOCK_UN)
+
     def test_default_kml_no_parent_lock_no_lockfd(self):
         # 未上传 KML（使用默认库）时不进入合并链路：不取父锁、不传 --lock_fd，
         # 锁仍由子进程按原语义自行获取（BFF 链路完全不受影响）。
