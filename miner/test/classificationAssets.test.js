@@ -80,6 +80,8 @@ test('路由与标签接线：classification 路由挂 authGuard，地物分类�
 
   const panelSource = readFile('src', 'components', 'EcologyDiagnosisPanels.vue');
   assert.match(panelSource, /confusion_matrix/);
-  assert.match(panelSource, /confusion-table/);
+  assert.match(panelSource, /confusion-matrix/);
+  assert.match(panelSource, /getHeatmapColor/);
+  assert.match(panelSource, /classificationItems/);
   assert.ok(MINE_ECOLOGY_TABS.includes('地物分类'), '地物分类标签未加入 MINE_ECOLOGY_TABS');
 });

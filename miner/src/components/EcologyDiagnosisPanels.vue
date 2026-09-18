@@ -54,78 +54,55 @@
       {{ classificationState.error }}
     </div>
     <template v-else-if="classificationState.data">
-      <p class="source-note">
-        数据源：同步分析推理产物（change_matrix_outputs，仅展示已写入的推理结果）。
-      </p>
-      <div v-if="classificationState.data.years.length" class="classification-grid">
-        <figure
-          v-for="item in classificationState.data.years"
-          :key="item.year"
-          class="classification-card"
-        >
-          <figcaption>{{ item.year }} 年地物分类结果</figcaption>
-          <img :src="item.result_url" :alt="`${item.year} 年地物分类结果`" loading="lazy" />
-        </figure>
+      <div class="source-badge">Source: 同步分析推理产物</div>
+      <div v-if="classificationItems.length" class="classification-container">
+        <div v-for="item in classificationItems" :key="item.key" class="class-image-box">
+          <div class="class-title">{{ item.title }}（{{ item.year ?? '未知年份' }}）</div>
+          <div class="class-image-wrapper">
+            <img
+              :src="item.url"
+              :alt="`${item.title}分类结果`"
+              class="class-image"
+              loading="lazy"
+            />
+            <div class="class-year-label">{{ item.year ?? '未知' }}</div>
+          </div>
+        </div>
+        <div v-if="classificationItems.length === 1" class="no-data">暂无可比较的前期分类结果</div>
       </div>
-      <div v-if="classificationState.data.pair.old_url" class="classification-grid">
-        <figure class="classification-card">
-          <figcaption>基准期分类（old）</figcaption>
-          <img
-            :src="classificationState.data.pair.old_url"
-            alt="基准期地物分类结果"
-            loading="lazy"
-          />
-        </figure>
-        <figure v-if="classificationState.data.pair.new_url" class="classification-card">
-          <figcaption>最新期分类（new）</figcaption>
-          <img
-            :src="classificationState.data.pair.new_url"
-            alt="最新期地物分类结果"
-            loading="lazy"
-          />
-        </figure>
-      </div>
-      <p
-        v-if="!classificationState.data.years.length && !classificationState.data.pair.old_url"
-        class="state-panel"
-      >
-        该图斑暂无地物分类推理结果。
-      </p>
-      <div v-if="classificationState.data.confusion_matrix.pixels" class="confusion-box">
-        <span class="confusion-title">混淆矩阵（基准期 → 最新期，单位：像素）</span>
-        <table class="confusion-table">
+      <p v-else class="no-data">暂无地物分类结果</p>
+      <div v-if="classificationMatrix" class="matrix-container">
+        <table class="confusion-matrix">
           <thead>
             <tr>
-              <th>基准 \ 最新</th>
-              <th
-                v-for="name in classificationState.data.confusion_matrix.pixels.col_labels"
-                :key="name"
-              >
-                {{ classZh(name) }}
+              <th class="corner-cell">
+                <div class="corner-old">{{ matrixYearLabels.old }}</div>
+                <div class="corner-new">{{ matrixYearLabels.new }}</div>
               </th>
+              <th v-for="h in classificationMatrix.col_labels" :key="h">{{ classZh(h) }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="(row, rowIndex) in classificationState.data.confusion_matrix.pixels.rows"
-              :key="rowIndex"
-            >
-              <th>
-                {{ classZh(classificationState.data.confusion_matrix.pixels.row_labels[rowIndex]) }}
-              </th>
+            <tr v-for="(row, rowIndex) in classificationMatrix.rows" :key="rowIndex">
+              <td class="row-label">{{ classZh(classificationMatrix.row_labels[rowIndex]) }}</td>
               <td
-                v-for="(value, colIndex) in row"
+                v-for="(val, colIndex) in row"
                 :key="colIndex"
-                :class="{ diag: rowIndex === colIndex }"
+                class="matrix-cell"
+                :style="{ backgroundColor: getHeatmapColor(Number(val)) }"
               >
-                {{ value }}
+                {{ Number(val).toFixed(1) }}%
               </td>
             </tr>
           </tbody>
         </table>
-        <small>对角线为两期未变化像素，非对角线为地物类型转移量。</small>
+        <div class="matrix-legend">
+          <span>0%</span>
+          <div class="legend-bar"></div>
+          <span>100%</span>
+        </div>
       </div>
-      <p v-else class="state-panel">暂无混淆矩阵（需要至少两期分类结果才会生成）。</p>
+      <p v-else class="no-data">暂无混淆矩阵数据（需要至少两期分类结果）。</p>
     </template>
   </section>
   <section v-else-if="environmentMetricKey" class="panel-stack">
@@ -217,6 +194,52 @@ const loadClassification = async () => {
       data: null,
     };
   }
+};
+
+const classificationItems = computed(() => {
+  const data = classificationState.value.data;
+  if (!data) return [];
+  const years = data.years || [];
+  if (data.pair.old_url && years.length >= 2) {
+    const oldYear = years[0].year;
+    const newYear = years[years.length - 1].year;
+    return [
+      { key: 'old', title: '前期地物分类', year: oldYear, url: data.pair.old_url },
+      {
+        key: 'new',
+        title: '当前地物分类',
+        year: newYear,
+        url: data.pair.new_url || years[years.length - 1].result_url,
+      },
+    ];
+  }
+  return years.map((item) => ({
+    key: String(item.year),
+    title: '地物分类',
+    year: item.year,
+    url: item.result_url,
+  }));
+});
+
+const classificationMatrix = computed(() => {
+  const data = classificationState.value.data;
+  if (!data) return null;
+  const matrix = data.confusion_matrix?.percent_rownorm || null;
+  if (!matrix || matrix.rows.length < 2) return null;
+  return matrix;
+});
+
+const matrixYearLabels = computed(() => {
+  const years = classificationState.value.data?.years || [];
+  if (years.length >= 2) {
+    return { old: `${years[0].year}（基准期）`, new: `${years[years.length - 1].year}（最新期）` };
+  }
+  return { old: '前期', new: '当前' };
+});
+
+const getHeatmapColor = (val) => {
+  const opacity = Math.min(Math.max(val, 0) / 100, 1);
+  return `rgba(78, 205, 196, ${opacity * 0.8})`;
 };
 
 watch(
@@ -553,66 +576,156 @@ const AnnualDataTable = defineComponent({
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.classification-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+.matrix-container {
+  margin-top: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 15px;
+  border-radius: 8px;
+  overflow-x: auto;
 }
 
-.classification-card {
-  margin: 0;
-  border: 1px solid var(--jx-border);
-  border-radius: var(--jx-radius);
-  overflow: hidden;
-  background: var(--jx-surface-muted);
-}
-
-.classification-card figcaption {
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--jx-text-muted);
-}
-
-.classification-card img {
-  display: block;
+.confusion-matrix {
   width: 100%;
-  background: #04101a;
-}
-
-.confusion-box {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.confusion-title {
-  color: var(--jx-text-muted);
-  font-size: 12px;
-}
-
-.confusion-table {
   border-collapse: collapse;
-  width: 100%;
   font-size: 12px;
+  table-layout: fixed;
 }
 
-.confusion-table th,
-.confusion-table td {
-  border: 1px solid var(--jx-border);
-  padding: 4px 8px;
+.confusion-matrix th,
+.confusion-matrix td {
+  padding: 8px 4px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.confusion-matrix th {
+  color: var(--jx-text-muted);
+  font-weight: normal;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.corner-cell {
+  position: relative;
+  min-width: 80px;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.corner-cell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    transparent 48%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 52%
+  );
+  pointer-events: none;
+}
+
+.corner-old,
+.corner-new {
+  position: absolute;
+  font-size: 11px;
+  color: var(--jx-text-muted);
+}
+
+.corner-old {
+  top: 4px;
+  left: 6px;
+  text-align: left;
+}
+
+.corner-new {
+  bottom: 4px;
+  right: 6px;
   text-align: right;
 }
 
-.confusion-table th {
+.row-label {
   color: var(--jx-text-muted);
-  font-weight: 600;
+  text-align: left !important;
+  width: 60px;
 }
 
-.confusion-table td.diag {
-  background: rgba(127, 216, 166, 0.12);
+.matrix-cell {
+  transition: transform 0.2s;
+  cursor: default;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-.confusion-box small {
+.matrix-cell:hover {
+  transform: scale(1.05);
+  z-index: 1;
+}
+
+.matrix-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 15px;
+  font-size: 12px;
   color: var(--jx-text-muted);
+  justify-content: center;
+}
+
+.legend-bar {
+  width: 200px;
+  height: 10px;
+  background: linear-gradient(to right, rgba(78, 205, 196, 0), rgba(78, 205, 196, 0.8));
+  border-radius: 5px;
+}
+
+.no-data {
+  text-align: center;
+  padding: 40px;
+  color: var(--jx-text-muted);
+}
+
+.classification-container {
+  margin-top: 10px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.class-image-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.class-title {
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: var(--jx-text-muted);
+}
+
+.class-image-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.class-image {
+  width: 100%;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.class-year-label {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: #000;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 4px;
 }
 </style>

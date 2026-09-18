@@ -55,15 +55,25 @@ def run_kml_roi_pipeline(
     features = load_kml_features(kml_path)
     mark("kml_load")
     bounds_4326 = raster_union_bounds_4326(old_tif, new_tif)
+    raw_feature_count = len(features)
     features = filter_features_by_bounds(features, bounds_4326)
     if limit > 0:
         features = features[:limit]
     mark("bounds_filter")
 
     if not features:
+        # 2026-09-18 验收反馈：把无可用图斑的原因说清——多边形存在但全部落在
+        # 影像覆盖范围之外，与「KML 本身没有多边形」是两种不同的用户失误。
+        if raw_feature_count > 0:
+            message = (
+                f"KML 共解析到 {raw_feature_count} 个多边形，均未落入影像覆盖范围，"
+                "请改用覆盖这些图斑的影像，或更换与影像范围匹配的 KML"
+            )
+        else:
+            message = "KML 中未解析到可用多边形，请检查文件内容"
         return {
             "status": "no_features",
-            "message": "No usable polygons in KML",
+            "message": message,
             "stage_durations": dict(stage_durations),
             "total_seconds": round(time.monotonic() - run_started, 3),
         }
