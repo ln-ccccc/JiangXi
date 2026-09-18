@@ -475,6 +475,44 @@ def kml_roi_history_list():
     limit = max(1, min(100, limit))
 
     records = _iter_flash_records()
+    # 未联动推理产物（U<fid> 目录，2026-09-18）：并入历史列表供结果预览展示，
+    # record_id 置空（无 TBBH 历史，不可删除），图片走未联动出图路由。
+    unlinked_records = []
+    try:
+        u_dirs = sorted(
+            (d for d in miner_change_output_root.iterdir() if re.fullmatch(r"U[1-9][0-9]*", d.name)),
+            key=lambda d: d.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        u_dirs = []
+    for u_dir in u_dirs:
+        result_files = [
+            f2.name
+            for f2 in u_dir.glob("*.png")
+            if not f2.name.endswith("_mask.png") and not f2.name.endswith("_src.png")
+        ]
+        if not result_files:
+            continue
+        after_name = next(
+            (f2 for f2 in result_files if f2.endswith("_new.png")), result_files[0]
+        )
+        before_name = next(
+            (f2 for f2 in result_files if f2.endswith("_old.png")),
+            after_name.replace(".png", "_src.png")
+            if (u_dir / (after_name.replace(".png", "_src.png"))).exists()
+            else after_name,
+        )
+        unlinked_records.append(
+            {
+                "record_id": None,
+                "type": "地物分类",
+                "before_img": f"/api/analysis/kml_roi_unlinked_output/{u_dir.name}/{before_name}",
+                "after_img": f"/api/analysis/kml_roi_unlinked_output/{u_dir.name}/{after_name}",
+                "data": {"mode": "flash", "unlinked": True, "fid": u_dir.name},
+            }
+        )
+    records = records + unlinked_records
     total = len(records)
     start = (page - 1) * limit
     end = start + limit
@@ -482,6 +520,9 @@ def kml_roi_history_list():
 
     data = []
     for idx, rec in enumerate(page_items):
+        if rec.get("unlinked"):
+            data.append({"id": total - start - idx, **rec})
+            continue
         tbbh = rec["tbbh"]
         map_fid = rec["map_fid"]
         filename = rec["filename"]
