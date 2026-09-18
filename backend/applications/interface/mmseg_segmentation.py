@@ -256,8 +256,13 @@ def run_loaded_model_inference(
         # 2026-09-18 验收反馈：整图推理一次送入数十片同尺寸瓦片，缓存分配器
         # 的保留池随片数累积到接近显存上限（nvidia-smi 观感「瞬间打满」）。
         # 预测结果已拷贝至 CPU，这里释放 GPU 缓存块，把保留池压回常驻模型水位。
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        # 局部导入：外层函数有懒加载 import torch，嵌套作用域直接引用会冲突
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
         return results_cpu
 
     def _emit(filename: str, img_array: np.ndarray, pred_mask: np.ndarray) -> None:
