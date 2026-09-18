@@ -498,10 +498,13 @@ def kml_roi_history_list():
             (f2 for f2 in result_files if f2.endswith("_new.png")), result_files[0]
         )
         before_name = next(
+            (f2 for f2 in result_files if f2.endswith("_src.png")),
+            next(
             (f2 for f2 in result_files if f2.endswith("_old.png")),
             after_name.replace(".png", "_src.png")
             if (u_dir / (after_name.replace(".png", "_src.png"))).exists()
             else after_name,
+            ),
         )
         unlinked_records.append(
             {
