@@ -97,7 +97,16 @@ def _run_whole_image_inference(
     new_pred, ok_n = stitch("pred", "n", True)
     old_mask, _ = stitch("mask", "o", False)
     new_mask, _ = stitch("mask", "n", False)
-    src_img, ok_src = stitch("tile", "o", True)  # o 期原始瓦片拼接 = 原始影像
+    # o 期原始瓦片就在 tile_dir（无 stage 前缀），拼接为原始影像 _src.png
+    src_img = np.zeros((height, width, 3), dtype=np.uint8)
+    ok_src = 0
+    for r, c, h, w in grid:
+        tp = tile_dir / (fid + "_tile_o" + str(r) + "_" + str(c) + ".png")
+        if tp.exists():
+            tile = cv2.imread(str(tp), cv2.IMREAD_COLOR)
+            if tile is not None:
+                src_img[r * tile_size : r * tile_size + h, c * tile_size : c * tile_size + w] = tile[:h, :w]
+                ok_src += 1
     mark("stitch")
 
     failed = ok_o == 0 or ok_n == 0
