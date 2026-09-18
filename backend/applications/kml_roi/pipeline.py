@@ -73,8 +73,10 @@ def _run_whole_image_inference(
     )
     mark("inference")
 
-    def stitch(stage, tag):
-        canvas = np.zeros((height, width), dtype=np.uint8)
+    def stitch(stage, tag, keep_color):
+        # pred_* 为彩色叠加图（3 通道 BGR），必须全彩拼接；mask_* 为类别索引灰度图
+        channels = 3 if keep_color else 1
+        canvas = np.zeros((height, width, channels) if keep_color else (height, width), dtype=np.uint8)
         ok = 0
         for r, c, h, w in grid:
             path = mmseg_out_dir / (stage + "_" + fid + "_tile_" + tag + str(r) + "_" + str(c) + ".png")
@@ -83,16 +85,18 @@ def _run_whole_image_inference(
             tile = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
             if tile is None:
                 continue
-            if tile.ndim == 3:
+            if tile.ndim == 3 and not keep_color:
                 tile = tile[:, :, 0]
+            if keep_color and tile.ndim == 2:
+                tile = cv2.cvtColor(tile, cv2.COLOR_GRAY2BGR)
             canvas[r * tile_size : r * tile_size + h, c * tile_size : c * tile_size + w] = tile[:h, :w]
             ok += 1
         return canvas, ok
 
-    old_pred, ok_o = stitch("pred", "o")
-    new_pred, ok_n = stitch("pred", "n")
-    old_mask, _ = stitch("mask", "o")
-    new_mask, _ = stitch("mask", "n")
+    old_pred, ok_o = stitch("pred", "o", True)
+    new_pred, ok_n = stitch("pred", "n", True)
+    old_mask, _ = stitch("mask", "o", False)
+    new_mask, _ = stitch("mask", "n", False)
     mark("stitch")
 
     failed = ok_o == 0 or ok_n == 0
@@ -104,8 +108,8 @@ def _run_whole_image_inference(
         run_status = "failed"
         tile_errors.setdefault("whole_image", "切片推理存在整期缺失，未能拼接全图结果")
     else:
-        cv2.imwrite(str(out_dir / (fid + "_old.png")), cv2.cvtColor(old_pred, cv2.COLOR_GRAY2BGR))
-        cv2.imwrite(str(out_dir / (fid + "_new.png")), cv2.cvtColor(new_pred, cv2.COLOR_GRAY2BGR))
+        cv2.imwrite(str(out_dir / (fid + "_old.png")), old_pred)
+        cv2.imwrite(str(out_dir / (fid + "_new.png")), new_pred)
         old_mask_path = out_dir / (fid + "_old_mask.png")
         new_mask_path = out_dir / (fid + "_new_mask.png")
         cv2.imwrite(str(old_mask_path), old_mask)
