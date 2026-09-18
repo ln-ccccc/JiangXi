@@ -181,11 +181,14 @@ const classificationApiBase = import.meta.env.VITE_MINER_API_BASE_URL
 const loadClassification = async () => {
   const tbbh = props.mineData?.tbbh;
   if (!tbbh) return;
+  const requestTbbh = String(tbbh);
   classificationState.value = { loading: true, error: '', data: null };
   try {
     const res = await axios.get(
-      `${classificationApiBase}/api/inference/classification/${encodeURIComponent(String(tbbh))}`
+      `${classificationApiBase}/api/inference/classification/${encodeURIComponent(requestTbbh)}`
     );
+    // 过期响应守卫：快速切换图斑时，慢响应不得覆盖新图斑的数据
+    if (String(props.mineData?.tbbh) !== requestTbbh) return;
     classificationState.value = { loading: false, error: '', data: res?.data?.data || null };
   } catch (err) {
     classificationState.value = {
@@ -200,7 +203,8 @@ const classificationItems = computed(() => {
   const data = classificationState.value.data;
   if (!data) return [];
   const years = data.years || [];
-  if (data.pair.old_url && years.length >= 2) {
+  // 无年份推理产物只有 pair（_old/_new）没有 +YYYY 掩膜：年份缺省显示「未知年份」
+  if (data.pair.old_url && (years.length >= 2 || !years.length)) {
     const oldYear = years[0].year;
     const newYear = years[years.length - 1].year;
     return [
@@ -252,11 +256,11 @@ watch(
 
 const metrics = computed(() => props.profile?.metrics || {});
 const ecologyMetricKey = computed(
-  () => ({ NDVI: 'ndvi', FCV: 'fcv', LAI: 'lai', NPP: 'npp' })[props.tab] || ''
+  () => ({ NDVI: 'ndvi', FCV: 'fcv', LAI: 'lai', NPP: 'npp' }[props.tab] || '')
 );
 const environmentMetricKey = computed(
   () =>
-    ({ LST: 'lst', 土壤湿度: 'sm_proxy', TVDI: 'tvdi_proxy', 气候背景: 'climate' })[props.tab] || ''
+    ({ LST: 'lst', 土壤湿度: 'sm_proxy', TVDI: 'tvdi_proxy', 气候背景: 'climate' }[props.tab] || '')
 );
 const prediction = computed(() => props.profile?.prediction || {});
 const diagnosisCards = computed(() => buildDiagnosisCards(metrics.value));
@@ -294,7 +298,7 @@ const formatDelta = (value, unit = '') => `${value >= 0 ? '+' : ''}${formatMetri
 const formatPercent = (value) =>
   Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(1)}%` : '暂无';
 const formatTrend = (value) =>
-  ({ upward: '上升', downward: '下降', stable: '稳定' })[value] || '暂无';
+  ({ upward: '上升', downward: '下降', stable: '稳定' }[value] || '暂无');
 
 const TrendChart = defineComponent({
   props: {
@@ -348,7 +352,9 @@ const TrendChart = defineComponent({
         h(
           'h4',
           { class: 'chart-title' },
-          `${chartProps.metric.label || '年度趋势'}${chartProps.metric.unit ? `（${chartProps.metric.unit}）` : ''}`
+          `${chartProps.metric.label || '年度趋势'}${
+            chartProps.metric.unit ? `（${chartProps.metric.unit}）` : ''
+          }`
         ),
         h('div', { ref: element, class: 'eco-chart', style: { height: '230px' } }),
         !(chartProps.metric.data || []).length && h('p', { class: 'empty' }, '暂无该指标年度数据'),

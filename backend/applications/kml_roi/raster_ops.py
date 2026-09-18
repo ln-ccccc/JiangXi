@@ -34,7 +34,9 @@ def raster_union_bounds_4326(old_tif: Path, new_tif: Path) -> Tuple[float, float
 def crop_polygon_from_raster(raster_path: Path, geom_4326: Dict, out_path: Path) -> bool:
     with rasterio.open(raster_path) as src:
         if src.crs is None:
-            raise RuntimeError(f"Missing CRS for raster: {raster_path}")
+            # 无 CRS 影像无法与经纬度图斑做空间裁剪：跳过该图斑（返回 False），
+            # 交给上层零交集时的整图推理兜底，而不是让整跑 500
+            return False
 
         geom_src = transform_geom(WGS84, src.crs, geom_4326, precision=6)
         try:

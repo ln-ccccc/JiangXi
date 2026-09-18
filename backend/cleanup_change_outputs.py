@@ -1,3 +1,4 @@
+import re
 import argparse
 from pathlib import Path
 
@@ -27,7 +28,7 @@ def main() -> int:
         print({"visited": visited, "removed": removed_total})
         return 0
 
-    for d in sorted([p for p in root.iterdir() if p.is_dir()], key=lambda p: p.name):
+    for d in sorted([p for p in root.iterdir() if p.is_dir() and not re.match(r"^U[1-9][0-9]*$", p.name)], key=lambda p: p.name):
         fid = d.name
         removed_total += cleanup_output_dir(fid, d, keep_last_years=args.keep_last_years)
         visited += 1

@@ -2,20 +2,32 @@
   <div class="result-gallery">
     <div v-if="childImgArr.length === 0" class="result-empty" data-state="idle">
       <el-empty description="尚无分析结果" :image-size="150" />
-      <p>请先在上方选择 tif / tiff 影像并执行分析，完成后结果会自动归档到这里。</p>
+      <p>
+        请先在上方选择 tif / tiff 影像并执行分析，完成后结果会自动归档到这里。
+      </p>
     </div>
 
     <article
-      v-for="(item,index) in childImgArr"
+      v-for="(item, index) in childImgArr"
       :key="item.record_id || item.id || index"
       class="result-record"
     >
       <header class="result-record__header">
         <div>
-          <span class="result-record__eyebrow data-label">RECORD {{ item.display_index || (index + 1) }}</span>
-          <h3 class="atlas-title">第 {{ item.display_index || (index + 1) }} 组 · {{ item.type || "分析成果" }}</h3>
+          <span class="result-record__eyebrow data-label"
+            >RECORD {{ item.display_index || index + 1 }}</span
+          >
+          <h3 class="atlas-title">
+            第 {{ item.display_index || index + 1 }} 组 ·
+            {{ item.type || "分析成果" }}
+          </h3>
         </div>
-        <button class="result-delete" type="button" @click="$emit('delete-item', item)">
+        <button v-if="item.record_id" class="result-delete" type="button"
+        @click="$emit('<button
+          class="result-delete"
+          type="button"
+          @click="$emit('delete-item', item)"
+        >
           删除该组
         </button>
       </header>
@@ -69,11 +81,13 @@
             <button
               class="result-download"
               type="button"
-              @click="downloadimgWithWords(
-                item.display_index || (index + 1),
-                item.after_img,
-                `${item.type}结果图.png`
-              )"
+              @click="
+                downloadimgWithWords(
+                  item.display_index || index + 1,
+                  item.after_img,
+                  `${item.type}结果图.png`
+                )
+              "
             >
               <i class="iconfont icon-xiazai" aria-hidden="true" />
               下载结果
@@ -81,16 +95,39 @@
           </figcaption>
         </figure>
 
-        <aside v-if="isLandClassification(item)" class="classification-legend" aria-label="地物分类类别图例">
+        <aside
+          v-if="isLandClassification(item)"
+          class="classification-legend"
+          aria-label="地物分类类别图例"
+        >
           <span class="classification-legend__eyebrow data-label">LEGEND</span>
           <h4 class="atlas-title">类别图例</h4>
           <ul>
-            <li><i class="legend-swatch legend-swatch--grass" /><span>草地</span><small>Grassland</small></li>
-            <li><i class="legend-swatch legend-swatch--forest" /><span>林地</span><small>Forest</small></li>
-            <li><i class="legend-swatch legend-swatch--building" /><span>建筑</span><small>Building</small></li>
-            <li><i class="legend-swatch legend-swatch--road" /><span>道路</span><small>Road</small></li>
-            <li><i class="legend-swatch legend-swatch--bare" /><span>裸地</span><small>Bareground</small></li>
-            <li><i class="legend-swatch legend-swatch--water" /><span>水体</span><small>Water</small></li>
+            <li>
+              <i class="legend-swatch legend-swatch--grass" /><span>草地</span
+              ><small>Grassland</small>
+            </li>
+            <li>
+              <i class="legend-swatch legend-swatch--forest" /><span>林地</span
+              ><small>Forest</small>
+            </li>
+            <li>
+              <i class="legend-swatch legend-swatch--building" /><span
+                >建筑</span
+              ><small>Building</small>
+            </li>
+            <li>
+              <i class="legend-swatch legend-swatch--road" /><span>道路</span
+              ><small>Road</small>
+            </li>
+            <li>
+              <i class="legend-swatch legend-swatch--bare" /><span>裸地</span
+              ><small>Bareground</small>
+            </li>
+            <li>
+              <i class="legend-swatch legend-swatch--water" /><span>水体</span
+              ><small>Water</small>
+            </li>
           </ul>
         </aside>
       </div>
@@ -108,7 +145,10 @@
           <dt>有效像元</dt>
           <dd>{{ item.data.valid_pixel_count }}</dd>
         </div>
-        <div v-if="item.data.boundary_status && item.data.boundary_status !== 'ok'" data-state="error">
+        <div
+          v-if="item.data.boundary_status && item.data.boundary_status !== 'ok'"
+          data-state="error"
+        >
           <dt>边界状态</dt>
           <dd>{{ boundaryStatusText(item.data.boundary_status) }}</dd>
         </div>
@@ -126,25 +166,25 @@ export default {
   name: "Imgshow",
   emits: ["delete-item"],
   props: {
-    imgArr:{
-      type:Array,
-      default(){
-        return []
-      }
+    imgArr: {
+      type: Array,
+      default() {
+        return [];
+      },
     },
   },
   data() {
     return {
       fit: "fill",
-      childImgArr:[],
-      imageErrors: {}
+      childImgArr: [],
+      imageErrors: {},
     };
   },
   mounted() {
-    this.childImgArr = this.imgArr
+    this.childImgArr = this.imgArr;
   },
   updated() {
-    this.childImgArr = this.imgArr
+    this.childImgArr = this.imgArr;
   },
   methods: {
     downloadimgWithWords,
@@ -157,7 +197,11 @@ export default {
       return key ? `${key}：${data[key]}` : "暂无分类信息";
     },
     formatNumber(value) {
-      if (value === null || value === undefined || Number.isNaN(Number(value))) {
+      if (
+        value === null ||
+        value === undefined ||
+        Number.isNaN(Number(value))
+      ) {
         return "暂无";
       }
       return Number(value).toFixed(4);
@@ -171,7 +215,7 @@ export default {
       return statusMap[status] || status;
     },
     imageErrorKey(item, side) {
-      return `${item?.record_id || item?.id || ''}:${side}`;
+      return `${item?.record_id || item?.id || ""}:${side}`;
     },
     handleImageLoad(item, side) {
       const key = this.imageErrorKey(item, side);
@@ -357,12 +401,24 @@ export default {
   border-radius: 3px;
 }
 
-.legend-swatch--grass { background: rgb(0, 255, 0); }
-.legend-swatch--forest { background: rgb(0, 128, 0); }
-.legend-swatch--building { background: rgb(255, 0, 0); }
-.legend-swatch--road { background: rgb(255, 255, 0); }
-.legend-swatch--bare { background: rgb(255, 0, 255); }
-.legend-swatch--water { background: rgb(0, 191, 255); }
+.legend-swatch--grass {
+  background: rgb(0, 255, 0);
+}
+.legend-swatch--forest {
+  background: rgb(0, 128, 0);
+}
+.legend-swatch--building {
+  background: rgb(255, 0, 0);
+}
+.legend-swatch--road {
+  background: rgb(255, 255, 0);
+}
+.legend-swatch--bare {
+  background: rgb(255, 0, 255);
+}
+.legend-swatch--water {
+  background: rgb(0, 191, 255);
+}
 
 .spectral-stat {
   display: grid;

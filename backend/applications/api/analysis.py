@@ -487,23 +487,24 @@ def kml_roi_history_list():
     except OSError:
         u_dirs = []
     for u_dir in u_dirs:
+        all_files = [f2.name for f2 in u_dir.glob("*.png")]
         result_files = [
-            f2.name
-            for f2 in u_dir.glob("*.png")
-            if not f2.name.endswith("_mask.png") and not f2.name.endswith("_src.png")
+            f2
+            for f2 in sorted(all_files)
+            if not f2.endswith("_mask.png") and not f2.endswith("_src.png")
         ]
         if not result_files:
             continue
+        # after 优先 _new（整图模式），年命名目录取排序末位（最大年份）
         after_name = next(
-            (f2 for f2 in result_files if f2.endswith("_new.png")), result_files[0]
+            (f2 for f2 in result_files if f2.endswith("_new.png")), result_files[-1]
         )
+        # before 三级回退：_src（原始影像）→ _old（前一期分类）→ after 本身
         before_name = next(
-            (f2 for f2 in result_files if f2.endswith("_src.png")),
+            (f2 for f2 in all_files if f2.endswith("_src.png")),
             next(
-            (f2 for f2 in result_files if f2.endswith("_old.png")),
-            after_name.replace(".png", "_src.png")
-            if (u_dir / (after_name.replace(".png", "_src.png"))).exists()
-            else after_name,
+                (f2 for f2 in result_files if f2.endswith("_old.png")),
+                after_name,
             ),
         )
         unlinked_records.append(
@@ -511,12 +512,15 @@ def kml_roi_history_list():
                 "record_id": None,
                 "unlinked": True,
                 "type": "地物分类",
+                "mtime": u_dir.stat().st_mtime,
                 "before_img": f"/api/analysis/kml_roi_unlinked_output/{u_dir.name}/{before_name}",
                 "after_img": f"/api/analysis/kml_roi_unlinked_output/{u_dir.name}/{after_name}",
                 "data": {"mode": "flash", "unlinked": True, "fid": u_dir.name},
             }
         )
-    records = records + unlinked_records
+    # 未联动记录按 mtime 降序后排在联动记录之前：结果预览的目的是「看最新推的」，
+    # 联动历史攒满 20 条时未联动新结果不能被挤到不可见页
+    records = unlinked_records + records
     total = len(records)
     start = (page - 1) * limit
     end = start + limit

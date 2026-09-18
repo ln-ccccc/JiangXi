@@ -159,13 +159,13 @@ def run_kml_roi_inference(
             # 成功才落库：completed/partial 等价于 written>=1（pipeline 对
             # written==0 一律判 failed；no_features 为 KML 无可用多边形）。
             # 失败路径 runtime.kml 保持原样，kml_update 维持全零占位。
-            written_now = [str(f) for f in (result.get("written_fid_list") or [])]
+            # 判据用 unlinked_count（kml_roi_infer 打印 summary 前 pop 掉了
+            # written_fid_list/matched_fid_list，此处读不到）：>0 即含未联动
+            # 图斑或整图模式，禁止落库，防止清单外矿山带进 miner 数据源
             merge_allowed = (
                 merge_target is not None
                 and result.get("status") in ("completed", "partial")
-                # 混合清单（含 U 前缀未联动图斑）时整体不落库，
-                # 防止把清单外矿山带进 miner 数据源
-                and not any(f.startswith("U") for f in written_now)
+                and not result.get("unlinked_count")
             )
             if merge_allowed:
                 kml_update = merge_kml_increment(

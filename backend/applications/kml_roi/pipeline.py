@@ -41,6 +41,27 @@ def _run_whole_image_inference(
     grid = []
     with rasterio.open(old_tif) as src:
         height, width = src.height, src.width
+    max_pixels = 36_000_000
+    if height * width > max_pixels:
+        return {
+            "status": "failed",
+            "message": (
+                f"影像尺寸 {width}x{height} 超出整图推理上限"
+                f"（约 {max_pixels // 1_000_000}00 万像素），请裁剪或降采样后重试"
+            ),
+            "total_features": 0,
+            "matched_fids": 0,
+            "matched_fid_list": [],
+            "output_root": str(output_root),
+            "failed_tiles": ["whole_image"],
+            "tile_errors": {"whole_image": "影像尺寸超限"},
+            "inference_runtime": {},
+            "written_fids": 0,
+            "written_fid_list": [],
+            "missing_fids": [],
+            "stage_durations": dict(stage_durations),
+            "total_seconds": round(time.monotonic() - run_started, 3),
+        }
     n_rows = (height + tile_size - 1) // tile_size
     n_cols = (width + tile_size - 1) // tile_size
 
@@ -73,14 +94,21 @@ def _run_whole_image_inference(
     )
     mark("inference")
 
-    def stitch(stage, tag, keep_color):
+    def stitch(stage, tag, keep_color, missing_fill=None):
         # pred_* 为彩色叠加图（3 通道 BGR），必须全彩拼接；mask_* 为类别索引灰度图
+        # missing_fill：切片缺失时该区域填充值（掩膜填 255=无效，混淆矩阵自动剔除）
         channels = 3 if keep_color else 1
-        canvas = np.zeros((height, width, channels) if keep_color else (height, width), dtype=np.uint8)
+        canvas = (
+            np.full((height, width, channels), missing_fill or 0, dtype=np.uint8)
+            if keep_color
+            else np.full((height, width), missing_fill or 0, dtype=np.uint8)
+        )
         ok = 0
         for r, c, h, w in grid:
             path = mmseg_out_dir / (stage + "_" + fid + "_tile_" + tag + str(r) + "_" + str(c) + ".png")
             if not path.exists():
+                if missing_fill is not None:
+                    ok += 0  # 缺失片计入失败统计
                 continue
             tile = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
             if tile is None:
@@ -93,10 +121,11 @@ def _run_whole_image_inference(
             ok += 1
         return canvas, ok
 
+    total_tiles = len(grid)
     old_pred, ok_o = stitch("pred", "o", True)
     new_pred, ok_n = stitch("pred", "n", True)
-    old_mask, _ = stitch("mask", "o", False)
-    new_mask, _ = stitch("mask", "n", False)
+    old_mask, _ = stitch("mask", "o", False, missing_fill=255)
+    new_mask, _ = stitch("mask", "n", False, missing_fill=255)
     # o 期原始瓦片就在 tile_dir（无 stage 前缀），拼接为原始影像 _src.png
     src_img = np.zeros((height, width, 3), dtype=np.uint8)
     ok_src = 0
@@ -110,6 +139,7 @@ def _run_whole_image_inference(
     mark("stitch")
 
     failed = ok_o == 0 or ok_n == 0
+    partial = not failed and (ok_o < total_tiles or ok_n < total_tiles)
     out_dir = output_root / fid
     out_dir.mkdir(parents=True, exist_ok=True)
     failed_tiles = list(failed_tiles or [])
@@ -117,6 +147,12 @@ def _run_whole_image_inference(
     if failed:
         run_status = "failed"
         tile_errors.setdefault("whole_image", "切片推理存在整期缺失，未能拼接全图结果")
+    elif partial:
+        run_status = "partial"
+        tile_errors.setdefault(
+            "whole_image",
+            "部分切片推理失败：缺失掩膜区域以无效值 255 标记，不计入混淆矩阵",
+        )
     else:
         cv2.imwrite(str(out_dir / (fid + "_old.png")), old_pred)
         cv2.imwrite(str(out_dir / (fid + "_new.png")), new_pred)
@@ -223,7 +259,7 @@ def run_kml_roi_pipeline(
             )
         else:
             message = "KML 中未解析到可用多边形，请检查文件内容"
-        if not allow_whole_image:
+        if not allow_whole_image or raw_feature_count == 0:
             return {
             "status": "no_features",
             "message": message,
