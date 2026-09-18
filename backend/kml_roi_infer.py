@@ -153,11 +153,19 @@ def main() -> int:
         year=args.year or None,
         old_year=args.old_year or None,
         new_year=args.new_year or None,
+        linked_fids={str(k) for k in map_fid_to_tbbh},
     )
     matched_fids = summary.get("matched_fid_list") or []
-    unresolved = [fid for fid in matched_fids if int(fid) not in map_fid_to_tbbh]
-    if unresolved:
-        raise RuntimeError(f"KML 中存在无法映射为 TBBH 的 map_fid: {unresolved[:20]}")
+    # 非联动模式（2026-09-18 验收反馈）：清单外 fid 已被管线改写为 U<fid>，
+    # 正常出结果但不映射 TBBH、不写联动 result_manifest，miner 天然不可见。
+    linked_matched = [fid for fid in matched_fids if not str(fid).startswith("U")]
+    unlinked_matched = [fid for fid in matched_fids if str(fid).startswith("U")]
+    summary["unlinked_count"] = len(unlinked_matched)
+    if unlinked_matched:
+        summary["message"] = (
+            "KML 含 " + str(len(unlinked_matched)) + " 个清单外图斑，已按未联动模式推理："
+            "结果仅在解译平台展示，不与 miner 矿山（TBBH）关联"
+        )
     worker_runtime = summary.pop("inference_runtime", {})
     if isinstance(worker_runtime, dict) and worker_runtime.get("peak_memory_bytes") is not None:
         runtime["peak_memory_bytes"] = worker_runtime["peak_memory_bytes"]
@@ -191,16 +199,36 @@ def main() -> int:
             encoding="utf-8",
         )
         result_manifests.append(str(result_path))
-    summary["matched_tbbh_list"] = [map_fid_to_tbbh[int(fid)] for fid in matched_fids]
-    summary["written_tbbh_list"] = [map_fid_to_tbbh[int(fid)] for fid in written_fids]
-    summary["written_results"] = [
-        {
-            "tbbh": map_fid_to_tbbh[int(fid)],
-            "map_fid": int(fid),
-            "source_output_dir": str(int(fid)),
-        }
-        for fid in written_fids
+    written_results = []
+    for raw_fid in written_fids:
+        if str(raw_fid).startswith("U"):
+            fid_dir = output_root / str(raw_fid)
+            files = sorted(
+                f.name
+                for f in fid_dir.glob("*.png")
+                if not f.name.endswith("_mask.png") and not f.name.endswith("_src.png")
+            ) if fid_dir.exists() else []
+            written_results.append(
+                {
+                    "unlinked": True,
+                    "fid": str(raw_fid),
+                    "source_output_dir": str(raw_fid),
+                    "files": files,
+                }
+            )
+            continue
+        written_results.append(
+            {
+                "tbbh": map_fid_to_tbbh[int(raw_fid)],
+                "map_fid": int(raw_fid),
+                "source_output_dir": str(int(raw_fid)),
+            }
+        )
+    summary["matched_tbbh_list"] = [map_fid_to_tbbh[int(fid)] for fid in linked_matched]
+    summary["written_tbbh_list"] = [
+        map_fid_to_tbbh[int(fid)] for fid in written_fids if not str(fid).startswith("U")
     ]
+    summary["written_results"] = written_results
     summary["result_manifests"] = result_manifests
     summary.pop("matched_fid_list", None)
     summary.pop("written_fid_list", None)

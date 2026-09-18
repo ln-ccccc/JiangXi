@@ -25,6 +25,7 @@ def run_kml_roi_pipeline(
     year: Optional[str] = None,
     old_year: Optional[str] = None,
     new_year: Optional[str] = None,
+    linked_fids: Optional[set] = None,
 ) -> Dict:
     tile_dir = work_dir / "tiles"
     mmseg_out_dir = work_dir / "mmseg_out"
@@ -60,6 +61,15 @@ def run_kml_roi_pipeline(
     if limit > 0:
         features = features[:limit]
     mark("bounds_filter")
+
+    if linked_fids is not None:
+        # 非联动命名空间（2026-09-18 验收反馈）：不在江西清单内的多边形 fid
+        # 改写为 U<fid>，产物落 output_root/U<fid>/，与 348 权威目录永不冲突，
+        # miner 侧无该身份映射、天然不联动。linked_fids=None 保持原语义。
+        features = [
+            (fid if fid in linked_fids else "U" + fid, geom)
+            for fid, geom in features
+        ]
 
     if not features:
         # 2026-09-18 验收反馈：把无可用图斑的原因说清——多边形存在但全部落在

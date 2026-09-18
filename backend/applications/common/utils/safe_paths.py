@@ -33,7 +33,11 @@ def _path_inside_root(root, *parts):
 
 
 def resolve_output_directory(root, identifier):
-    return _path_inside_root(root, _positive_identifier(identifier, "标识"))
+    # U 前缀为非联动推理产物命名空间（单段、无路径分隔符，穿越安全）
+    text = str(identifier or "").strip()
+    if not re.fullmatch(r"U[1-9][0-9]*|[1-9][0-9]*", text):
+        raise PathValidationError("标识必须为正整数或 U 前缀未联动标识")
+    return _path_inside_root(root, text)
 
 
 def resolve_managed_file(root, filename, allowed_suffixes):

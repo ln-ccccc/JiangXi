@@ -195,6 +195,10 @@ export default {
       return panel && panel.$refs ? panel.$refs.cut : null;
     },
     deleteHistoryItem(item) {
+      if (!item || !item.record_id) {
+        // 未联动结果无历史记录，不可删除
+        return;
+      }
       this.$confirm("删除该条历史？", "提示", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",

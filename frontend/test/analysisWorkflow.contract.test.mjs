@@ -150,10 +150,9 @@ test("地物分类工具链按真实 Promise 分支更新 running、partial、su
 test("flash 卡片 record_id 冻结为 2 段式 tbbh|name（与后端删除接口对齐）", () => {
   // 后端 /api/analysis/kml_roi_history/item 按 record_id.split("|", 1) 解析，
   // 3 段式 tbbh|map_fid|name 在删除时必然「记录不存在」
-  const recordIdIndex = uploadUtility.indexOf("record_id:");
-  assert.ok(recordIdIndex >= 0, "flash 卡片必须携带 record_id");
-  const recordIdSource = uploadUtility.slice(recordIdIndex, recordIdIndex + 80);
-  assert.match(recordIdSource, /record_id:\s*`\$\{tbbh\}\|\$\{name\}`/);
+  // 联动卡片 2 段式模板必须存在；未联动卡片（清单外图斑）record_id 为 null
+  assert.match(uploadUtility, /record_id:\s*`\$\{tbbh\}\|\$\{name\}`/);
+  assert.match(uploadUtility, /record_id: null/);
   assert.doesNotMatch(uploadUtility, /record_id:\s*`\$\{tbbh\}\|\$\{mapFid\}/);
 });
 

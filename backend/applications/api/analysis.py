@@ -2,10 +2,12 @@ import json
 import os
 from pathlib import Path
 
+import re
+
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 from sqlalchemy import desc
 
-from applications.auth.guard import ensure_logged_in
+from applications.auth.guard import ensure_logged_in, login_required
 from applications.common.curd import model_to_dicts
 from applications.common.path_global import generate_dir, generate_url, fun_type_2, fun_type_3, fun_type_4, fun_type_5, up_dir
 from applications.common.utils import type_utils
@@ -442,6 +444,21 @@ def kml_roi_output_file(tbbh, filename):
         return fail_api(f"TBBH 不存在: {normalized_tbbh}"), 404
     try:
         target = resolve_output_file(miner_change_output_root, str(map_fid), filename, {".png"})
+    except PathValidationError as exc:
+        return fail_api(str(exc)), 400
+    if not target.is_file():
+        return fail_api("结果目录不存在")
+    return send_from_directory(str(target.parent), target.name)
+
+
+@analysis_api.get('/kml_roi_unlinked_output/<fid>/<filename>')
+@login_required
+def kml_roi_unlinked_output_file(fid, filename):
+    # 非联动推理产物（U<fid> 命名空间）：仅登录用户可读，与 348 联动目录完全隔离
+    if not re.fullmatch(r"U[1-9][0-9]*", str(fid or "")):
+        return fail_api("参数异常"), 400
+    try:
+        target = resolve_output_file(miner_change_output_root, str(fid), filename, {".png"})
     except PathValidationError as exc:
         return fail_api(str(exc)), 400
     if not target.is_file():
