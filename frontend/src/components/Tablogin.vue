@@ -121,19 +121,19 @@ export default {
 
 .sample-record__label {
   color: var(--jx-primary);
-  font-size: 9px;
+  font-size: 11px;
   grid-column: 1 / -1;
 }
 
 .sample-record__title {
   color: var(--jx-text);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
 }
 
 .sample-record__id {
   color: var(--jx-text-muted);
-  font-size: 9px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -156,12 +156,12 @@ export default {
   border-radius: var(--jx-radius);
   background: var(--jx-surface-muted);
   color: var(--jx-text);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .user-caption {
   color: var(--jx-text-muted);
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .logout-btn,
@@ -170,7 +170,7 @@ export default {
 }
 
 .miner-btn {
-  font-size: 12px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -205,11 +205,11 @@ export default {
   }
 
   .sample-record__label {
-    font-size: 8px;
+    font-size: 10px;
   }
 
   .sample-record__title {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .user-pill {
@@ -220,7 +220,7 @@ export default {
   .miner-btn {
     padding-right: 9px;
     padding-left: 9px;
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 

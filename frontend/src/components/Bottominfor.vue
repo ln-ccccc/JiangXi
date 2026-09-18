@@ -24,7 +24,7 @@ export default {
   padding: 18px 4px 6px;
   border-top: 1px solid var(--jx-border);
   color: var(--jx-text-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .platform-footer div {
