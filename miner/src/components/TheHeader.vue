@@ -48,7 +48,7 @@
     <div class="header-right">
       <button
         v-if="currentView === 'projects'"
-        class="primary-btn"
+        class="system-btn"
         type="button"
         @click="$emit('create-project')"
       >
