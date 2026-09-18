@@ -181,19 +181,24 @@ function upload(type, funUrl) {
               // 未联动结果：清单外图斑，仅解译平台展示，无 miner 历史可删
               const fid = String(result.fid || '');
               if (!/^U[1-9][0-9]*$/.test(fid)) return;
-              (result.files || []).forEach((fname) => {
-                if (fname.endsWith('_src.png') || fname.endsWith('_mask.png')) return;
-                const srcName = fname.replace(/\.png$/, '') + '_src.png';
-                const urlBase = global.BASEURL + 'api/analysis/kml_roi_unlinked_output/' + fid;
-                flashCards.push({
-                  id: seq++,
-                  record_id: null,
-                  unlinked: true,
-                  type: '地物分类',
-                  before_img: urlBase + '/' + encodeURIComponent(srcName),
-                  after_img: urlBase + '/' + encodeURIComponent(fname),
-                  data: { fid, note: '未联动：不在江西348清单，仅此处展示' }
-                });
+              const files = result.files || [];
+              const resultFile =
+                files.find((f) => f.endsWith('_new.png')) ||
+                files.find((f) => !f.endsWith('_mask.png') && !f.endsWith('_src.png'));
+              if (!resultFile) return;
+              // 整图模式：before 取前一期分类（_old）；图斑模式：取 _src 源图
+              const beforeFile =
+                files.find((f) => f.endsWith('_old.png')) ||
+                resultFile.replace(/\.png$/, '_src.png');
+              const urlBase = global.BASEURL + 'api/analysis/kml_roi_unlinked_output/' + fid;
+              flashCards.push({
+                id: seq++,
+                record_id: null,
+                unlinked: true,
+                type: '地物分类',
+                before_img: urlBase + '/' + encodeURIComponent(beforeFile),
+                after_img: urlBase + '/' + encodeURIComponent(resultFile),
+                data: { fid, note: '未联动：不在江西348清单，仅此处展示' }
               });
               return;
             }
