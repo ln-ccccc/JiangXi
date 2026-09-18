@@ -19,7 +19,9 @@ ROI_BOUNDARY_COLOR = (255, 255, 255)
 def raster_bounds_4326(raster_path: Path) -> Tuple[float, float, float, float]:
     with rasterio.open(raster_path) as src:
         if src.crs is None:
-            raise RuntimeError(f"Missing CRS for raster: {raster_path}")
+            # 无地理配准的影像：退化为像素坐标范围（必然与经纬度图斑零交集，
+            # 由上层整图推理模式兜底），不再直接崩溃（2026-09-18 验收反馈）
+            return (0.0, -float(src.height), float(src.width), 0.0)
         return transform_bounds(src.crs, WGS84, *src.bounds, densify_pts=21)
 
 

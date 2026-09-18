@@ -410,6 +410,7 @@ def kml_roi_inference_api():
             manifest_path=str(_asset_manifest_path()),
             prehandle=prehandle,
             denoise=denoise,
+            allow_whole_image=True,
         )
         if data.get("status") == "failed":
             errors = data.get("tile_errors") or {}

@@ -68,6 +68,7 @@ def run_kml_roi_inference(
     manifest_path: Optional[str] = None,
     prehandle: int = 0,
     denoise: int = 0,
+    allow_whole_image: bool = False,
 ) -> dict:
     if not old_tif_path:
         raise ValueError("缺少 old_tif_path")
@@ -150,7 +151,8 @@ def run_kml_roi_inference(
                     script_path=script_path,
                     backend_root=backend_root,
                     parent_lock=parent_lock,
-                )
+                    extra_env={"JIANGXI_ALLOW_WHOLE_IMAGE": "1" if allow_whole_image else "0"},
+                    )
             finally:
                 if preprocess_dir:
                     shutil.rmtree(preprocess_dir, ignore_errors=True)
@@ -191,7 +193,7 @@ def _terminate_proc(proc):
     proc.kill()
 
 
-def _run_subprocess_with_cleanup(cmd, *, timeout, cwd, pass_fds=()):
+def _run_subprocess_with_cleanup(cmd, *, timeout, cwd, pass_fds=(), extra_env=None):
     """subprocess.run 的孤儿安全版本（复用 mmseg_inference_caller 同款模式）。
 
     裸 subprocess.run 在父进程（Flask worker）被 kill 时不会杀子进程：孤儿
@@ -202,6 +204,8 @@ def _run_subprocess_with_cleanup(cmd, *, timeout, cwd, pass_fds=()):
     popen_kwargs = {}
     if pass_fds:
         popen_kwargs["pass_fds"] = tuple(pass_fds)
+    if extra_env:
+        popen_kwargs["env"] = {**os.environ, **extra_env}
     if os.name != "nt":
         # POSIX 上独立进程组，killpg 才能整组杀；Windows 忽略（无该语义）
         popen_kwargs["start_new_session"] = True
@@ -242,6 +246,7 @@ def _run_inference_subprocess(
     script_path,
     backend_root,
     parent_lock=None,
+    extra_env=None,
 ):
     cmd = [
         os.getenv("PYTHON_EXE") or sys.executable,
@@ -282,6 +287,7 @@ def _run_inference_subprocess(
             timeout=3600,
             cwd=str(backend_root),
             pass_fds=(lock_fd,) if lock_fd is not None else (),
+            extra_env=extra_env,
         )
     except Exception as e:
         raise RuntimeError(f"执行失败: {str(e)}") from e

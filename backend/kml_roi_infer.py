@@ -154,6 +154,7 @@ def main() -> int:
         old_year=args.old_year or None,
         new_year=args.new_year or None,
         linked_fids={str(k) for k in map_fid_to_tbbh},
+        allow_whole_image=os.getenv("JIANGXI_ALLOW_WHOLE_IMAGE", "0") == "1",
     )
     matched_fids = summary.get("matched_fid_list") or []
     # 非联动模式（2026-09-18 验收反馈）：清单外 fid 已被管线改写为 U<fid>，

@@ -11,6 +11,131 @@ from applications.kml_roi.spatial_index import filter_features_by_bounds
 from applications.kml_roi.tiles import distribute_outputs, prepare_tiles
 
 
+def _run_whole_image_inference(
+    *,
+    old_tif: Path,
+    new_tif: Path,
+    tile_dir: Path,
+    mmseg_out_dir: Path,
+    output_root: Path,
+    model_id: str,
+    device: str,
+    no_features_message: str,
+    mark,
+    stage_durations: Dict,
+    run_started: float,
+) -> Dict:
+    """整图推理：512×512 网格切片 → 逐片推理 → 拼接全图 → U 命名空间落盘。"""
+    import cv2
+    import numpy as np
+    import rasterio
+    from applications.kml_roi.change_matrix import write_change_matrix_csv
+
+    fid = "U" + str(int(time.time()))
+    tile_size = 512
+    tile_dir.mkdir(parents=True, exist_ok=True)
+    mmseg_out_dir.mkdir(parents=True, exist_ok=True)
+    mark("prep_dirs")
+
+    file_names = []
+    grid = []
+    with rasterio.open(old_tif) as src:
+        height, width = src.height, src.width
+    n_rows = (height + tile_size - 1) // tile_size
+    n_cols = (width + tile_size - 1) // tile_size
+
+    for year_tag, tif_path in (("o", old_tif), ("n", new_tif)):
+        with rasterio.open(tif_path) as src:
+            for r in range(n_rows):
+                for c in range(n_cols):
+                    win = rasterio.windows.Window(c * tile_size, r * tile_size, tile_size, tile_size)
+                    data = src.read(window=win, boundless=True, fill_value=0)
+                    arr = np.moveaxis(data, 0, -1)
+                    if arr.shape[2] > 3:
+                        arr = arr[:, :, :3]
+                    elif arr.shape[2] == 1:
+                        arr = np.repeat(arr, 3, axis=2)
+                    png = tile_dir / (fid + "_tile_" + year_tag + str(r) + "_" + str(c) + ".png")
+                    cv2.imwrite(str(png), cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
+                    if year_tag == "o":
+                        valid_h = min(tile_size, height - r * tile_size)
+                        valid_w = min(tile_size, width - c * tile_size)
+                        grid.append((r, c, valid_h, valid_w))
+                    file_names.append(png.name)
+    mark("tiles")
+
+    failed_tiles, tile_errors, inference_runtime = run_mmseg_tiles(
+        model_id=model_id,
+        data_path=str(tile_dir),
+        out_dir=str(mmseg_out_dir),
+        file_names=file_names,
+        device=device,
+    )
+    mark("inference")
+
+    def stitch(stage, tag):
+        canvas = np.zeros((height, width), dtype=np.uint8)
+        ok = 0
+        for r, c, h, w in grid:
+            path = mmseg_out_dir / (stage + "_" + fid + "_tile_" + tag + str(r) + "_" + str(c) + ".png")
+            if not path.exists():
+                continue
+            tile = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+            if tile is None:
+                continue
+            if tile.ndim == 3:
+                tile = tile[:, :, 0]
+            canvas[r * tile_size : r * tile_size + h, c * tile_size : c * tile_size + w] = tile[:h, :w]
+            ok += 1
+        return canvas, ok
+
+    old_pred, ok_o = stitch("pred", "o")
+    new_pred, ok_n = stitch("pred", "n")
+    old_mask, _ = stitch("mask", "o")
+    new_mask, _ = stitch("mask", "n")
+    mark("stitch")
+
+    failed = ok_o == 0 or ok_n == 0
+    out_dir = output_root / fid
+    out_dir.mkdir(parents=True, exist_ok=True)
+    failed_tiles = list(failed_tiles or [])
+    tile_errors = dict(tile_errors or {})
+    if failed:
+        run_status = "failed"
+        tile_errors.setdefault("whole_image", "切片推理存在整期缺失，未能拼接全图结果")
+    else:
+        cv2.imwrite(str(out_dir / (fid + "_old.png")), cv2.cvtColor(old_pred, cv2.COLOR_GRAY2BGR))
+        cv2.imwrite(str(out_dir / (fid + "_new.png")), cv2.cvtColor(new_pred, cv2.COLOR_GRAY2BGR))
+        old_mask_path = out_dir / (fid + "_old_mask.png")
+        new_mask_path = out_dir / (fid + "_new_mask.png")
+        cv2.imwrite(str(old_mask_path), old_mask)
+        cv2.imwrite(str(new_mask_path), new_mask)
+        write_change_matrix_csv(old_mask_path, new_mask_path, out_dir)
+        run_status = "completed"
+
+    return {
+        "status": run_status,
+        "message": (
+            "整图推理模式：影像与 KML 图斑无交集（" + no_features_message + "），"
+            "已按 512×512 切片推理并拼接全图分类结果（未联动，仅解译平台展示）"
+            if not failed
+            else "整图推理失败：" + no_features_message
+        ),
+        "total_features": 0,
+        "matched_fids": 1,
+        "matched_fid_list": [fid],
+        "output_root": str(output_root),
+        "failed_tiles": failed_tiles,
+        "tile_errors": tile_errors,
+        "inference_runtime": inference_runtime,
+        "written_fids": 0 if failed else 1,
+        "written_fid_list": [] if failed else [fid],
+        "missing_fids": [],
+        "stage_durations": dict(stage_durations),
+        "total_seconds": round(time.monotonic() - run_started, 3),
+    }
+
+
 def run_kml_roi_pipeline(
     *,
     old_tif: Path,
@@ -26,6 +151,7 @@ def run_kml_roi_pipeline(
     old_year: Optional[str] = None,
     new_year: Optional[str] = None,
     linked_fids: Optional[set] = None,
+    allow_whole_image: bool = False,
 ) -> Dict:
     tile_dir = work_dir / "tiles"
     mmseg_out_dir = work_dir / "mmseg_out"
@@ -81,12 +207,32 @@ def run_kml_roi_pipeline(
             )
         else:
             message = "KML 中未解析到可用多边形，请检查文件内容"
-        return {
+        if not allow_whole_image:
+            return {
             "status": "no_features",
             "message": message,
             "stage_durations": dict(stage_durations),
             "total_seconds": round(time.monotonic() - run_started, 3),
         }
+
+    if not features:
+        # 整图推理模式（2026-09-18 验收反馈）：影像与 KML 图斑零交集时，
+        # 按 512×512 网格切片推理并拼接全图结果，落 U<时间戳> 未联动命名空间，
+        # 仅解译平台预览展示，不与 miner 矿山联动。
+        return _run_whole_image_inference(
+            old_tif=old_tif,
+            new_tif=new_tif,
+            tile_dir=tile_dir,
+            mmseg_out_dir=mmseg_out_dir,
+            output_root=output_root,
+            model_id=model_id,
+            device=device,
+            no_features_message=message,
+            mark=mark,
+            stage_durations=stage_durations,
+            run_started=run_started,
+        )
+
 
     matched_fids, file_names, variants_by_fid = prepare_tiles(
         old_tif,
