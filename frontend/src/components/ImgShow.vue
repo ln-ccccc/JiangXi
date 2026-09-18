@@ -22,8 +22,8 @@
             {{ item.type || "分析成果" }}
           </h3>
         </div>
-        <button v-if="item.record_id" class="result-delete" type="button"
-        @click="$emit('<button
+        <button
+          v-if="item.record_id"
           class="result-delete"
           type="button"
           @click="$emit('delete-item', item)"
