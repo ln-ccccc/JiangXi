@@ -582,6 +582,14 @@ def kml_roi_history_remove_one():
 @analysis_api.delete('/kml_roi_history/clear')
 def kml_roi_history_clear():
     removed = 0
+    # 一键清空必须连带删除未联动 U 目录，否则旧整图结果会反复出现在预览里
+    import shutil
+    try:
+        for d in miner_change_output_root.iterdir():
+            if re.fullmatch(r"U[1-9][0-9]*", d.name) and d.is_dir():
+                shutil.rmtree(d, ignore_errors=True)
+    except OSError:
+        pass
     for rec in _iter_flash_records():
         map_fid = rec["map_fid"]
         filename = rec["filename"]

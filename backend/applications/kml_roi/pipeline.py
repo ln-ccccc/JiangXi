@@ -97,6 +97,7 @@ def _run_whole_image_inference(
     new_pred, ok_n = stitch("pred", "n", True)
     old_mask, _ = stitch("mask", "o", False)
     new_mask, _ = stitch("mask", "n", False)
+    src_img, ok_src = stitch("tile", "o", True)  # o 期原始瓦片拼接 = 原始影像
     mark("stitch")
 
     failed = ok_o == 0 or ok_n == 0
@@ -110,6 +111,8 @@ def _run_whole_image_inference(
     else:
         cv2.imwrite(str(out_dir / (fid + "_old.png")), old_pred)
         cv2.imwrite(str(out_dir / (fid + "_new.png")), new_pred)
+        if ok_src:
+            cv2.imwrite(str(out_dir / (fid + "_src.png")), src_img)
         old_mask_path = out_dir / (fid + "_old_mask.png")
         new_mask_path = out_dir / (fid + "_new_mask.png")
         cv2.imwrite(str(old_mask_path), old_mask)

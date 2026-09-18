@@ -209,7 +209,7 @@ def main() -> int:
             files = sorted(
                 f.name
                 for f in fid_dir.glob("*.png")
-                if not f.name.endswith("_mask.png") and not f.name.endswith("_src.png")
+                if not f.name.endswith("_mask.png")
             ) if fid_dir.exists() else []
             written_results.append(
                 {

@@ -184,12 +184,10 @@ function upload(type, funUrl) {
               const files = result.files || [];
               const resultFile =
                 files.find((f) => f.endsWith('_new.png')) ||
-                files.find((f) => !f.endsWith('_mask.png') && !f.endsWith('_src.png'));
+                files.find((f) => !f.endsWith('_mask.png') && !f.endsWith('_src.png') && !f.endsWith('_old.png'));
               if (!resultFile) return;
-              // 整图模式：before 取前一期分类（_old）；图斑模式：取 _src 源图
-              const beforeFile =
-                files.find((f) => f.endsWith('_old.png')) ||
-                resultFile.replace(/\.png$/, '_src.png');
+              // 左侧固定为原始影像（_src 由管线拼接输出）；右侧为最新分类结果
+              const beforeFile = files.find((f) => f.endsWith('_src.png')) || '';
               const urlBase = global.BASEURL + 'api/analysis/kml_roi_unlinked_output/' + fid;
               flashCards.push({
                 id: seq++,
