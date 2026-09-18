@@ -159,7 +159,7 @@ export default {
 .login-record {
   margin: 0 0 14px;
   color: var(--jx-sand);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .login-title {
@@ -172,32 +172,32 @@ export default {
 .login-subtitle {
   margin: 10px 0 28px;
   color: var(--jx-text-muted);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.7;
 }
 
 /* 表单整体放大：输入框 46px 高、正文 16px，与卡片玻璃比例协调 */
 .login-card :deep(.el-form-item__label) {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--jx-text-muted);
   line-height: 1.6;
 }
 
 .login-card :deep(.el-input__inner) {
   height: 46px;
-  font-size: 16px;
+  font-size: 17px;
   color: var(--jx-text);
 }
 
 .login-card :deep(.el-input__suffix) {
-  font-size: 17px;
+  font-size: 18px;
 }
 
 .submit-btn {
   width: 100%;
   height: 46px;
   margin-top: 10px;
-  font-size: 16px;
+  font-size: 17px;
   letter-spacing: 0.02em;
 }
 
@@ -207,7 +207,7 @@ export default {
   border-left: 2px solid var(--jx-warning);
   background: var(--jx-surface-muted);
   color: var(--jx-warning);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -217,7 +217,7 @@ export default {
   border-left: 2px solid var(--jx-danger);
   background: var(--jx-surface-muted);
   color: var(--jx-danger);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 

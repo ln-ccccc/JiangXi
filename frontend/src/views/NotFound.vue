@@ -67,7 +67,7 @@ export default {
 .record-label {
   margin: 0 0 22px;
   color: var(--jx-sand);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .error-index {

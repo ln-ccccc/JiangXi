@@ -213,7 +213,7 @@ export default {
   display: block;
   margin-bottom: 2px;
   color: var(--jx-primary);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .atlas-name {
@@ -230,7 +230,7 @@ export default {
 .atlas-subtitle {
   margin: 5px 0 9px;
   color: var(--jx-text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .sync-state {
@@ -239,7 +239,7 @@ export default {
   align-items: center;
   gap: 7px;
   color: var(--jx-text-muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .sync-dot {
@@ -254,7 +254,7 @@ export default {
   z-index: 1;
   margin: 22px 12px 8px;
   color: var(--jx-text-muted);
-  font-size: 9px;
+  font-size: 11px;
   text-align: left;
 }
 
@@ -303,13 +303,13 @@ export default {
 
 .tool-copy strong {
   color: inherit;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .tool-copy span {
   color: var(--jx-text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .sidebar-guidance {
@@ -336,13 +336,13 @@ export default {
 .guidance-title {
   margin: 0 0 8px;
   color: var(--jx-sand);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .guidance-lead {
   margin: 0 0 8px;
   color: var(--jx-text);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .sidebar-guidance ul {
@@ -353,7 +353,7 @@ export default {
 }
 
 .sidebar-guidance li {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.55;
 }
 

@@ -239,7 +239,7 @@ export default {
 .result-record__eyebrow,
 .classification-legend__eyebrow {
   color: var(--jx-sand);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .result-record__header h3 {
@@ -327,7 +327,7 @@ export default {
 .classification-legend h4 {
   margin: 2px 0 14px;
   color: var(--jx-text);
-  font-size: 17px;
+  font-size: 18px;
 }
 
 .classification-legend ul {
@@ -380,7 +380,7 @@ export default {
 
 .spectral-stat dt {
   color: var(--jx-text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .spectral-stat dd {

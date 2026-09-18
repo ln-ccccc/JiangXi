@@ -173,7 +173,7 @@ textarea {
 
 .workflow-heading__eyebrow {
   color: var(--jx-sand);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .workflow-heading h1 {
@@ -205,7 +205,7 @@ textarea {
   background: var(--jx-surface-muted);
   color: var(--jx-text);
   font-family: var(--jx-font-data);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
 }
 
@@ -246,7 +246,7 @@ textarea {
 .workflow-step__number {
   color: var(--jx-sand);
   font-family: var(--jx-font-data);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.08em;
 }
 
@@ -640,7 +640,7 @@ textarea {
 
   .workflow-track li {
     padding: 11px 10px;
-    font-size: 13px;
+    font-size: 14px;
   }
 }
 

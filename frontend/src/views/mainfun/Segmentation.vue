@@ -432,7 +432,7 @@ export default {
 }
 
 .upload-dropzone .el-upload__text {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
 }
 
@@ -465,7 +465,7 @@ export default {
 .upload-guidance {
   margin-top: 8px;
   color: var(--jx-text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .selected-files {
@@ -484,7 +484,7 @@ export default {
 
 .selected-files__item {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   word-break: break-all;
 }
@@ -548,7 +548,7 @@ export default {
 
 .workflow-panel__index {
   color: var(--jx-sand);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .workflow-panel--execute {
@@ -609,7 +609,7 @@ export default {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 18px;
   margin-top: 8px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .run-status [data-state="partial"] {
