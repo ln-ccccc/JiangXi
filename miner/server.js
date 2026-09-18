@@ -11,6 +11,11 @@ import { createProjectRoutes } from './routes/projects.js';
 import { authBackend } from './services/authBackend.js';
 import { relayBackendResponse, requireMinerAuth } from './services/authProxy.js';
 import { buildChangeMatrixAssetPath } from './services/changeMatrixAssets.js';
+import {
+  CLASSIFICATION_CLASS_NAMES,
+  listClassificationYears,
+  parseClassificationMatrixCsv,
+} from './services/classificationAssets.js';
 import { buildDashboardStats } from './services/dashboardStats.js';
 import {
   buildEcologyProfilePayload,
@@ -1130,6 +1135,67 @@ app.post('/api/inference/kml-roi', async (req, res) => {
     return res.status(500).json({ error: '推理任务执行失败，请稍后重试或联系管理员' });
   } finally {
     kmlInferenceActive = false;
+  }
+});
+
+// 地物分类查询（图斑弹窗「地物分类」标签，2026-09-18 验收反馈）：
+// 列出某 TBBH 的推理结果图与混淆矩阵；产物由 kml_roi 推理管线写入
+// change_matrix_outputs/<map_fid>/，静态访问走 /change-matrix-outputs（带 authGuard）。
+app.get('/api/inference/classification/:tbbh', authGuard, (req, res) => {
+  try {
+    let tbbh;
+    try {
+      tbbh = normalizeTbbh(req.params.tbbh);
+    } catch (_) {
+      return res.status(400).json({ error: 'TBBH 格式不合法' });
+    }
+    const feature = mineIdentityIndex.byTbbh.get(tbbh);
+    if (!feature) {
+      return res.status(404).json({ error: `TBBH 不存在: ${tbbh}` });
+    }
+    const fid = String(feature.properties?.map_fid ?? '').trim();
+    if (!/^\d+$/.test(fid)) {
+      return res.status(404).json({ error: `TBBH 缺少有效 map_fid: ${tbbh}` });
+    }
+    const fidDir = path.join(defaultOutputRoot, fid);
+    const hasMatrix = fs.existsSync(path.join(fidDir, 'change_matrix_pixels.csv'));
+    const years = listClassificationYears(fidDir, fid);
+    if (!hasMatrix && years.length === 0) {
+      return res.status(404).json({ error: '该图斑暂无地物分类推理结果' });
+    }
+    const assetUrl = (file) => buildChangeMatrixAssetPath(fid, file);
+    const yearAssets = years.map((year) => ({
+      year,
+      result_url: assetUrl(`${fid}+${year}.png`),
+      mask_url: assetUrl(`${fid}+${year}_mask.png`),
+      source_url: assetUrl(`${fid}+${year}_src.png`),
+    }));
+    const pair = {};
+    for (const tag of ['old', 'new']) {
+      if (fs.existsSync(path.join(fidDir, `${fid}_${tag}.png`))) {
+        pair[`${tag}_url`] = assetUrl(`${fid}_${tag}.png`);
+      }
+    }
+    return res.json({
+      success: true,
+      data: {
+        tbbh,
+        map_fid: fid,
+        years: yearAssets,
+        pair,
+        confusion_matrix: {
+          class_names: CLASSIFICATION_CLASS_NAMES,
+          pixels: parseClassificationMatrixCsv(path.join(fidDir, 'change_matrix_pixels.csv')),
+          percent_rownorm: parseClassificationMatrixCsv(
+            path.join(fidDir, 'change_matrix_percent_rownorm.csv')
+          ),
+          km2: parseClassificationMatrixCsv(path.join(fidDir, 'change_matrix_km2.csv')),
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[classification] 查询失败:', err);
+    return res.status(500).json({ error: '地物分类结果查询失败，请稍后重试' });
   }
 });
 app.listen(port, () => {

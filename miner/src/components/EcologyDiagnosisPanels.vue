@@ -48,6 +48,86 @@
     <TrendChart :metric="activeMetric" :sampling-interval="chartSamplingInterval" />
     <AnnualDataTable :metric="activeMetric" />
   </section>
+  <section v-else-if="tab === '地物分类'" class="panel-stack">
+    <div v-if="classificationState.loading" class="state-panel">正在加载地物分类推理结果…</div>
+    <div v-else-if="classificationState.error" class="state-panel error">
+      {{ classificationState.error }}
+    </div>
+    <template v-else-if="classificationState.data">
+      <p class="source-note">
+        数据源：同步分析推理产物（change_matrix_outputs，仅展示已写入的推理结果）。
+      </p>
+      <div v-if="classificationState.data.years.length" class="classification-grid">
+        <figure
+          v-for="item in classificationState.data.years"
+          :key="item.year"
+          class="classification-card"
+        >
+          <figcaption>{{ item.year }} 年地物分类结果</figcaption>
+          <img :src="item.result_url" :alt="`${item.year} 年地物分类结果`" loading="lazy" />
+        </figure>
+      </div>
+      <div v-if="classificationState.data.pair.old_url" class="classification-grid">
+        <figure class="classification-card">
+          <figcaption>基准期分类（old）</figcaption>
+          <img
+            :src="classificationState.data.pair.old_url"
+            alt="基准期地物分类结果"
+            loading="lazy"
+          />
+        </figure>
+        <figure v-if="classificationState.data.pair.new_url" class="classification-card">
+          <figcaption>最新期分类（new）</figcaption>
+          <img
+            :src="classificationState.data.pair.new_url"
+            alt="最新期地物分类结果"
+            loading="lazy"
+          />
+        </figure>
+      </div>
+      <p
+        v-if="!classificationState.data.years.length && !classificationState.data.pair.old_url"
+        class="state-panel"
+      >
+        该图斑暂无地物分类推理结果。
+      </p>
+      <div v-if="classificationState.data.confusion_matrix.pixels" class="confusion-box">
+        <span class="confusion-title">混淆矩阵（基准期 → 最新期，单位：像素）</span>
+        <table class="confusion-table">
+          <thead>
+            <tr>
+              <th>基准 \ 最新</th>
+              <th
+                v-for="name in classificationState.data.confusion_matrix.pixels.col_labels"
+                :key="name"
+              >
+                {{ classZh(name) }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(row, rowIndex) in classificationState.data.confusion_matrix.pixels.rows"
+              :key="rowIndex"
+            >
+              <th>
+                {{ classZh(classificationState.data.confusion_matrix.pixels.row_labels[rowIndex]) }}
+              </th>
+              <td
+                v-for="(value, colIndex) in row"
+                :key="colIndex"
+                :class="{ diag: rowIndex === colIndex }"
+              >
+                {{ value }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <small>对角线为两期未变化像素，非对角线为地物类型转移量。</small>
+      </div>
+      <p v-else class="state-panel">暂无混淆矩阵（需要至少两期分类结果才会生成）。</p>
+    </template>
+  </section>
   <section v-else-if="environmentMetricKey" class="panel-stack">
     <p class="source-note">
       数据源：TableMERNet；土壤湿度与 TVDI 为代理指标，用于辅助判断环境背景。
@@ -95,6 +175,7 @@
 <script setup>
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as echarts from 'echarts';
+import axios from 'axios';
 import { buildDiagnosisCards, selectEcologyChartPoints } from '../utils/ecologyProfile.js';
 
 const props = defineProps({
@@ -104,6 +185,47 @@ const props = defineProps({
   loading: Boolean,
   error: { type: String, default: '' },
 });
+
+const CLASSIFICATION_ZH = {
+  grassland: '草地',
+  forest: '林地',
+  building: '建筑',
+  road: '道路',
+  bareground: '裸地',
+  water: '水体',
+};
+const classZh = (name) => CLASSIFICATION_ZH[String(name || '').trim()] || name;
+
+const classificationState = ref({ loading: false, error: '', data: null });
+const classificationApiBase = import.meta.env.VITE_MINER_API_BASE_URL
+  ? String(import.meta.env.VITE_MINER_API_BASE_URL).replace(/\/$/, '')
+  : '';
+
+const loadClassification = async () => {
+  const tbbh = props.mineData?.tbbh;
+  if (!tbbh) return;
+  classificationState.value = { loading: true, error: '', data: null };
+  try {
+    const res = await axios.get(
+      `${classificationApiBase}/api/inference/classification/${encodeURIComponent(String(tbbh))}`
+    );
+    classificationState.value = { loading: false, error: '', data: res?.data?.data || null };
+  } catch (err) {
+    classificationState.value = {
+      loading: false,
+      error: err?.response?.data?.error || '地物分类推理结果加载失败',
+      data: null,
+    };
+  }
+};
+
+watch(
+  () => [props.tab, props.mineData?.tbbh],
+  ([tab]) => {
+    if (tab === '地物分类') loadClassification();
+  },
+  { immediate: true }
+);
 
 const metrics = computed(() => props.profile?.metrics || {});
 const ecologyMetricKey = computed(
@@ -429,5 +551,68 @@ const AnnualDataTable = defineComponent({
 .annual-data td {
   padding: 5px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.classification-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.classification-card {
+  margin: 0;
+  border: 1px solid var(--jx-border);
+  border-radius: var(--jx-radius);
+  overflow: hidden;
+  background: var(--jx-surface-muted);
+}
+
+.classification-card figcaption {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--jx-text-muted);
+}
+
+.classification-card img {
+  display: block;
+  width: 100%;
+  background: #04101a;
+}
+
+.confusion-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.confusion-title {
+  color: var(--jx-text-muted);
+  font-size: 12px;
+}
+
+.confusion-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+.confusion-table th,
+.confusion-table td {
+  border: 1px solid var(--jx-border);
+  padding: 4px 8px;
+  text-align: right;
+}
+
+.confusion-table th {
+  color: var(--jx-text-muted);
+  font-weight: 600;
+}
+
+.confusion-table td.diag {
+  background: rgba(127, 216, 166, 0.12);
+}
+
+.confusion-box small {
+  color: var(--jx-text-muted);
 }
 </style>

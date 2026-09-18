@@ -6,6 +6,7 @@ export const MINE_ECOLOGY_TABS = [
   'FCV',
   'LAI',
   'NPP',
+  '地物分类',
   'LST',
   '土壤湿度',
   'TVDI',
