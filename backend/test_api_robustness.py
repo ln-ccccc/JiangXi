@@ -38,12 +38,14 @@ class ApiRobustnessTestCase(unittest.TestCase):
         self.assertEqual(body.get("msg"), "参数异常")
 
     def test_history_batch_remove_without_body_returns_client_error(self):
-        # 无 JSON content-type 时 Flask 2.2 抛 400，HTTPException 应原样直通
-        # （不再被全局处理器吞成 200 JSON）
+        # 无 JSON content-type 时 get_json 抛 HTTPException，必须原样直通
+        # （不被全局处理器吞成 200 JSON）。具体码随 Werkzeug 版本：
+        # 2.2 抛 400 BadRequest，2.3+ 抛 415 UnsupportedMediaType（语义更准），
+        # 断言锁定「4xx 客户端错误直通」这一契约而非版本细节。
         with self.client.session_transaction() as sess:
             sess["admin_user_id"] = 1
         resp = self.client.delete("/api/history/batchRemove")
-        self.assertEqual(resp.status_code, 400)
+        self.assertIn(resp.status_code, (400, 415))
 
 
 class InitDbFailureTests(unittest.TestCase):
