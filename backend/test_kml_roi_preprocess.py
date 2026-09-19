@@ -275,6 +275,12 @@ class PreprocessSizeGuardTests(unittest.TestCase):
 
 class KmlRoiPreprocessApiTests(unittest.TestCase):
     def setUp(self):
+        # T1 回归钉（2026-09-19）：GPU 镜像烘焙 JIANGXI_INFERENCE_DEVICE=cuda:0，
+        # 无 GPU 车辆里 API 层设备解析 400 假红——测试一律钉 cpu，不依赖宿主 GPU
+        self._device_env_patcher = patch.dict(
+            "os.environ", {"JIANGXI_INFERENCE_DEVICE": "cpu"}
+        )
+        self._device_env_patcher.start()
         self.app = create_app("testing")
         self.app.config["PROPAGATE_EXCEPTIONS"] = True
         self.client = self.app.test_client()
@@ -293,6 +299,7 @@ class KmlRoiPreprocessApiTests(unittest.TestCase):
         db.session.remove()
         db.drop_all()
         self.ctx.pop()
+        self._device_env_patcher.stop()
         shutil.rmtree(self.input_root, ignore_errors=True)
         shutil.rmtree(self.kml_root, ignore_errors=True)
 
