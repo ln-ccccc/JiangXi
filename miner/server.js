@@ -1165,7 +1165,9 @@ app.post('/api/inference/kml-roi', async (req, res) => {
 // 地物分类查询（图斑弹窗「地物分类」标签，2026-09-18 验收反馈）：
 // 列出某 TBBH 的推理结果图与混淆矩阵；产物由 kml_roi 推理管线写入
 // change_matrix_outputs/<map_fid>/，静态访问走 /change-matrix-outputs（带 authGuard）。
-app.get('/api/inference/classification/:tbbh', authGuard, (req, res) => {
+// M2（2026-09-19 审查）：鉴权由上方 app.use('/api/inference', authGuard)
+// 全局覆盖——路由级再挂一次会让每个请求做两次 Flask session 往返
+app.get('/api/inference/classification/:tbbh', (req, res) => {
   try {
     let tbbh;
     try {
@@ -1194,10 +1196,15 @@ app.get('/api/inference/classification/:tbbh', authGuard, (req, res) => {
       mask_url: assetUrl(`${fid}+${year}_mask.png`),
       source_url: assetUrl(`${fid}+${year}_src.png`),
     }));
+    // M6（2026-09-19 审查）：+YYYY 年份产物与 pair（_old/_new）可能来自
+    // 不同推理轮次混存——只回一套口径：有年份产物时忽略 pair，
+    // 前端年份标签不再张冠李戴
     const pair = {};
-    for (const tag of ['old', 'new']) {
-      if (fs.existsSync(path.join(fidDir, `${fid}_${tag}.png`))) {
-        pair[`${tag}_url`] = assetUrl(`${fid}_${tag}.png`);
+    if (years.length === 0) {
+      for (const tag of ['old', 'new']) {
+        if (fs.existsSync(path.join(fidDir, `${fid}_${tag}.png`))) {
+          pair[`${tag}_url`] = assetUrl(`${fid}_${tag}.png`);
+        }
       }
     }
     return res.json({

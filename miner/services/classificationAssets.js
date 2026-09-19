@@ -35,7 +35,14 @@ export function parseClassificationMatrixCsv(csvPath) {
   for (let i = 1; i < lines.length; i++) {
     const parts = lines[i].split(',');
     rowLabels.push(parts[0].trim());
-    rows.push(parts.slice(1).map((v) => Number(String(v).trim())));
+    // M3（2026-09-19 审查）：空单元格映射 NaN（Number('') === 0 曾把
+    // 手工编辑/格式漂移的 CSV 显示成假 0%），交给下方 isFinite 拦截
+    rows.push(
+      parts.slice(1).map((v) => {
+        const text = String(v).trim();
+        return text === '' ? NaN : Number(text);
+      })
+    );
   }
   if (rows.some((row) => row.length !== colLabels.length || row.some((v) => !Number.isFinite(v)))) {
     return null;

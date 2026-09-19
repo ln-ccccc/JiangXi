@@ -104,6 +104,8 @@
       </div>
       <p v-else class="no-data">暂无混淆矩阵数据（需要至少两期分类结果）。</p>
     </template>
+    <!-- M7（2026-09-19 审查）：未跑过推理是合法空态，用中性提示而非红色错误 -->
+    <div v-else class="state-panel">该图斑尚未生成地物分类推理结果</div>
   </section>
   <section v-else-if="environmentMetricKey" class="panel-stack">
     <p class="source-note">
@@ -185,12 +187,21 @@ const loadClassification = async () => {
   classificationState.value = { loading: true, error: '', data: null };
   try {
     const res = await axios.get(
-      `${classificationApiBase}/api/inference/classification/${encodeURIComponent(requestTbbh)}`
+      `${classificationApiBase}/api/inference/classification/${encodeURIComponent(requestTbbh)}`,
+      // M8（2026-09-19 审查）：与分级请求一致的超时，半开连接不再永挂 loading
+      { timeout: 15000 }
     );
     // 过期响应守卫：快速切换图斑时，慢响应不得覆盖新图斑的数据
     if (String(props.mineData?.tbbh) !== requestTbbh) return;
     classificationState.value = { loading: false, error: '', data: res?.data?.data || null };
   } catch (err) {
+    // M5：过期响应守卫同样护住失败分支，旧图斑的失败不得覆盖新图斑数据
+    if (String(props.mineData?.tbbh) !== requestTbbh) return;
+    // M7（2026-09-19 审查）：404 = 该图斑尚未跑过推理的合法空态，非红色错误
+    if (err?.response?.status === 404) {
+      classificationState.value = { loading: false, error: '', data: null };
+      return;
+    }
     classificationState.value = {
       loading: false,
       error: err?.response?.data?.error || '地物分类推理结果加载失败',
