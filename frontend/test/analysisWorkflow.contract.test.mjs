@@ -301,3 +301,14 @@ test("执行入口带运行中重入守卫，防止上传阶段并发重复提�
         /:disabled="fileList\.length === 0 \|\| runState === ["']running["']"/
     );
 });
+
+test("删除入口按历史来源分流：kml_roi 走 record_id、光谱历史走 id、未联动卡不渲染", () => {
+    // P0-1 回归钉：9a8944a 给删除按钮加 v-if="item.record_id" 隐藏未联动卡，
+    // 但光谱指数页历史条目（/api/history/list）永远没有 record_id → 删除入口整页消失
+    assert.match(
+        imageShow,
+        /v-if=["']item\.record_id \|\| \(!item\.unlinked && item\.id\)["']/
+    );
+    // 不允许回退成只认 record_id 的恒假写法
+    assert.doesNotMatch(imageShow, /v-if=["']item\.record_id["']/);
+});

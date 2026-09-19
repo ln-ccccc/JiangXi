@@ -23,7 +23,7 @@
           </h3>
         </div>
         <button
-          v-if="item.record_id"
+          v-if="item.record_id || (!item.unlinked && item.id)"
           class="result-delete"
           type="button"
           @click="$emit('delete-item', item)"
