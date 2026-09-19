@@ -1,5 +1,6 @@
 import { flashHistoryGetPage, historyGetPage } from "@/api/history";
 import global from "@/global";
+import { ElNotification } from "element-plus";
 import { showFullScreenLoading } from "@/utils/loading";
 import { kmlRoiInfer } from "@/api/upload";
 
@@ -14,6 +15,30 @@ const JIANGXI_INFERENCE_DEVICE = String(
 // 失败混为「未生成任何结果」，否则用户按提示重试只会撞跨进程锁
 const DISCONNECT_MESSAGE =
   "连接已中断，任务可能仍在后端执行，请稍后刷新历史查看结果";
+
+// F2（2026-09-19 审查）：与后端 P1-3 同口径的上传预检上限
+const MAX_PER_FILE_BYTES = 8 * 1024 ** 3; // 单文件 8GB（后端 MAX_UPLOAD_TIFF_SIZE_MB=8192MB）
+const MAX_TOTAL_BYTES = Math.floor(8.5 * 1024 ** 3); // 请求体 8.5GiB（后端 MAX_CONTENT_LENGTH）
+
+// 上传取消控制器（模块级：路由切换不失效，与 F5 running 守卫同源思想）
+let activeUploadAbort = null;
+
+function notifyCancellableUpload(onCancel) {
+  try {
+    const notification = ElNotification({
+      title: "影像上传中",
+      message: "点击本通知取消本次上传",
+      type: "info",
+      duration: 0,
+      onClick() {
+        onCancel();
+        notification.close();
+      },
+    });
+  } catch (_) {
+    // 通知组件不可用时降级为不可取消（上传本身不受影响）
+  }
+}
 
 function getUploadImg(type) {
   const requestId = (this._flashHistoryRequestId || 0) + 1;
@@ -126,13 +151,53 @@ function upload(type, funUrl) {
 
   if (isSegmentation) formData.append("keepRawTiff", "true");
 
+  // F2：上传前本地预检——选 9GB 文件此前要整包传完才被后端拒（file.size 现成没用）
+  const sizedFiles = this.fileList.map((item) => item?.raw || item).filter(Boolean);
+  const oversized = sizedFiles.find((f) => Number(f.size) > MAX_PER_FILE_BYTES);
+  if (oversized) {
+    const oversizeGb = (Number(oversized.size) / 1024 ** 3).toFixed(1);
+    setAnalysisRunState(
+      this,
+      "error",
+      `单个文件 ${oversizeGb}GB 超过 8GB 硬上限，请拆分或裁剪后重试。`
+    );
+    this.$message.error(`单个文件超过 8GB 硬上限（${oversizeGb}GB）`);
+    return Promise.resolve({ status: "error", reason: "file_too_large" });
+  }
+  const totalBytes = sizedFiles.reduce((sum, f) => sum + (Number(f.size) || 0), 0);
+  if (totalBytes > MAX_TOTAL_BYTES) {
+    setAnalysisRunState(this, "error", "文件总大小超过单次上传上限 8.5GB，请分批上传。");
+    this.$message.error("文件总大小超过单次上传上限 8.5GB，请分批上传");
+    return Promise.resolve({ status: "error", reason: "total_too_large" });
+  }
+
+  if (typeof AbortController !== "undefined") {
+    // 新上传开始前取消上一轮残留请求（模块级控制器，路由切换不失效）
+    activeUploadAbort?.abort();
+    activeUploadAbort = new AbortController();
+  }
+  const abortController = activeUploadAbort;
+  const onUploadProgress = (event) => {
+    if (!event?.total) return;
+    const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+    setAnalysisRunState(
+      this,
+      "running",
+      `正在上传影像（${percent}%），完成后执行同步 ${JIANGXI_INFERENCE_DEVICE.toUpperCase()} 地物分类；点击页面上方通知可取消上传。`
+    );
+  };
+  notifyCancellableUpload(() => abortController?.abort());
+
   setAnalysisRunState(
     this,
     "running",
-    `正在上传影像并执行同步 ${JIANGXI_INFERENCE_DEVICE.toUpperCase()} 地物分类，请保持页面开启。`
+    `正在上传影像（0%），完成后执行同步 ${JIANGXI_INFERENCE_DEVICE.toUpperCase()} 地物分类；点击页面上方通知可取消上传。`
   );
 
-  return this.createSrc(formData)
+  return this.createSrc(formData, {
+    signal: abortController?.signal,
+    onUploadProgress,
+  })
     .then((res) => {
       const uploadItems = res.data.data || [];
       this.uploadSrc.list = uploadItems.map((item) => item.src);
@@ -341,6 +406,20 @@ function upload(type, funUrl) {
         this.$refs.upload?.clearFiles?.();
         return inferencePromise;
       }
+    })
+    .catch((err) => {
+      // F2：用户主动取消——不落入「上传失败」错误分支
+      if (
+        abortController?.signal.aborted ||
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError"
+      ) {
+        activeUploadAbort = null;
+        setAnalysisRunState(this, "idle", "上传已取消，可重新选择影像执行分析。");
+        this.$message.info("上传已取消");
+        return { status: "error", reason: "upload_cancelled" };
+      }
+      throw err;
     })
     .catch((err) => {
       const msg = err?.message || err?.response?.data?.msg || "影像上传失败";

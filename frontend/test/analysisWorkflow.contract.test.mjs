@@ -24,6 +24,7 @@ const tabInfo = read("src", "components", "Tabinfor.vue");
 const bottomInfo = read("src", "components", "Bottominfor.vue");
 const theme = read("src", "assets", "css", "theme-dark.css");
 const uploadUtility = read("src", "utils", "getUploadImg.js");
+const uploadApiSource = read("src", "api", "upload.js");
 const preHandleUtility = read("src", "utils", "preHandle.js");
 const authRedirect = read("src", "utils", "authRedirect.js");
 const loginView = read("src", "views", "Login.vue");
@@ -125,7 +126,7 @@ test("地物分类工具链按真实 Promise 分支更新 running、partial、su
         /setAnalysisRunState\(\s*this,\s*[\"']running[\"']/
     );
     const createSrcIndex = uploadUtility.search(
-        /return\s+this\.createSrc\(formData\)/
+        /return\s+this\.createSrc\(formData,/
     );
     assert.ok(runningIndex >= 0, "发起上传前必须进入 running");
     assert.ok(createSrcIndex > runningIndex, "running 必须早于 createSrc 请求");
@@ -319,4 +320,17 @@ test("整图推理断链与真实失败区分提示（P1-4/F8）", () => {
     assert.match(uploadUtility, /连接已中断，任务可能仍在后端执行，请稍后刷新历史查看结果/);
     assert.match(uploadUtility, /!\s*settled\.reason\?\.response/u);
     assert.match(uploadUtility, /disconnectedCount === failedRequestCount/u);
+});
+
+test("8GB 上传本地预检、进度展示与可取消（F2）", () => {
+    // 选 9GB 文件此前要整包传完才被后端拒；上传全程只有文案无进度；选错只能关页面
+    assert.match(uploadUtility, /reason: ["']file_too_large["']/);
+    assert.match(uploadUtility, /reason: ["']total_too_large["']/);
+    assert.match(uploadUtility, /8 \* 1024 \*\* 3/u);
+    assert.match(uploadUtility, /onUploadProgress/u);
+    assert.match(uploadUtility, /new AbortController\(\)/u);
+    assert.match(uploadUtility, /ERR_CANCELED/u);
+    // createSrc 必须把 options（signal/onUploadProgress）透传给 axios
+    assert.match(uploadApiSource, /export function createSrc\(formdata, options = \{\}\)/u);
+    assert.match(uploadApiSource, /\.\.\.options,/u);
 });

@@ -1,6 +1,7 @@
 import { requestfile } from "@/api/requestfile.js"
 import {request} from "@/api/request.js"
-export function createSrc(formdata) {
+// options 透传 axios 配置（F2：onUploadProgress 进度 / signal 取消）
+export function createSrc(formdata, options = {}) {
     return requestfile({
         method: 'POST',
         url: '/api/file/upload',
@@ -11,7 +12,8 @@ export function createSrc(formdata) {
         }],
         headers:{
             'Content-Type':'multipart/form-data'
-        }
+        },
+        ...options,
     })
 }
 export function imgUpload(data,funUrl){
