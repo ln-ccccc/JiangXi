@@ -113,6 +113,7 @@ def _run_whole_image_inference(
             row_h = min(tile_size, height - r * tile_size)
             row_win = Window(0, r * tile_size, width, row_h)
             file_names = []
+            row_raw_o = {}
             for tag, tif_path in (("o", old_tif), ("n", new_tif)):
                 with rasterio.open(tif_path) as s2:
                     for c in range(n_cols):
@@ -123,6 +124,8 @@ def _run_whole_image_inference(
                             arr = arr[:, :, :3]
                         elif arr.shape[2] == 1:
                             arr = np.repeat(arr, 3, axis=2)
+                        if tag == "o":
+                            row_raw_o[c] = arr  # o 期原始像素：nodata（黑边）判定依据
                         png = tile_dir / (fid + "_tile_" + tag + str(r) + "_" + str(c) + ".png")
                         cv2.imwrite(str(png), cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
                         file_names.append(png.name)
@@ -166,10 +169,27 @@ def _run_whole_image_inference(
                 if mask_n.ndim == 3:
                     mask_n = mask_n[:, :, 0]
                 w_valid = min(tile_size, width - x0)
-                row_old[:, x0 : x0 + w_valid] = pred_o[:row_h, :w_valid]
-                row_new[:, x0 : x0 + w_valid] = pred_n[:row_h, :w_valid]
-                row_mask_old[:, x0 : x0 + w_valid] = mask_o[:row_h, :w_valid]
-                row_mask_new[:, x0 : x0 + w_valid] = mask_n[:row_h, :w_valid]
+                # nodata 剔除（2026-09-19 验收反馈）：原始影像黑边/补零区
+                # （RGB 全 0）无地物意义，模型易误判为水体——掩膜置 255 从
+                # 混淆矩阵与占比统计中剔除，分类颜色置黑与原始影像一致
+                raw = row_raw_o.get(c)
+                nodata = (
+                    (raw.max(axis=2) <= 2)[:row_h, :w_valid]
+                    if raw is not None
+                    else np.zeros((row_h, w_valid), dtype=bool)
+                )
+                po = pred_o[:row_h, :w_valid]
+                pn = pred_n[:row_h, :w_valid]
+                po[nodata] = 0
+                pn[nodata] = 0
+                row_old[:, x0 : x0 + w_valid] = po
+                row_new[:, x0 : x0 + w_valid] = pn
+                mo = mask_o[:row_h, :w_valid]
+                mn = mask_n[:row_h, :w_valid]
+                mo[nodata] = 255
+                mn[nodata] = 255
+                row_mask_old[:, x0 : x0 + w_valid] = mo
+                row_mask_new[:, x0 : x0 + w_valid] = mn
                 row_ok += 1
 
             if row_ok:
