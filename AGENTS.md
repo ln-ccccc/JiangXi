@@ -323,6 +323,15 @@ Set-Location ..
 
 原理：单次冒烟无法暴露"上一轮残留状态毒害下一轮"的失效，而这类失效在交付后几乎必然被用户触发（2026-09-07 推理 worker 崩溃即由此发现，见 §7）。
 
+### 5.2 代码审查/测试工具偏好：alibaba/open-code-review（2026-09-19 用户约定）
+
+以后让 agent 做 **review 和测试**，优先用 [alibaba/open-code-review](https://github.com/alibaba/open-code-review)（OCR CLI，中文说明 `docs/i18n/README.zh-CN.md`）驱动，本项目的审查工作法（并行子代理、契约驱动、修复声明 vs 实现对照）作为 OCR 之上的执行层不变。
+
+- 安装：`npm install -g @alibaba-group/open-code-review`（命令 `ocr`；依赖 Git ≥ 2.41）。
+- 委托模式（无需配 LLM API key，适合本环境）：`ocr delegate preview` 预览选中文件与规则，`ocr delegate rule <files...>` 按规则执行——OCR 负责文件选择与规则解析，由编码 agent 自身模型完成评审。
+- 常规命令：`ocr review`（工作区变更）/ `ocr review --from <base> --to <branch>`（区间，本项目常用 `--from main --to <修复分支>`）/ `ocr review --commit <sha>`（单提交）/ `ocr scan --path <dir>`（无 git 历史的全量扫描）；`--resume <session-id>` 恢复中断会话。
+- agent 消费：加 `--format json --output result.json`，逐条映射到报告模板后按 §5.1/既有测试网（backend/miner/frontend 三门）固化验证。
+
 ## 6. 安全与协作约定
 
 - 不要在日志、文档、提交或回复中写入真实管理员密码、`SECRET_KEY`、数据库密码或 token。
