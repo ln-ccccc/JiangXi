@@ -93,9 +93,59 @@ class SubprocessCleanupTests(unittest.TestCase):
         self.assertIn("已有一个图斑推理任务正在执行", str(ctx.exception))
         self.assertEqual(len(calls), 1)
         self.assertIn("--work_dir", calls[0]["command"])
-        self.assertEqual(calls[0]["kwargs"].get("timeout"), 3600)
+        # 2841071 超时按影像规模放宽（P1-2 回归钉）：假 tif 元数据不可读 → 14400 兜底
+        self.assertEqual(calls[0]["kwargs"].get("timeout"), 14400)
         # 无合并链路（默认库）时无锁 fd 传递
         self.assertEqual(calls[0]["kwargs"].get("pass_fds"), ())
+
+    def test_run_inference_timeout_scales_with_image_size(self):
+        # P1-2 回归钉（2841071）：可读影像超时走缩放公式
+        # min(14400, max(3600, tiles*2*3))——小影像落 3600 下限
+        import numpy as np
+        import rasterio as rio
+        from rasterio.transform import from_origin
+
+        calls = []
+
+        def fake_cleanup(command, **kwargs):
+            calls.append({"kwargs": kwargs})
+            return SimpleNamespace(returncode=0, stdout='{"status": "completed"}', stderr="")
+
+        with tempfile.TemporaryDirectory(prefix="kml-timeout-scale-") as temp_dir:
+            root = Path(temp_dir)
+            kml_path = root / "roi.kml"
+            tif_path = root / "input.tif"
+            manifest_path = root / "manifest.json"
+            kml_path.write_text("<kml />", encoding="utf-8")
+            with rio.open(
+                tif_path,
+                "w",
+                driver="GTiff",
+                height=512,
+                width=512,
+                count=1,
+                dtype="uint8",
+                crs="EPSG:32650",
+                transform=from_origin(500000, 4000000, 10, 10),
+            ) as dst:
+                dst.write(np.zeros((1, 512, 512), dtype=np.uint8))
+            manifest_path.write_text(
+                '{"status": "ok", "mapping": {"tbbh_to_map_fid": {}}}', encoding="utf-8"
+            )
+
+            with patch.object(
+                service, "resolve_default_jiangxi_kmz", return_value=kml_path
+            ), patch.object(service, "_run_subprocess_with_cleanup", side_effect=fake_cleanup):
+                service.run_kml_roi_inference(
+                    old_tif_path=str(tif_path),
+                    new_tif_path=str(tif_path),
+                    output_root=str(root / "outputs"),
+                    manifest_path=str(manifest_path),
+                )
+
+        self.assertEqual(len(calls), 1)
+        # 512×512 → 1 tile → 1*2*3=6 → max(3600, 6) = 3600 下限
+        self.assertEqual(calls[0]["kwargs"].get("timeout"), 3600)
 
 
 if __name__ == "__main__":
