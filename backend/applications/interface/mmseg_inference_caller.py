@@ -294,6 +294,12 @@ def _run_subprocess_with_cleanup(cmd, *, timeout, cwd, env):
     return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
 
+def _batch_timeout(timeout, names):
+    """整批超时公式（worker/子进程两路径共用，B4）：随瓦片数缩放，
+    下限取调用方给定的 timeout（默认 1200s）。"""
+    return max(float(timeout), 3.0 * len(names))
+
+
 def _run_mmseg_inference(
     model_id: str,
     data_path: str,
@@ -308,14 +314,13 @@ def _run_mmseg_inference(
     if _worker_enabled():
         # 整批单请求：超时按瓦片数缩放，避免全量运行（数百瓦片、冷启动/慢 IO）
         # 触顶默认 1200s 后客户端报失败、worker 却把结果算完落盘的状态不一致
-        worker_timeout = max(float(timeout), 3.0 * len(names))
         return _request_worker_inference(
             model_id=model_id,
             data_path=data_path,
             out_dir=out_dir,
             names=names,
             device=device,
-            timeout=worker_timeout,
+            timeout=_batch_timeout(timeout, names),
         )
 
     runtime = resolve_inference_device(device)
@@ -351,7 +356,9 @@ def _run_mmseg_inference(
 
     result = _run_subprocess_with_cleanup(
         cmd,
-        timeout=timeout,
+        # B4（2026-09-19 审查）：子进程路径此前固定 1200s 不随行宽缩放，
+        # CPU + 宽影像一行超限即整行空白横带——与 worker 路径共用同一公式
+        timeout=_batch_timeout(timeout, names),
         cwd=_curr_dir,
         env=_build_mmseg_env(),
     )

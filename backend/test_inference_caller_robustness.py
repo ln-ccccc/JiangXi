@@ -31,6 +31,31 @@ class WorkerTimeoutScalingTests(unittest.TestCase):
         self.assertGreaterEqual(captured["timeout"], 1200.0)
 
 
+class SubprocessTimeoutScalingTests(unittest.TestCase):
+    def test_subprocess_timeout_scales_with_batch_size(self):
+        """B4（2026-09-19 审查）：非 worker（子进程）路径的超时同样按瓦片数
+        缩放——此前固定 1200s，CPU + 宽影像一行超限即整行空白横带且无重试，
+        与 worker 路径行为不一致。"""
+        captured = {}
+
+        def fake_cleanup(cmd, **kwargs):
+            captured.update(kwargs)
+            return mock.MagicMock(returncode=0, stdout='{"status": "completed"}', stderr="")
+
+        names = [f"{i}.tif" for i in range(1000)]
+        with mock.patch.object(caller, "_worker_enabled", return_value=False), \
+                mock.patch.object(caller, "_run_subprocess_with_cleanup", side_effect=fake_cleanup):
+            caller._run_mmseg_inference("cc-ln/CUGRS", "/input", "/output", names, device="cpu")
+
+        self.assertGreaterEqual(captured["timeout"], 3000.0)
+        # 小批量仍保持默认下限
+        captured.clear()
+        with mock.patch.object(caller, "_worker_enabled", return_value=False), \
+                mock.patch.object(caller, "_run_subprocess_with_cleanup", side_effect=fake_cleanup):
+            caller._run_mmseg_inference("cc-ln/CUGRS", "/input", "/output", ["a.tif"], device="cpu")
+        self.assertGreaterEqual(captured["timeout"], 1200.0)
+
+
 class SubprocessCleanupTests(unittest.TestCase):
     def _fake_proc(self):
         proc = mock.MagicMock()
