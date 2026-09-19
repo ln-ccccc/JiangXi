@@ -225,6 +225,17 @@ export default {
       this.imageErrors = next;
     },
     async handleImageError(item, side) {
+      // F3（2026-09-19 审查）：flash 卡 before_img 用 `_src` 拼接图，缺失
+      // （如拼接失败）时 404——与后端历史列表的回退一致，左图回退结果图
+      // 一次；两图已相同仍失败才走错误态
+      if (
+        side === "before" &&
+        item?.after_img &&
+        item.before_img !== item.after_img
+      ) {
+        item.before_img = item.after_img;
+        return;
+      }
       const key = this.imageErrorKey(item, side);
       let message = "结果图片加载失败，请刷新结果或检查后端文件。";
       try {

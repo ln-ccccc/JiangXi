@@ -334,3 +334,9 @@ test("8GB 上传本地预检、进度展示与可取消（F2）", () => {
     assert.match(uploadApiSource, /export function createSrc\(formdata, options = \{\}\)/u);
     assert.match(uploadApiSource, /\.\.\.options,/u);
 });
+
+test("flash 卡左图 _src 缺失回退（F3）", () => {
+    // `_src` 拼接失败时闪卡左图 404 且永不恢复——回退结果图一次（与后端历史列表一致）
+    assert.match(imageShow, /side === ["']before["']/);
+    assert.match(imageShow, /item\.before_img = item\.after_img/);
+});
