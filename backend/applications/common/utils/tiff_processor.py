@@ -114,38 +114,62 @@ def is_large_image(width: int, height: int) -> bool:
     return width > LARGE_IMAGE_THRESHOLD[0] or height > LARGE_IMAGE_THRESHOLD[1]
 
 
-def normalize_array(array: np.ndarray, percentile: Tuple[int, int] = NORMALIZE_PERCENTILE) -> np.ndarray:
+def compute_normalize_params(
+    array: np.ndarray, percentile: Tuple[int, int] = NORMALIZE_PERCENTILE
+) -> list:
+    """逐通道计算 (p_low, p_high) 归一化参数。
+
+    供整图流式管线一次性算好全局参数（降采样统计）、再对每个 tile
+    应用——与 normalize_array 完全同一公式（P1-1），避免逐 tile 独立
+    统计造成 tile 间亮度接缝。
     """
-    将数组归一化到 0-255 uint8 范围
-    
-    使用百分位裁剪以增强对比度
-    
-    :param array: 输入数组
-    :param percentile: 归一化百分位范围
-    :return: uint8 数组
-    """
-    # 处理每个通道
+    if array.ndim == 2:
+        p_low, p_high = np.percentile(array, percentile)
+        return [(float(p_low), float(p_high))]
+    return [
+        (float(p_low), float(p_high))
+        for p_low, p_high in (
+            np.percentile(array[:, :, i], percentile)
+            for i in range(array.shape[2])
+        )
+    ]
+
+
+def normalize_array_with_params(array: np.ndarray, params: list) -> np.ndarray:
+    """用预计算参数归一化到 0-255 uint8，公式与 normalize_array 同源。"""
     if array.ndim == 3:
         result = np.zeros_like(array, dtype=np.uint8)
         for i in range(array.shape[2]):
-            result[:, :, i] = normalize_array(array[:, :, i], percentile)
+            result[:, :, i] = normalize_array_with_params(array[:, :, i], [params[i]])
         return result
-    
-    # 单通道处理
-    p_low, p_high = np.percentile(array, percentile)
-    
+
+    p_low, p_high = params[0]
+
     # 避免除零
     if p_high - p_low < 1e-6:
         if p_high > 0:
             return (array / p_high * 255).astype(np.uint8)
         else:
             return np.zeros_like(array, dtype=np.uint8)
-    
+
     # 裁剪并归一化
     clipped = np.clip(array, p_low, p_high)
     normalized = (clipped - p_low) / (p_high - p_low) * 255
-    
+
     return normalized.astype(np.uint8)
+
+
+def normalize_array(array: np.ndarray, percentile: Tuple[int, int] = NORMALIZE_PERCENTILE) -> np.ndarray:
+    """
+    将数组归一化到 0-255 uint8 范围
+
+    使用百分位裁剪以增强对比度
+
+    :param array: 输入数组
+    :param percentile: 归一化百分位范围
+    :return: uint8 数组
+    """
+    return normalize_array_with_params(array, compute_normalize_params(array, percentile))
 
 
 def extract_rgb_from_multiband(data: np.ndarray, band_count: int) -> np.ndarray:

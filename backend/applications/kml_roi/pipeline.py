@@ -11,6 +11,47 @@ from applications.kml_roi.spatial_index import filter_features_by_bounds
 from applications.kml_roi.tiles import distribute_outputs, prepare_tiles
 
 
+def _decimated_normalize_params(src):
+    """整图全局 (2%,98%) 归一化参数：降采样读控制成本，各 tile 共用同一
+    基准避免逐 tile 独立统计的亮度接缝（P1-1）。uint8 影像返回 None。"""
+    import numpy as np
+
+    from applications.common.utils.tiff_processor import (
+        compute_normalize_params,
+        extract_rgb_from_multiband,
+    )
+
+    decim = max(1, max(src.height, src.width) // 1024)
+    out_h = max(1, src.height // decim)
+    out_w = max(1, src.width // decim)
+    sample = src.read(out_shape=(src.count, out_h, out_w))
+    rgb = extract_rgb_from_multiband(np.moveaxis(sample, 0, -1), sample.shape[0])
+    if rgb.dtype == np.uint8:
+        return None
+    return compute_normalize_params(rgb)
+
+
+def prepare_whole_image_tile(src, win, norm_params):
+    """整图单 tile → 模型输入像素（uint8 RGB [h, w, 3]）。
+
+    波段提取与归一化复用联动切片路径同一函数（P1-1/B1）：4+ 波段取
+    B4/B3/B2，1/2 波段灰度复制，非 uint8 用整图全局参数归一化。
+    """
+    import numpy as np
+
+    from applications.common.utils.tiff_processor import (
+        extract_rgb_from_multiband,
+        normalize_array_with_params,
+    )
+
+    data = src.read(window=win, boundless=True, fill_value=0)
+    arr = np.moveaxis(data, 0, -1)
+    rgb = extract_rgb_from_multiband(arr, data.shape[0])
+    if rgb.dtype != np.uint8 and norm_params is not None:
+        rgb = normalize_array_with_params(rgb, norm_params)
+    return rgb
+
+
 def _run_whole_image_inference(
     *,
     old_tif: Path,
@@ -105,6 +146,14 @@ def _run_whole_image_inference(
     ok_rows = 0
     last_runtime = {}
 
+    # P1-1：非 uint8 影像先按整图全局统计一次性算好归一化参数，
+    # 逐 tile 共用同一基准（uint8 影像参数为 None，零开销）
+    norm_params = {}
+    for tag, tif_path in (("o", old_tif), ("n", new_tif)):
+        with rasterio.open(tif_path) as s_params:
+            norm_params[tag] = _decimated_normalize_params(s_params)
+    mark("norm_params")
+
     preview_old = np.zeros((pv_h, pv_w, 3), dtype=np.uint8)
     preview_new = np.zeros((pv_h, pv_w, 3), dtype=np.uint8)
 
@@ -118,12 +167,8 @@ def _run_whole_image_inference(
                 with rasterio.open(tif_path) as s2:
                     for c in range(n_cols):
                         win = Window(c * tile_size, r * tile_size, tile_size, tile_size)
-                        data = s2.read(window=win, boundless=True, fill_value=0)
-                        arr = np.moveaxis(data, 0, -1)
-                        if arr.shape[2] > 3:
-                            arr = arr[:, :, :3]
-                        elif arr.shape[2] == 1:
-                            arr = np.repeat(arr, 3, axis=2)
+                        # P1-1/B1：波段提取与归一化与联动切片路径共用同一函数
+                        arr = prepare_whole_image_tile(s2, win, norm_params[tag])
                         if tag == "o":
                             row_raw_o[c] = arr  # o 期原始像素：nodata（黑边）判定依据
                         png = tile_dir / (fid + "_tile_" + tag + str(r) + "_" + str(c) + ".png")
@@ -226,10 +271,7 @@ def _run_whole_image_inference(
         for y0 in range(0, pv_h, 256):
             y1 = min(pv_h, y0 + 256)
             row_win = Window(0, min(height - 1, round(y0 / scale)), width, max(1, round((y1 - y0) / scale)))
-            data = s3.read(window=row_win, boundless=True, fill_value=0)
-            arr = np.moveaxis(data, 0, -1)
-            if arr.shape[2] > 3:
-                arr = arr[:, :, :3]
+            arr = prepare_whole_image_tile(s3, row_win, norm_params["o"])
             strip = cv2.resize(arr, (pv_w, y1 - y0), interpolation=cv2.INTER_AREA)
             preview_src[y0:y1] = strip[: y1 - y0]
     cv2.imwrite(str(out_dir / (fid + "_src.png")), cv2.cvtColor(preview_src, cv2.COLOR_RGB2BGR))
