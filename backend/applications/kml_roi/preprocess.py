@@ -16,6 +16,10 @@ import cv2
 import rasterio
 
 from applications.common.utils.tiff_processor import MAX_TIFF_SIZE_MB, read_tiff_as_rgb
+
+# 上传硬上限（8GB）：切片推理路径逐窗口读取/逐行拼接，内存与影像大小解耦；
+# 图像增强/降噪路径仍受 MAX_TIFF_SIZE_MB（500MB）约束（整图读内存）
+MAX_UPLOAD_TIFF_SIZE_MB = 8192
 from applications.interface.analysis import handle
 
 
@@ -44,8 +48,9 @@ def preprocess_tif_for_inference(
     file_size_mb = tif_path.stat().st_size / (1024 * 1024)
     if file_size_mb > MAX_TIFF_SIZE_MB:
         raise ValueError(
-            f"预处理输入影像过大: {file_size_mb:.1f}MB 超过上限 {MAX_TIFF_SIZE_MB}MB，"
-            "请先裁剪或降采样后再启用预处理"
+            f"预处理输入影像过大: {file_size_mb:.1f}MB 超过上限 {MAX_TIFF_SIZE_MB}MB。"
+            "大影像请关闭图像增强/降噪（不勾选即可按切片模式正常推理），"
+            "或先裁剪至 500MB 内再启用预处理"
         )
 
     base_dir.mkdir(parents=True, exist_ok=True)

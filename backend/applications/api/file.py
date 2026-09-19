@@ -3,7 +3,8 @@ from flask import Blueprint, current_app, jsonify, request
 from applications.auth.guard import ensure_logged_in
 from applications.common.utils import type_utils, upload as upload_curd
 from applications.common.utils.http import fail_api
-from applications.common.utils.tiff_processor import MAX_TIFF_SIZE_MB, is_tiff_file
+from applications.common.utils.tiff_processor import is_tiff_file
+from applications.kml_roi.preprocess import MAX_UPLOAD_TIFF_SIZE_MB
 
 file_api = Blueprint('file_api', __name__, url_prefix='/api/file')
 
@@ -28,8 +29,11 @@ def upload_api():
             size_bytes = photo.tell()
             photo.seek(0)
             size_mb = size_bytes / (1024 * 1024)
-            if size_mb > MAX_TIFF_SIZE_MB:
-                return fail_api(f"TIFF 文件 '{photo.filename}' 大小 ({size_mb:.1f}MB) 超过限制 ({MAX_TIFF_SIZE_MB}MB)")
+            # 2026-09-19：上限放宽至 8GB——地物分类走 512×512 切片推理，
+            # 逐窗口读取与逐行拼接均内存安全；500MB 限制仅保留在
+            # 图像增强/降噪（prehandle）环节（该路径整图读内存）。
+            if size_mb > MAX_UPLOAD_TIFF_SIZE_MB:
+                return fail_api(f"TIFF 文件 '{photo.filename}' 大小 ({size_mb:.1f}MB) 超过硬上限 ({MAX_UPLOAD_TIFF_SIZE_MB}MB)")
 
     data = []
     is_slice_str = request.form.get('isSlice', 'false')
