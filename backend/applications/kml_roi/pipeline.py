@@ -162,15 +162,14 @@ def _run_whole_image_inference(
             row_h = min(tile_size, height - r * tile_size)
             row_win = Window(0, r * tile_size, width, row_h)
             file_names = []
-            row_raw_o = {}
+            row_raw = {"o": {}, "n": {}}
             for tag, tif_path in (("o", old_tif), ("n", new_tif)):
                 with rasterio.open(tif_path) as s2:
                     for c in range(n_cols):
                         win = Window(c * tile_size, r * tile_size, tile_size, tile_size)
                         # P1-1/B1：波段提取与归一化与联动切片路径共用同一函数
                         arr = prepare_whole_image_tile(s2, win, norm_params[tag])
-                        if tag == "o":
-                            row_raw_o[c] = arr  # o 期原始像素：nodata（黑边）判定依据
+                        row_raw[tag][c] = arr  # 两期原始像素：nodata（黑边）联合判定依据（B2）
                         png = tile_dir / (fid + "_tile_" + tag + str(r) + "_" + str(c) + ".png")
                         cv2.imwrite(str(png), cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
                         file_names.append(png.name)
@@ -216,13 +215,15 @@ def _run_whole_image_inference(
                 w_valid = min(tile_size, width - x0)
                 # nodata 剔除（2026-09-19 验收反馈）：原始影像黑边/补零区
                 # （RGB 全 0）无地物意义，模型易误判为水体——掩膜置 255 从
-                # 混淆矩阵与占比统计中剔除，分类颜色置黑与原始影像一致
-                raw = row_raw_o.get(c)
-                nodata = (
-                    (raw.max(axis=2) <= 2)[:row_h, :w_valid]
-                    if raw is not None
-                    else np.zeros((row_h, w_valid), dtype=bool)
-                )
+                # 混淆矩阵与占比统计中剔除，分类颜色置黑与原始影像一致。
+                # B2（2026-09-19 审查）：两期联合剔除——只看 o 期时 n 期黑边
+                # 会复活误判；阈值 max<=2 对深色水体的边界风险仍在（黑边
+                # 与深色水体区分需边界连通性分析，见审查报告 B2 备注）。
+                nodata = np.zeros((row_h, w_valid), dtype=bool)
+                for raw_map in (row_raw["o"], row_raw["n"]):
+                    raw = raw_map.get(c)
+                    if raw is not None:
+                        nodata |= (raw.max(axis=2) <= 2)[:row_h, :w_valid]
                 po = pred_o[:row_h, :w_valid]
                 pn = pred_n[:row_h, :w_valid]
                 po[nodata] = 0

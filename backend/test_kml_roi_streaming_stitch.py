@@ -172,10 +172,10 @@ class StreamingStitchTests(unittest.TestCase):
         self.assertTrue((mask_new[:512] == 255).all())
         self.assertTrue((mask_new[512:] == 2).all())
 
-    def test_new_period_nodata_is_currently_not_excluded(self):
-        # B2【待验证→实锤】：n 期黑边未联合剔除，误判类别在 n 期复活。
-        # 现状钉：mask_new 黑边区仍为预测类别 2。目标行为（随 B2 修复翻转）：
-        # mask_new 黑边区应为 255。
+    def test_new_period_nodata_is_union_excluded(self):
+        # B2（已修复翻转）：n 期黑边与 o 期黑边联合剔除——只看 o 期时
+        # n 期黑边会被模型误判为水体并进入掩膜/统计（32dfdc4 想消灭的
+        # 误判在 n 期复活）。修复后 mask_new 黑边区应为 255。
         h, w = 1024, 512
         old = np.stack([_gradient(h, w)] * 3)
         new = np.stack([_gradient(h, w)] * 3)
@@ -184,8 +184,8 @@ class StreamingStitchTests(unittest.TestCase):
 
         self.assertEqual(summary["status"], "completed")
         mask_new = self._read_mask(root, "mask_new_full.tif")
-        # ——现状断言（B2 修复后翻转为 == 255）——
-        self.assertTrue((mask_new[512:] == 2).all())
+        self.assertTrue((mask_new[512:] == 255).all(), "n 期黑边应联合剔除为 255")
+        self.assertTrue((mask_new[:512] == 2).all(), "n 期有效区保留预测类别")
 
     def test_failed_row_mask_reads_as_nodata_255(self):
         # B3【已证伪，转回归钉】：报告假设失败行未写入的 GTiff 块读出 0（草地）
