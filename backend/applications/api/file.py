@@ -24,16 +24,18 @@ def upload_api():
     photos = request.files.getlist('files')
 
     for photo in photos:
-        if is_tiff_file(photo.filename):
-            photo.seek(0, 2)
-            size_bytes = photo.tell()
-            photo.seek(0)
-            size_mb = size_bytes / (1024 * 1024)
-            # 2026-09-19：上限放宽至 8GB——地物分类走 512×512 切片推理，
-            # 逐窗口读取与逐行拼接均内存安全；500MB 限制仅保留在
-            # 图像增强/降噪（prehandle）环节（该路径整图读内存）。
-            if size_mb > MAX_UPLOAD_TIFF_SIZE_MB:
-                return fail_api(f"TIFF 文件 '{photo.filename}' 大小 ({size_mb:.1f}MB) 超过硬上限 ({MAX_UPLOAD_TIFF_SIZE_MB}MB)")
+        # P1-3（2026-09-19）：大小检查不再只认扩展名 .tif——9GB 随机数据改名
+        # .png 曾可整包落盘（磁盘耗尽型 DoS）。所有文件 seek/tell 一视同仁。
+        photo.seek(0, 2)
+        size_bytes = photo.tell()
+        photo.seek(0)
+        size_mb = size_bytes / (1024 * 1024)
+        # 2026-09-19：上限放宽至 8GB——地物分类走 512×512 切片推理，
+        # 逐窗口读取与逐行拼接均内存安全；500MB 限制仅保留在
+        # 图像增强/降噪（prehandle）环节（该路径整图读内存）。
+        if size_mb > MAX_UPLOAD_TIFF_SIZE_MB:
+            kind = "TIFF 文件" if is_tiff_file(photo.filename) else "文件"
+            return fail_api(f"{kind} '{photo.filename}' 大小 ({size_mb:.1f}MB) 超过硬上限 ({MAX_UPLOAD_TIFF_SIZE_MB}MB)")
 
     data = []
     is_slice_str = request.form.get('isSlice', 'false')

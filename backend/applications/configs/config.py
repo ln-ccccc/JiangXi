@@ -41,6 +41,10 @@ class BaseConfig:
     # JSON配置
     JSON_AS_ASCII = False
 
+    # P1-3（2026-09-19）：请求体硬上限 8.5GiB——业务上限 8GB（MAX_UPLOAD_TIFF_SIZE_MB）
+    # 留 0.5GiB 裕量；Werkzeug 超限直接 413 掐断，multipart 不再全量 spool 落盘
+    MAX_CONTENT_LENGTH = int(8.5 * 1024 ** 3)
+
     SECRET_KEY = os.getenv('SECRET_KEY') or 'dev key'
     ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
