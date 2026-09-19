@@ -299,6 +299,25 @@ docker exec <运行容器> bash -c \
    && python /app/backend/tools/validate_jiangxi_assets.py'
 ```
 
+**容器外一次性测试车辆（2026-09-19 第三轮审查沉淀，T2/T3）**：宿主直跑 `docker run` 时
+有三个陷阱——①镜像内 `/opt/venv` 的 openpyxl 破损（缺 et_xmlfile），任何以
+`--entrypoint python` 默认解释器（/opt/venv 在 PATH 前列）起的探针都会假红，必须显式
+钉 `/opt/conda/envs/MMSeg310/bin/python`（真运行环境）；②镜像烘焙 `STANDALONE_MODE=1`
+会触发 SECRET_KEY 强制校验使 64 个测试秒挂，须 `-e STANDALONE_MODE=` 置空；③
+Git Bash 会把 `-w /app/backend` 改写成 Windows 路径，须 `MSYS_NO_PATHCONV=1`：
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm --gpus all \
+  --entrypoint /opt/conda/envs/MMSeg310/bin/python \
+  -e STANDALONE_MODE= \
+  -v "D:/项目/JiangXi/JiangXi-Platform/backend:/app/backend" \
+  -w /app/backend geoview-jiangxi:jiangxi-gpu-20260916-fixes \
+  -m unittest discover -s . -p "test_*.py"
+```
+
+设备耦合已在测试层解除（API 测试类 setUp 钉 `JIANGXI_INFERENCE_DEVICE=cpu`），
+同命令不挂 `--gpus all` 也应全绿——若不绿即回归。
+
 前端两道门在宿主机跑（Node 环境稳定，未观察到漂移）：
 
 ```powershell
@@ -342,6 +361,11 @@ Set-Location ..
 - 先复现和定位根因，再写失败测试，再做最小修复；保留用户已有未提交改动。
 
 ## 7. 调试经验
+
+- **git 历史误导台账（F1，2026-09-19 审查）**：前端两提交的 message 与实际改动不符——
+  `9a8944a`（声称"3 P1 + 8 P2 全清"）实际打坏了光谱页删除按钮（P0-1）；
+  `b3c94f7`（声称"纯格式化"）实际携带 ImgShow 模板损坏修复。对这两个提交做
+  revert/cherry-pick/bisect 前必须先 `git show` 核对真实 diff，勿信提交信息。
 
 - 结果图片偶发加载失败的根因包括 Flask 会话过期导致结果 URL 返回 401，以及并发推理共享临时目录导致互相清理；当前已使用活动会话、会话心跳、可见图片错误状态和每次推理独立临时目录。
 - 道路类别大面积误判不是 CPU/GPU 设备本身造成的，优先检查模型权重、训练域、类别映射、预处理和输入影像分辨率。
