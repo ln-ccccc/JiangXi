@@ -340,3 +340,12 @@ test("flash 卡左图 _src 缺失回退（F3）", () => {
     assert.match(imageShow, /side === ["']before["']/);
     assert.match(imageShow, /item\.before_img = item\.after_img/);
 });
+
+test("预处理大影像预检与模块级 running 守卫（F4/F5）", () => {
+    // F4：>500MB 整包重传注定被后端 400 拒——先本地预检
+    assert.match(preHandleUtility, /MAX_PREPROCESS_PREVIEW_BYTES = 500 \* 1024 \* 1024/u);
+    assert.match(preHandleUtility, /大影像不支持预处理预览/);
+    // F5：running 守卫提升到模块级，路由切换不失效
+    assert.match(uploadUtility, /moduleRunState === ["']running["']/);
+    assert.match(uploadUtility, /moduleRunState = state;/);
+});

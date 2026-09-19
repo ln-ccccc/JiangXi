@@ -11,6 +11,10 @@ const PREHANDLE_SHARPEN = 4;
 const DENOISE_SMOOTH = 3;
 const DENOISE_FILTER = 5;
 
+// F4（2026-09-19 审查）：预处理预览走整包重传 + 后端整图读内存，
+// 与后端 preprocess.py 同口径的 500MB 闸门——先本地预检避免白传一轮
+const MAX_PREPROCESS_PREVIEW_BYTES = 500 * 1024 * 1024;
+
 // 受控复选框被拒绝勾选时（状态未变化、不触发重渲染），需手动回弹 DOM 勾选态
 function rejectCheckbox(event) {
   if (event?.target && event.target.checked) {
@@ -22,6 +26,17 @@ function rejectCheckbox(event) {
 // /api/file/upload 按 str_to_type(type) 入库，传数字字符串会得到 None 而失败。
 function requestPrehandlePreview(type, prehandleValue, previewField) {
   const formData = new FormData();
+  // F4：>500MB 预检——后端整图读内存注定 400，先提示不再整包重传
+  const totalBytes = this.fileList.reduce(
+    (sum, item) => sum + (Number(item?.raw?.size || item?.size) || 0),
+    0
+  );
+  if (totalBytes > MAX_PREPROCESS_PREVIEW_BYTES) {
+    this?.$message?.warning?.(
+      "大影像不支持预处理预览（上限 500MB）；推理仍可继续，预览已跳过。"
+    );
+    return;
+  }
   for (const item of this.fileList) {
     formData.append("files", item?.raw || item);
   }

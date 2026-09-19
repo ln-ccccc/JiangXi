@@ -101,7 +101,12 @@ function goCompress(type, num) {
     .catch(() => {});
 }
 
+// F5（2026-09-19 审查）：running 守卫提升为模块级单例——实例字段随路由
+// 切换丢失，旧页面的 8GB 上传未结束即可从新页面再发起一组并发上传
+let moduleRunState = "idle";
+
 function setAnalysisRunState(context, state, message) {
+  moduleRunState = state;
   if (!context || !("analysisRunState" in context)) return;
   context.analysisRunState = state;
   context.analysisRunMessage = message;
@@ -109,8 +114,12 @@ function setAnalysisRunState(context, state, message) {
 
 function upload(type, funUrl) {
   // 运行中重入守卫：上传阶段走 requestfile 无全屏锁，可再次点击按钮，
-  // 会并发起两组推理子进程并交叉写共享产物目录
-  if (this.analysisRunState === "running") {
+  // 会并发起两组推理子进程并交叉写共享产物目录。
+  // F5：同时检查模块级状态，防止路由切换后实例字段丢防守卫失效
+  if (
+    this.analysisRunState === "running" ||
+    moduleRunState === "running"
+  ) {
     this.$message.warning("当前已有分析任务在执行，请等待完成。");
     return Promise.resolve({ status: "error", reason: "busy" });
   }
