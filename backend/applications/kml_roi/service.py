@@ -13,6 +13,27 @@ from applications.region_source import resolve_default_jiangxi_kmz
 from applications.interface.inference_device import resolve_inference_device
 
 
+def cleanup_stale_work_dirs(max_age_seconds: int = 24 * 3600, base_dir: str = None) -> int:
+    """S7（2026-09-19 审查）：进程被 SIGKILL 时 TemporaryDirectory 不会执行
+    __exit__ 清理，/tmp 残留 kml-roi-* 目录单次可达数十 GB——启动时清扫
+    超龄残留（默认 >24h）。返回删除目录个数。"""
+    import glob
+    import time as _time
+
+    base = base_dir or tempfile.gettempdir()
+    now = _time.time()
+    removed = 0
+    for prefix in ("kml-roi-infer-", "kml-roi-preprocess-"):
+        for path in glob.glob(os.path.join(base, prefix + "*")):
+            try:
+                if now - os.path.getmtime(path) > max_age_seconds:
+                    shutil.rmtree(path, ignore_errors=True)
+                    removed += 1
+            except OSError:
+                continue
+    return removed
+
+
 def _parse_last_json(stdout_text: str) -> dict:
     parsed = None
     for line in reversed((stdout_text or "").splitlines()):

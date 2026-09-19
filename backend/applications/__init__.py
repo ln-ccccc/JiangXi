@@ -32,10 +32,18 @@ def create_app(config_name=None):
         app.config['SQLALCHEMY_DATABASE_URI'] = _build_database_uri()
     if (config_name == 'production' or os.getenv('STANDALONE_MODE') == '1') and not os.getenv('SECRET_KEY'):
         raise RuntimeError('SECRET_KEY 未配置：生产环境或 STANDALONE_MODE=1 时必须显式设置 SECRET_KEY 环境变量')
-    # S5（2026-09-19 审查）：MySQL 后端不允许空口令静默启动（此前回退 "123456"）
+    # S5（2026-09-19 审查）：MySQL 后端不允许空口令静默启动（此前回退弱口令）
     if str(app.config.get('SQLALCHEMY_DATABASE_URI') or '').startswith('mysql') and not app.config.get('MYSQL_PASSWORD'):
         raise RuntimeError('MYSQL_PASSWORD 未配置：MySQL 后端必须显式设置 MYSQL_PASSWORD 环境变量（或 DB_BACKEND=sqlite）')
     init_plugs(app)
+
+    # S7（2026-09-19 审查）：SIGKILL 后 /tmp 残留 kml-roi-* 单次可达数十 GB，
+    # 启动时清扫超龄残留（>24h 的才清，不影响并发中的其他实例）
+    try:
+        from applications.kml_roi.service import cleanup_stale_work_dirs
+        cleanup_stale_work_dirs()
+    except Exception:
+        pass
 
     with app.app_context():
         db.create_all()
