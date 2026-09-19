@@ -107,6 +107,50 @@ class UploadHardLimitTests(unittest.TestCase):
         self.assertFalse(payload.get("success"), payload)
         self.assertIn("超过硬上限", payload.get("msg", ""))
 
+    def test_random_bytes_renamed_png_is_rejected_by_magic_check(self):
+        # S3：任意数据改名 .png 之前可直接入库囤积——内容必须像扩展名
+        self._login()
+        body, content_type = _multipart(
+            fields={"type": "satellite"},
+            files=[("files", "evil.png", b"\xde\xad\xbe\xef" * 64)],
+        )
+        response = self.client.post("/api/file/upload", data=body, content_type=content_type)
+        payload = response.get_json()
+        self.assertIsNotNone(payload)
+        self.assertFalse(payload.get("success"), payload)
+        self.assertIn("内容与扩展名不符", payload.get("msg", ""))
+
+    def test_random_bytes_renamed_tif_is_rejected_by_magic_check(self):
+        self._login()
+        import secrets
+
+        body, content_type = _multipart(
+            fields={"type": "satellite", "keepRawTiff": "true"},
+            files=[("files", "evil.tif", secrets.token_bytes(4096))],
+        )
+        response = self.client.post("/api/file/upload", data=body, content_type=content_type)
+        payload = response.get_json()
+        self.assertIsNotNone(payload)
+        self.assertFalse(payload.get("success"), payload)
+        self.assertIn("内容与扩展名不符", payload.get("msg", ""))
+
+    def test_real_png_still_passes_magic_check(self):
+        self._login()
+        from io import BytesIO
+
+        from PIL import Image
+
+        buf = BytesIO()
+        Image.new("RGB", (4, 4), (10, 120, 200)).save(buf, format="PNG")
+        body, content_type = _multipart(
+            fields={"type": "satellite"},
+            files=[("files", "ok.png", buf.getvalue())],
+        )
+        response = self.client.post("/api/file/upload", data=body, content_type=content_type)
+        payload = response.get_json()
+        self.assertIsNotNone(payload)
+        self.assertTrue(payload.get("success"), payload)
+
 
 if __name__ == "__main__":
     unittest.main()

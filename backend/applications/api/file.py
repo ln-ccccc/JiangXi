@@ -8,6 +8,27 @@ from applications.kml_roi.preprocess import MAX_UPLOAD_TIFF_SIZE_MB
 
 file_api = Blueprint('file_api', __name__, url_prefix='/api/file')
 
+# S3（2026-09-19 审查）：按扩展名做内容魔数校验——白名单只看扩展名时，
+# 任意数据改名入库（囤积/绕过类型检查）。前缀覆盖 flask_uploads 允许集。
+_MAGIC_PREFIXES = {
+    '.tif': (b'II*\x00', b'MM\x00*'),
+    '.tiff': (b'II*\x00', b'MM\x00*'),
+    '.png': (b'\x89PNG',),
+    '.jpg': (b'\xff\xd8\xff',),
+    '.jpeg': (b'\xff\xd8\xff',),
+    '.gif': (b'GIF87a', b'GIF89a'),
+}
+
+
+def _content_matches_extension(filename, head):
+    from posixpath import splitext
+
+    ext = splitext(str(filename or '').lower())[1]
+    expected = _MAGIC_PREFIXES.get(ext)
+    if expected is None:
+        return True
+    return head.startswith(expected)
+
 
 @file_api.before_request
 def require_file_auth():
@@ -36,6 +57,11 @@ def upload_api():
         if size_mb > MAX_UPLOAD_TIFF_SIZE_MB:
             kind = "TIFF 文件" if is_tiff_file(photo.filename) else "文件"
             return fail_api(f"{kind} '{photo.filename}' 大小 ({size_mb:.1f}MB) 超过硬上限 ({MAX_UPLOAD_TIFF_SIZE_MB}MB)")
+        # S3：内容魔数校验（Werkzeug 已 spool，读 8 字节头部零成本）
+        head = photo.stream.read(8)
+        photo.stream.seek(0)
+        if not _content_matches_extension(photo.filename, head):
+            return fail_api(f"文件 '{photo.filename}' 内容与扩展名不符，已拒绝")
 
     data = []
     is_slice_str = request.form.get('isSlice', 'false')
