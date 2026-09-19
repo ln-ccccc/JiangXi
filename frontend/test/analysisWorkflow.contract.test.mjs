@@ -59,7 +59,9 @@ test("两类分析页都呈现江西同步四步工作流", () => {
 });
 
 test("工作流保持江西同步链路并使用容器设备配置", () => {
-    assert.match(runPanel, /seg\.upload\('地物分类','semantic_segmentation'\)/);
+    // F6（2026-09-19 审查）：断言字面量无关化（对齐同批其它断言），
+    // prettier 重排引号/空白不再打红；契约意图（同步链路接线）不变
+    assert.match(runPanel, /seg\.upload\(\s*['"]地物分类['"]\s*,\s*['"]semantic_segmentation['"]\s*\)/u);
     assert.match(spectral, /@click="startCompute"/);
     assert.match(spectral, /this\.createSrc\(formData\)\.then/);
     assert.match(spectral, /return this\.imgUpload\(/);

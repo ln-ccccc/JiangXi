@@ -75,8 +75,12 @@ function getUploadImg(type) {
       this.imgArr = (res.data.data || []).map((item, idx) => ({
         ...item,
         display_index: idx + 1,
-        before_img: global.BASEURL + item.before_img,
-        after_img: global.BASEURL + item.after_img,
+        // F7（2026-09-19 审查）：与 flash 分支同款守卫——字段异常不出
+        // "undefined" URL，前导斜杠去掉避免跨代理多一跳 308
+        before_img:
+          global.BASEURL + String(item.before_img || "").replace(/^\//, ""),
+        after_img:
+          global.BASEURL + String(item.after_img || "").replace(/^\//, ""),
       }));
       this.isUpload = this.imgArr.length !== 0;
       return { status: "success", resultCount: this.imgArr.length };
