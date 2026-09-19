@@ -281,17 +281,22 @@ def _run_inference_subprocess(
         # 锁 fd 随子进程传递：子进程复用父进程已持有的锁（--lock_fd），
         # 不再自行 flock（重复取会 busy 自杀）；锁的释放在父进程 finally。
         cmd.extend(["--lock_fd", str(lock_fd)])
+    # 整图推理（2026-09-19）：大影像数千切片远超 1 小时兜底——
+    # 以影像元数据估算切片数（行×列×两期）× 单片成本并留 2 倍裕量，上限 4 小时
     try:
-        run_res = _run_subprocess_with_cleanup(
-            cmd,
-            timeout=3600,
-            cwd=str(backend_root),
-            pass_fds=(lock_fd,) if lock_fd is not None else (),
-            extra_env=extra_env,
-        )
-    except Exception as e:
-        raise RuntimeError(f"执行失败: {str(e)}") from e
-
+        import rasterio as _rio
+        with _rio.open(old_tif_path) as _s:
+            _tiles = ((_s.height + 511) // 512) * ((_s.width + 511) // 512)
+        estimated = min(14400, max(3600, int(_tiles * 2 * 3)))
+    except Exception:
+        estimated = 14400
+    run_res = _run_subprocess_with_cleanup(
+        cmd,
+        timeout=estimated,
+        cwd=str(backend_root),
+        pass_fds=(lock_fd,) if lock_fd is not None else (),
+        extra_env=extra_env,
+    )
     if run_res.returncode == 3:
         # kml_roi_infer.py 的跨进程推理锁占用退出码：转成业务异常向上透出可读信息
         raise ValueError("已有一个图斑推理任务正在执行，请等待完成后再提交")
