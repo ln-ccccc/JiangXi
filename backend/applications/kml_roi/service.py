@@ -282,21 +282,37 @@ def _run_inference_subprocess(
         # 不再自行 flock（重复取会 busy 自杀）；锁的释放在父进程 finally。
         cmd.extend(["--lock_fd", str(lock_fd)])
     # 整图推理（2026-09-19）：大影像数千切片远超 1 小时兜底——
-    # 以影像元数据估算切片数（行×列×两期）× 单片成本并留 2 倍裕量，上限 4 小时
+    # 以影像元数据估算切片数（行×列×两期）× 单片成本并留 2 倍裕量，上限 4 小时。
+    # B5（2026-09-19 审查）：单片成本可用 KML_ROI_EST_SEC_PER_TILE 按部署调
+    # （CPU 冷启动链路更慢时调大）
     try:
         import rasterio as _rio
         with _rio.open(old_tif_path) as _s:
             _tiles = ((_s.height + 511) // 512) * ((_s.width + 511) // 512)
-        estimated = min(14400, max(3600, int(_tiles * 2 * 3)))
+        _sec_per_tile = float(os.getenv("KML_ROI_EST_SEC_PER_TILE") or 3)
+        estimated = min(14400, max(3600, int(_tiles * 2 * _sec_per_tile)))
     except Exception:
         estimated = 14400
-    run_res = _run_subprocess_with_cleanup(
-        cmd,
-        timeout=estimated,
-        cwd=str(backend_root),
-        pass_fds=(lock_fd,) if lock_fd is not None else (),
-        extra_env=extra_env,
-    )
+    try:
+        run_res = _run_subprocess_with_cleanup(
+            cmd,
+            timeout=estimated,
+            cwd=str(backend_root),
+            pass_fds=(lock_fd,) if lock_fd is not None else (),
+            extra_env=extra_env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # B5：超时不再裸抛（上层只见空错误信息）——保留子进程已有输出的
+        # 尾部，便于定位卡在哪一行/哪个阶段
+        tail = b""
+        for chunk in (exc.stderr, exc.stdout, exc.output):
+            if chunk:
+                tail = chunk if isinstance(chunk, bytes) else str(chunk).encode("utf-8", "ignore")
+                break
+        text = tail.decode("utf-8", "ignore").strip()[-500:]
+        raise RuntimeError(
+            f"推理超时（>{estimated}s，可用 KML_ROI_EST_SEC_PER_TILE 调整估算）：{text or '子进程无输出'}"
+        ) from exc
     if run_res.returncode == 3:
         # kml_roi_infer.py 的跨进程推理锁占用退出码：转成业务异常向上透出可读信息
         raise ValueError("已有一个图斑推理任务正在执行，请等待完成后再提交")
