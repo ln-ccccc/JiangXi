@@ -9,6 +9,12 @@ const JIANGXI_INFERENCE_DEVICE = String(
   .trim()
   .toLowerCase();
 
+// P1-4（2026-09-19 审查）：整图推理为同步长请求，跨 VPN/反代/系统休眠断链时
+// axios 错误无 response，而后端子进程仍在执行并最终落盘——不得与真实推理
+// 失败混为「未生成任何结果」，否则用户按提示重试只会撞跨进程锁
+const DISCONNECT_MESSAGE =
+  "连接已中断，任务可能仍在后端执行，请稍后刷新历史查看结果";
+
 function getUploadImg(type) {
   const requestId = (this._flashHistoryRequestId || 0) + 1;
   if (type === "地物分类") this._flashHistoryRequestId = requestId;
@@ -173,11 +179,18 @@ function upload(type, funUrl) {
           let seq = 1;
           let failedCount = 0;
           let failedRequestCount = 0;
+          let disconnectedCount = 0;
           const errorMessages = [];
           const backendMessages = [];
           settledResults.forEach((settled) => {
             if (settled.status === "rejected") {
               failedRequestCount += 1;
+              // P1-4：无 response = 网络层断链，后端任务可能仍在执行
+              if (!settled.reason?.response) {
+                disconnectedCount += 1;
+                errorMessages.push(DISCONNECT_MESSAGE);
+                return;
+              }
               errorMessages.push(
                 settled.reason?.message ||
                   settled.reason?.response?.data?.msg ||
@@ -283,7 +296,11 @@ function upload(type, funUrl) {
             const detail = detailSource
               ? `：${String(detailSource).slice(0, 120)}`
               : "";
-            const failureMessage = `Flash 推理失败，未生成任何结果${detail}`;
+            // P1-4：全部失败均为断链时改用「可能仍在后端执行」提示，避免误报
+            const failureMessage =
+              disconnectedCount > 0 && disconnectedCount === failedRequestCount
+                ? DISCONNECT_MESSAGE
+                : `Flash 推理失败，未生成任何结果${detail}`;
             this.$message.error(failureMessage);
             setAnalysisRunState(this, "error", failureMessage);
           }

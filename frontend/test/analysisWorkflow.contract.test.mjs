@@ -312,3 +312,11 @@ test("删除入口按历史来源分流：kml_roi 走 record_id、光谱历史�
     // 不允许回退成只认 record_id 的恒假写法
     assert.doesNotMatch(imageShow, /v-if=["']item\.record_id["']/);
 });
+
+test("整图推理断链与真实失败区分提示（P1-4/F8）", () => {
+    // 同步长请求跨 VPN/反代/休眠断链时 axios 无 response，后端任务仍在跑——
+    // 不得与真实推理失败混为「未生成任何结果」（重试会撞跨进程锁）
+    assert.match(uploadUtility, /连接已中断，任务可能仍在后端执行，请稍后刷新历史查看结果/);
+    assert.match(uploadUtility, /!\s*settled\.reason\?\.response/u);
+    assert.match(uploadUtility, /disconnectedCount === failedRequestCount/u);
+});
