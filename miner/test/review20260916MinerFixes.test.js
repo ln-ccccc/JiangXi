@@ -67,12 +67,18 @@ test('启动链子进程必须带超时：探测类 15s、SHP 加载 120s、KMZ 
 
 test('kml-roi 500 分支固定文案：内部异常原文不回显，仅设备契约错误 400 透出', async () => {
   // 2026-09-16 审查 P2-6：err.message 含完整命令行/绝对路径，不得经 detail 回显；
-  // 原文只进服务端 console.error。设备契约错误（用户可修正）保留 400 透出原文。
+  // 原文只进服务端 console.error。设备契约错误（用户可修正）保留 400，
+  // 但 detail 经 safeDeviceDetail 只透出命中设备契约的行（M1，2026-09-19）。
   const server = await read('../server.js');
 
-  // 设备错误 400 分支保留：正则守卫 + 原文透出
+  // 设备错误 400 分支保留：正则守卫 + detail 必须经 safeDeviceDetail 清洗
   assert.match(server, /device 仅支持\|CUDA 不可用\|江西项目仅支持 CPU/u);
-  assert.match(server, /res\.status\(400\)\.json\(\{[\s\S]*?detail: message/u);
+  assert.match(server, /function safeDeviceDetail\(err\)/u);
+  assert.match(
+    server,
+    /res\.status\(400\)\.json\(\{\s*error: 'Failed to run kml roi inference',\s*detail: safeDeviceDetail\(err\),?\s*\}\);/u
+  );
+  assert.doesNotMatch(server, /detail: message\b/u);
 
   // 其余 500：固定文案 + 原文进日志；500 返回体不得再携带 detail 键回显原文
   assert.match(
@@ -82,6 +88,17 @@ test('kml-roi 500 分支固定文案：内部异常原文不回显，仅设备�
   const failureReturn = server.match(/return res\.status\(500\)\.json\(\{[^}]*\}\);/u);
   assert.ok(failureReturn, 'kml-roi 500 分支应返回固定文案对象');
   assert.ok(!failureReturn[0].includes('detail'), '500 返回体不得回显内部异常原文 detail');
+});
+
+test('kml-roi 入参校验错误只回显裸文件名（M9，2026-09-19）', async () => {
+  // `old_tif_path not found: <绝对路径>` 式回显向客户端泄露服务器目录结构
+  const server = await read('../server.js');
+  assert.match(server, /old_tif_path not found: \$\{path\.basename\(oldTifPath\)\}/u);
+  assert.match(server, /new_tif_path not found: \$\{path\.basename\(newTifPath\)\}/u);
+  assert.match(server, /kml_path not found: \$\{path\.basename\(kmlPath\)\}/u);
+  assert.match(server, /Script not found: \$\{path\.basename\(kmlRoiScriptPath\)\}/u);
+  assert.doesNotMatch(server, /not found: \$\{oldTifPath\}/u);
+  assert.doesNotMatch(server, /not found: \$\{kmlRoiScriptPath\}/u);
 });
 
 test('npm scripts 不得指向不存在的 scripts/ 目录（import:ndvi 死链不回潮）', async () => {

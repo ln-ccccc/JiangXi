@@ -285,6 +285,21 @@ function loadJiangxiAssetManifest() {
   };
 }
 
+// M1（2026-09-19 审查）：设备契约 400 透出的 detail 只取命中设备契约的那一行——
+// err.message 可能是 "Command failed: <完整命令行>"，含绝对路径，与 P2-6
+// 的收口原则一致不得整段回显；原文仍进服务端日志。
+const DEVICE_CONTRACT_PATTERN = /device 仅支持|CUDA 不可用|江西项目仅支持 CPU/;
+
+function safeDeviceDetail(err) {
+  for (const chunk of [err && err.stderr, err && err.stdout, err && err.message]) {
+    if (!chunk) continue;
+    for (const line of String(chunk).split(/\r?\n/)) {
+      if (DEVICE_CONTRACT_PATTERN.test(line)) return line.trim().slice(0, 200);
+    }
+  }
+  return '推理设备不可用，请检查 JIANGXI_INFERENCE_DEVICE 配置';
+}
+
 function parseJsonFromStdout(stdoutText) {
   const lines = String(stdoutText || '')
     .split('\n')
@@ -999,14 +1014,23 @@ app.post('/api/inference/kml-roi', async (req, res) => {
     const newYear = normalizePathInput(req.body?.new_year || '');
 
     if (!oldTifPath) return res.status(400).json({ error: 'Missing old_tif_path' });
+    // M9（2026-09-19 审查）：校验错误只回显裸文件名，不回显服务器绝对路径
     if (!fs.existsSync(oldTifPath))
-      return res.status(400).json({ error: `old_tif_path not found: ${oldTifPath}` });
+      return res
+        .status(400)
+        .json({ error: `old_tif_path not found: ${path.basename(oldTifPath)}` });
     if (!fs.existsSync(newTifPath))
-      return res.status(400).json({ error: `new_tif_path not found: ${newTifPath}` });
+      return res
+        .status(400)
+        .json({ error: `new_tif_path not found: ${path.basename(newTifPath)}` });
     if (!fs.existsSync(kmlPath))
-      return res.status(400).json({ error: `kml_path not found: ${kmlPath}` });
+      return res
+        .status(400)
+        .json({ error: `kml_path not found: ${path.basename(kmlPath)}` });
     if (!fs.existsSync(kmlRoiScriptPath))
-      return res.status(500).json({ error: `Script not found: ${kmlRoiScriptPath}` });
+      return res
+        .status(500)
+        .json({ error: `Script not found: ${path.basename(kmlRoiScriptPath)}` });
 
     const args = buildKmlRoiArgs({
       scriptPath: kmlRoiScriptPath,
@@ -1128,7 +1152,7 @@ app.post('/api/inference/kml-roi', async (req, res) => {
     if (/device 仅支持|CUDA 不可用|江西项目仅支持 CPU/.test(message)) {
       return res.status(400).json({
         error: 'Failed to run kml roi inference',
-        detail: message,
+        detail: safeDeviceDetail(err),
       });
     }
     console.error('[inference] kml-roi 推理失败:', message);
