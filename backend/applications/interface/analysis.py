@@ -95,8 +95,9 @@ def _resolve_spectral_input(item, data_path):
         if not safe_name:
             raise ValueError("影像路径不合法")
         return os.path.join(data_path, safe_name), safe_name, display_url
-    if text and os.path.exists(text):
-        return text, os.path.basename(text), display_url
+    # S6（2026-09-19 审查）：删除对原始输入的存在性直通分支——
+    # 该分支允许存在性命名的任意路径绕过 data_path 收敛（纵深缺口）；
+    # 统一走 img_url_handle 归一化
     img_name = img_url_handle(text)
     return os.path.join(data_path, img_name), img_name, display_url
 

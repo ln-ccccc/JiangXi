@@ -224,7 +224,8 @@ def show_result(analysis_type):
         return fail_api("当前类型暂未开放")
 
     page = _safe_int(request.args.get('page'), 1)
-    limit = _safe_int(request.args.get('limit'), 10)
+    # S8（2026-09-19 审查）：limit 钳制，防止 limit=10^9 式单请求拉全表
+    limit = max(1, min(100, _safe_int(request.args.get('limit'), 10)))
     query = Analysis.query.filter_by(type=getattr(type_utils, analysis_type)).order_by(desc(Analysis.create_time))
 
     pagination = query.paginate(page=page, per_page=limit, error_out=False)

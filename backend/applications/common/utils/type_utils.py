@@ -17,3 +17,6 @@ def items_handle(items):
     for t in items:
         if 'type' in t:
             t['type'] = type_to_str(t['type'])
+    # 2026-09-19（S8 测试顺带抓获）：此前只变异不返回，`data = items_handle(data)`
+    # 式调用拿到 None，/api/analysis/show 的 data 恒为 null
+    return items
