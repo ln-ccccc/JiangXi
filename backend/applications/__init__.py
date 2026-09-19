@@ -32,6 +32,9 @@ def create_app(config_name=None):
         app.config['SQLALCHEMY_DATABASE_URI'] = _build_database_uri()
     if (config_name == 'production' or os.getenv('STANDALONE_MODE') == '1') and not os.getenv('SECRET_KEY'):
         raise RuntimeError('SECRET_KEY 未配置：生产环境或 STANDALONE_MODE=1 时必须显式设置 SECRET_KEY 环境变量')
+    # S5（2026-09-19 审查）：MySQL 后端不允许空口令静默启动（此前回退 "123456"）
+    if str(app.config.get('SQLALCHEMY_DATABASE_URI') or '').startswith('mysql') and not app.config.get('MYSQL_PASSWORD'):
+        raise RuntimeError('MYSQL_PASSWORD 未配置：MySQL 后端必须显式设置 MYSQL_PASSWORD 环境变量（或 DB_BACKEND=sqlite）')
     init_plugs(app)
 
     with app.app_context():

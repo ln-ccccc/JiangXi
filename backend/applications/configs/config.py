@@ -19,7 +19,9 @@ def _build_database_uri():
         return f"sqlite:///{sqlite_path.as_posix()}"
 
     mysql_username = os.getenv("MYSQL_USERNAME") or "root"
-    mysql_password = os.getenv("MYSQL_PASSWORD") or "123456"
+    # S5（2026-09-19 审查）：不再静默回退弱口令；空口令由 create_app 的
+    # fail-fast 门拦截（compose 注入，本地开发显式设 MYSQL_PASSWORD）
+    mysql_password = os.getenv("MYSQL_PASSWORD") or ""
     mysql_host = os.getenv("MYSQL_HOST") or "127.0.0.1"
     mysql_port = int(os.getenv("MYSQL_PORT") or 3306)
     mysql_database = os.getenv("MYSQL_DATABASE") or "AdminFlask"
@@ -81,7 +83,9 @@ class BaseConfig:
 
     # mysql 配置
     MYSQL_USERNAME = os.getenv('MYSQL_USERNAME') or "root"
-    MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD') or "123456"
+    # S5（2026-09-19 审查）：不再静默回退弱口令（源码锁禁出现该字面量）；
+    # 选了 MySQL 后端但口令为空时由 create_app fail-fast 拦截
+    MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD') or ""
     MYSQL_HOST = os.getenv('MYSQL_HOST') or "127.0.0.1"
     MYSQL_PORT = int(os.getenv('MYSQL_PORT') or 3306)
     MYSQL_DATABASE = os.getenv('MYSQL_DATABASE') or "AdminFlask"
